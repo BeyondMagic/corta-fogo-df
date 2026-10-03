@@ -310,7 +310,7 @@ flowchart LR
 
 A **camada Bronze** é o arquivo bruto como a fonte entrega: CSV do INPE, GeoJSON do IBRAM/SISDIA, shapefile zipado do SICAR. Fica em `data/raw` e `data/processed`, fora do banco; só os focos passam por uma staging table (`staging.foco_calor_raw`) antes da transformação, porque é a única carga que precisa reprojetar coordenadas soltas (`latitude`/`longitude`) em vez de ler geometria já pronta de um shapefile ou GeoJSON.
 
-A **camada Gold** é o schema `public` do PostgreSQL: as sete tabelas finais (`foco_calor`, `satelite`, `imovel_car`, `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`), com tipo de geometria fixo, SRID único, chaves, restrições (`ST_IsValid`) e índices GiST. É nela que a consulta da pergunta de gestão roda direto: a E1 não tem camada analítica intermediária (DuckDB/GeoParquet fica para entregas seguintes, ver [README.md](../../../README.md#o-que-ficou-para-entregas-seguintes)).
+A **camada Gold** é o schema `public` do PostgreSQL: as sete tabelas finais (`foco_calor`, `satelite`, `imovel_car`, `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`), com tipo de geometria fixo, SRID único, chaves, restrições (`ST_IsValid`) e índices GiST. É nela que a consulta da pergunta de gestão roda direto: a E1 não tem camada analítica intermediária (DuckDB/GeoParquet fica para entregas seguintes).
 
 Cada linha da camada Gold registra dois instantes distintos, nunca confundidos:
 

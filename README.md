@@ -2,120 +2,60 @@
 
 Plataforma de engenharia de dados para cruzamento espacial e temporal de focos de calor, áreas públicas protegidas e imóveis rurais no Distrito Federal.
 
-Disciplina Sistemas de Bancos de Dados 2 (FCTE / UnB, semestre 2026.2, Grupo G5).
+Projeto desenvolvido para a disciplina Sistemas de Bancos de Dados 2 (FCTE / UnB, 2026.2, Turma 03, Grupo 5).
 
-## Escopo da E1
+## Pergunta de gestão
 
-### Pergunta de gestão
+> Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em áreas de reserva legal, de preservação permanente ou a até 1 km de unidades de conservação entre 2015 e 2025?
 
-> Quais imóveis rurais do CAR-DF tiveram focos de calor reincidentes dentro da reserva legal, em APP ou a até 1 km de Unidades de Conservação entre 2015 e 2025?
+A pergunta orienta o recorte geográfico no Distrito Federal, a série histórica de 11 anos de focos de calor de satélite e os cruzamentos de sobreposição e proximidade entre a malha fundiária rural e as áreas protegidas.
 
-### O que entra na E1
+## Documentação
 
-- Focos de calor: BDQueimadas (INPE), recorte do DF de 2015 a 2025, todos os satélites (38.945 focos no total).
-- Unidades de Conservação e APPs: IBRAM / Geoportal DF.
-- Imóveis rurais e reserva legal: SICAR / CAR-DF.
-- Banco de dados: PostgreSQL com extensão PostGIS (ver [ADR 0001](docs/adr/01-adotar-postgresql-com-postgis-camada-gold.md)).
+A documentação detalhada do projeto está disponível na pasta `docs/` e publicada no site:
 
-### O que ficou para entregas seguintes
+- [Site da documentação](https://beyondmagic.github.io/corta-fogo-df/)
+- [Entrega 1: Fonte Transacional e Sistema de Origem](docs/entrega/01/README.md): escopo da primeira etapa, modelo relacional e espacial, histórico e procedimentos de carga.
+- [Registros de Decisões de Arquitetura (ADRs)](docs/adr/README.md): justificativas técnicas para escolhas de banco de dados, extensões espaciais e projeção cartográfica.
+- [Glossário Técnico](docs/glossario.md): conceitos espaciais, cadastrais e referências bibliográficas.
 
-- Flora ameaçada: o catálogo do SiBBr/JBRJ lista espécies, mas não fornece coordenadas das ocorrências.
-- Vazão de bacias: exige dados hidrológicos que não constam nas fontes atuais.
-- Bucket de arquivos brutos e camada analítica colunar: a consulta da E1 roda direto no PostGIS.
+## Execução local
 
-### Status da carga
-
-Todas as tabelas da E1 têm dado carregado pelo comando abaixo, com geometrias 100% válidas e no SRID 31983:
-
-| Tabela | Registros | Fonte |
-| :--- | ---: | :--- |
-| `foco_calor` | 38.945 | BDQueimadas (INPE), DF, 2015-2025, todos os satélites |
-| `imovel_car` | 21.047 | SICAR (`data/raw/AREA_IMOVEL.zip`, versionado no repo) |
-| `reserva_legal` | 13.499 | SICAR (`data/raw/RESERVA_LEGAL.zip`, versionado no repo) |
-| `area_preservacao_permanente` | 2.234 | IBRAM/SISDIA (nascente, borda de chapada, reservatório) |
-| `unidade_conservacao` | 84 | IBRAM/SISDIA |
-
-## Como rodar
+O ambiente utiliza Docker e Docker Compose.
 
 ### Pré-requisitos
 
-- Docker e Docker Compose v2 (comando `docker compose`, não o script antigo `docker-compose`).
-- Rede liberada para `sisdia.df.gov.br` (download das UCs e APPs do IBRAM a cada carga).
+- Docker e Docker Compose v2 (comando `docker compose`)
+- Conexão de rede ativa para download de camadas públicas do SISDIA/IBRAM
 
-### Um comando
+### Como subir os serviços
 
 ```bash
 docker compose up
 ```
 
-Isso faz, em ordem:
+O comando inicia o PostgreSQL 16 com PostGIS na porta 5434, aplica as migrações do Flyway e executa os contêineres de carga dos dados de satélite e das camadas territoriais.
 
-1. `db`: sobe PostgreSQL 16 com PostGIS 3.4 na porta 5434 do host e espera o banco responder (`pg_isready`).
-2. `migrate`: aplica as migrações do Flyway em `migrations/` (extensão PostGIS, tabelas, índices GiST, schema de staging).
-3. `load`: carrega `data/processed/focos_df_2015_2025.csv` em `satelite` e `foco_calor`, reprojetando as coordenadas para o SRID 31983.
-4. `load_camadas`: baixa UCs e APPs do IBRAM/SISDIA e carrega os zips do SICAR já versionados em `data/raw/`, saneando geometrias inválidas e reprojetando para 31983.
-
-`load` e `load_camadas` rodam em paralelo (dependem só do `migrate`) e cada um esvazia suas próprias tabelas antes de recarregar, então repetir `docker compose up` não duplica dado. Para derrubar tudo e apagar o volume do banco:
+Para parar os contêineres e remover os volumes de dados:
 
 ```bash
 docker compose down -v
 ```
 
-Variáveis de ambiente aceitas (todas opcionais, com valor padrão): `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`.
+Para conferir o total de registros carregados e ver detalhes de validação, consulte o [guia de reprodução na Entrega 1](docs/entrega/01/README.md#10-como-reproduzir-a-carga).
 
-### Conferir a carga
+## Equipe
 
-```bash
-docker compose exec db psql -U corta-fogo -d corta-fogo-df -c "
-SELECT 'foco_calor', count(*) FROM foco_calor
-UNION ALL SELECT 'imovel_car', count(*) FROM imovel_car
-UNION ALL SELECT 'reserva_legal', count(*) FROM reserva_legal
-UNION ALL SELECT 'area_preservacao_permanente', count(*) FROM area_preservacao_permanente
-UNION ALL SELECT 'unidade_conservacao', count(*) FROM unidade_conservacao;"
-```
+Grupo 5:
 
-Resultado esperado: os números da tabela em "Status da carga".
+| Integrante | GitHub |
+| :--- | :--- |
+| Cláudio Henrique | [@claudiohsc](https://github.com/claudiohsc) |
+| Elias F. | [@EliasOliver21](https://github.com/EliasOliver21) |
+| Gabriel Fernando | [@MMcLovin](https://github.com/MMcLovin) |
+| Gabriel Souza | [@GabrielMS00](https://github.com/GabrielMS00) |
+| João V. Farias | [@beyondmagic](https://github.com/beyondmagic) |
+| Manoel Felipe | [@Manoel835](https://github.com/Manoel835) |
+| Samuel Ribeiro | [@SamuelRicosta](https://github.com/SamuelRicosta) |
 
-### Desempenho da consulta da pergunta de gestão
-
-A junção espacial completa (focos dentro de imóvel, com interseção em reserva legal ou APP, ou a até 1 km de UC, agrupando por imóvel) não fica abaixo dos 500 ms previstos no ADR: sem otimização ela passa de 30 segundos. A causa não é falta de índice GiST (todos existem e são usados), é a complexidade real dos polígonos do SICAR: `reserva_legal` chega a 54.373 vértices numa única geometria, e o join `foco_calor` x `imovel_car` sozinho já leva ~4 s porque muitos imóveis do CAR-DF se sobrepõem (38.945 focos geram 76.116 pares foco-imóvel).
-
-Se tiver mudado `POSTGRES_USER` ou `POSTGRES_DB`, troque os valores de `-U` e `-d` pelos seus.
-
-### Teste em máquina limpa
-
-#### Teste 1
-
-- Quem: Cláudio Henrique.
-- Quando: 27/09/2026.
-- Commit: o que adiciona os serviços `load` e `load_camadas`, a migração de staging dos focos e o `Dockerfile` de `src/pipeline` (mensagem "feat: adicionar serviços de carga em um comando").
-- Ambiente: macOS, runtime Docker via Colima, Docker Compose v2, a partir de `docker compose down -v` seguido de `docker compose up`, sem estado anterior.
-- Resultado: banco saudável e 5 migrações aplicadas em cerca de 25 segundos; as 5 tabelas da E1 carregadas com os números da seção "Status da carga"; satélite de referência único (`AQUA_M-T`); todas as geometrias válidas em SRID 31983; trigger de imutabilidade de `foco_calor` bloqueou um `UPDATE` de teste; segunda execução de `load` e `load_camadas` não duplicou linhas.
-
-#### Teste 2
-
-- Quem: Samuel Ribeiro.
-- Quando: 28/09/2026.
-- Commit: `7acf86d` ("fix: update image source path for Distrito Federal map in README").
-- Ambiente: Windows 11, Docker 29.7.2, Docker Compose v5.5.1, projeto Compose separado (`-p e1-teste-limpo`, `POSTGRES_PORT=5439`) com volume novo, sem imagem de `load_camadas` em cache.
-- Resultado: carga completa em 2 min 30 s, incluindo o build da imagem; 5 migrações aplicadas (V1 a V5); as 5 tabelas da E1 carregadas com os números da seção "Status da carga"; 0 geometrias inválidas e um único SRID (31983); satélite de referência único (`AQUA_M-T`); `UPDATE` em `foco_calor` bloqueado pelo trigger; segunda execução de `load` e `load_camadas` sem duplicar linhas; o comando de "Conferir a carga" rodou sem erro.
-
-## Equipe e entregas da E1
-
-| Integrante | Frente | Entrega |
-| :--- | :--- | :--- |
-| Gabriel Souza | Coordenação e Pergunta de Gestão | Pergunta de gestão, escopo, contagem de focos e tag e1 |
-| Manoel Felipe | Modelagem de Dados | Esquema PostGIS com colunas geométricas tipadas e restrições |
-| Samuel Ribeiro | Migrações | Scripts versionados de criação do banco, extensão e índices GiST |
-| João V. Farias | ADR e ingestão de dados de focos | Download automatizado e carga dos focos do INPE (DF, 2015 a 2025) |
-| Gabriel Fernando | Ingestão de camadas territoriais | Carga e reprojeção de shapefiles/geopackages do IBRAM e CAR-DF |
-| Cláudio Henrique | Infraestrutura | Compose do PostGIS, script de carga em um comando e teste em máquina limpa |
-| Elias F. | Caracterização e Métricas | Números reais pós-carga e documentação no ADR |
-
-Detalhes de matrícula e GitHub de cada integrante: [docs/index.md](docs/index.md).
-
-## Onde encontrar mais detalhes
-
-- [docs/entrega/01/README.md](docs/entrega/01/README.md): documento consolidado da Entrega 1 (pergunta de gestão, modelo espacial, histórico e reprodução).
-- [docs/adr/](docs/adr/): registros formais de decisões de arquitetura.
-- [docs/glossario.md](docs/glossario.md): glossário técnico com referências bibliográficas.
+Matrículas e o histórico de cada membro ao longo das entregas estão na [página da equipe na documentação](docs/index.md).
