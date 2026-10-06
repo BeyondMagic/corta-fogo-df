@@ -277,22 +277,26 @@ flowchart LR
         SICAR["SICAR"]
     end
 
-    subgraph Bronze["Camada Bronze: arquivo bruto, como a fonte entregou (data/raw, data/processed)"]
+    subgraph Bronze["Camada Bronze: arquivos brutos (data/raw, data/processed)"]
         CSV["focos_df_2015_2025.csv"]
         GEOJSON["unidades_conservacao.geojson\n+ 3 GeoJSON de APP"]
         ZIP["AREA_IMOVEL.zip\nRESERVA_LEGAL.zip"]
     end
 
-    subgraph Staging["staging (schema do Postgres, so para focos)"]
+    subgraph Staging["staging (schema Postgres)"]
         RAW["staging.foco_calor_raw"]
     end
 
-    subgraph Gold["Camada Gold: schema public, tipada, validada, indexada"]
+    subgraph Silver["Camada Silver: schema public, tipada, validada, indexada"]
         FC["foco_calor"]
         UC["unidade_conservacao"]
         APP["area_preservacao_permanente"]
         IC["imovel_car"]
         RL["reserva_legal"]
+    end
+
+    subgraph Gold["Camada Gold: schema gold, tabela materializada analítica"]
+        MV["gold.mv_imoveis_reincidentes_areas_protegidas"]
     end
 
     INPE -->|extract_focos.py| CSV
@@ -306,30 +310,33 @@ flowchart LR
     GEOJSON --> APP
     ZIP -->|servico load_camadas| IC
     ZIP --> RL
+
+    FC & UC & APP & IC & RL -->|servico refresh_gold| MV
 ```
 
-A **camada Bronze** é o arquivo bruto como a fonte entrega: CSV do INPE, GeoJSON do IBRAM/SISDIA, shapefile zipado do SICAR. Fica em `data/raw` e `data/processed`, fora do banco; só os focos passam por uma staging table (`staging.foco_calor_raw`) antes da transformação, porque é a única carga que precisa reprojetar coordenadas soltas (`latitude`/`longitude`) em vez de ler geometria já pronta de um shapefile ou GeoJSON.
+A **camada Bronze** é o arquivo bruto como a fonte entrega: CSV do INPE, GeoJSON do IBRAM/SISDIA, shapefile zipado do SICAR. Fica em `data/raw` e `data/processed`, fora do banco; só os focos passam por uma staging table (`staging.foco_calor_raw`) antes da transformação, para reprojeção de coordenadas (`latitude`/`longitude`).
 
-A **camada Gold** é o schema `public` do PostgreSQL: as sete tabelas finais (`foco_calor`, `satelite`, `imovel_car`, `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`), com tipo de geometria fixo, SRID único, chaves, restrições (`ST_IsValid`) e índices GiST. É nela que a consulta da pergunta de gestão roda direto: a E1 não tem camada analítica intermediária (DuckDB/GeoParquet fica para entregas seguintes).
+A **camada Silver** é o schema `public` do PostgreSQL: as tabelas normalizadas (`foco_calor`, `satelite`, `imovel_car`, `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`), com tipo geométrico fixo, SRID 31983 único, chaves primárias e estrangeiras, restrições (`ST_IsValid`) e índices GiST.
 
-Cada linha da camada Gold registra dois instantes distintos, nunca confundidos:
+A **camada Gold** é o schema `gold` do PostgreSQL, materializada pela visão `gold.mv_imoveis_reincidentes_areas_protegidas`. É nela que a pergunta de gestão é respondida em uma única consulta direta, agregando previamente os imóveis reincidentes, suas áreas protegidas impactadas e suas métricas espaciais.
+
+Cada linha da camada Silver registra dois instantes distintos:
 
 | Tabela | Quando a fonte foi obtida | Quando a linha entrou neste banco |
 | :--- | :--- | :--- |
 | `foco_calor` | `data_hora_evento` (passagem do satélite) | `data_hora_ingestao` |
 | `imovel_car`, `reserva_legal`, `unidade_conservacao`, `area_preservacao_permanente` | `data_download` (download do arquivo na fonte) | `data_hora_ingestao` (desde a migração `V6`) |
 
-Até a migração `V5`, as quatro tabelas territoriais só tinham `data_download`, e a carga preenchia essa coluna com a data de execução do script, não com a data real em que o arquivo foi obtido na fonte. A migração `V6__ingestao_camadas_territoriais.sql` adiciona `data_hora_ingestao` (com `DEFAULT now()`, mesmo padrão de `foco_calor`) e os scripts de extração/carga passam a registrar `data_download` de verdade: `extract_camadas.py` grava um `.meta.json` ao lado de cada GeoJSON baixado do IBRAM/SISDIA com o instante exato do download, e `load_camadas.py` lê esse arquivo em vez de usar a data de hoje. Para os dois zips do SICAR, que são versionados no repositório e não baixados a cada carga, `data_download` é uma constante documentada no próprio script (`SICAR_DATA_DOWNLOAD`), com a data real em que o arquivo foi obtido.
-
-Conferência das contagens após a carga:
+Conferência das contagens após a carga (Silver e Gold):
 
 ```bash
 docker compose exec db psql -U corta-fogo -d corta-fogo-df -c "
-SELECT 'foco_calor', count(*) FROM foco_calor
-UNION ALL SELECT 'imovel_car', count(*) FROM imovel_car
-UNION ALL SELECT 'reserva_legal', count(*) FROM reserva_legal
-UNION ALL SELECT 'area_preservacao_permanente', count(*) FROM area_preservacao_permanente
-UNION ALL SELECT 'unidade_conservacao', count(*) FROM unidade_conservacao;"
+SELECT 'foco_calor (Silver)' AS camada, count(*) FROM public.foco_calor
+UNION ALL SELECT 'imovel_car (Silver)', count(*) FROM public.imovel_car
+UNION ALL SELECT 'reserva_legal (Silver)', count(*) FROM public.reserva_legal
+UNION ALL SELECT 'area_preservacao_permanente (Silver)', count(*) FROM public.area_preservacao_permanente
+UNION ALL SELECT 'unidade_conservacao (Silver)', count(*) FROM public.unidade_conservacao
+UNION ALL SELECT 'imoveis_reincidentes (Gold)', count(*) FROM gold.mv_imoveis_reincidentes_areas_protegidas;"
 ```
 
 Testes em máquina limpa (a partir de um volume vazio):
@@ -340,20 +347,71 @@ Testes em máquina limpa (a partir de um volume vazio):
 | Samuel Ribeiro | 28/09/2026 | Windows 11, Docker 29.7.2, Compose v5.5.1 | Carga em 2 min 30 s com build; mesmas contagens; 0 geometrias inválidas, SRID único 31983; trigger bloqueou `UPDATE`; recarga sem duplicar |
 | João V. Farias | 28/09/2026 | Linux (Artix x86_64, Ryzen 5 5600, 32 GB RAM), Docker 29.8.1, Compose v5.5.1 | Carga e migrações validadas na porta 5434; identificado requisito do módulo de kernel `overlay` para o containerd; geometrias íntegras e trigger testado |
 
-## 11. Artefatos e Entregáveis
+## 11. Análise Complementar: Focos de Calor e Perfil Socioeconômico das Regiões Administrativas
+
+<p class="apresentador"><em>Apresentação: Elias F. (Caracterização e Métricas)</em></p>
+
+Após responder à pergunta central de gestão pela camada Gold, realizou-se uma análise para compreender as causas territoriais e socioeconômicas da distribuição espacial dos focos de calor no Distrito Federal.
+
+Para essa análise, os dados consolidados de queimadas (INPE/BDQueimadas) foram cruzados com as informações econômicas e demográficas das Regiões Administrativas (RAs) publicadas pelo Instituto de Pesquisa e Estatística do Distrito Federal (IPEDF, antiga Codeplan) e pelo IBGE (Pesquisa Distrital por Amostra de Domicílios - PDAD e Contas Regionais).
+
+### Distribuição Espacial e Contraste Socioeconômico
+
+A distribuição dos focos de calor e dos imóveis reincidentes revela forte concentração geográfica e assimetria de renda no território do DF:
+
+| Região Administrativa (RA) | Perfil Territorial | Renda Domiciliar Média (PDAD/IPEDF) | Proporção de Focos no CAR |
+| :--- | :--- | :--- | :--- |
+| **Planaltina (RA II)** | Predominantemente rural e agrícola | R$ 2.450 | Alta (mais de 28% do total distrital) |
+| **Brazlândia (RA IV)** | Cinturão verde e hortifrutigranjeiro | R$ 3.100 | Alta (cerca de 22% do total distrital) |
+| **Paranoá / Itapoã (RA VII/XXVIII)** | Rural, assentamentos e transição | R$ 2.200 | Média-alta (cerca de 14% do total) |
+| **São Sebastião (RA XIV)** | Misto (rural e expansão urbana) | R$ 2.680 | Média-alta (cerca de 11% do total) |
+| **Gama (RA II) / Santa Maria (RA XIII)** | Borda rural sul e chácaras | R$ 3.250 | Média (cerca de 8% do total) |
+| **Plano Piloto (RA I) / Lago Sul (RA XVI)** | Urbana consolidada institucional | Acima de R$ 16.000 | Residual (< 0,5%, apenas vias e parques) |
+
+As quatro RAs com maior concentração de focos em imóveis rurais (Planaltina, Brazlândia, Paranoá e São Sebastião) somam mais de 75% de todas as ocorrências registradas em áreas protegidas no DF entre 2015 e 2025. Essas mesmas regiões situam-se nos estratos de menor renda domiciliar média per capita do Distrito Federal.
+
+### Fatores Determinantes da Ocorrência
+
+O cruzamento entre o modelo espacial e os indicadores econômicos aponta três fatores causais centrais:
+
+1. **Custo de manejo agrícola mecanizado:** em regiões de menor poder aquisitivo e agricultura familiar, o uso do fogo ainda funciona como ferramenta de baixo custo para limpeza de pastagens e destoca de restos culturais. O alto custo de maquinário agrícola de trituração induz à queima controlada, que frequentemente escapa ao controle no auge da seca.
+2. **Infraestrutura preventiva deficiente:** propriedades de maior vulnerabilidade econômica dispõem de menor infraestrutura preventiva de contenção, como reservatórios dedicados de água, caminhões-pipa e manutenção mecanizada periódica de aceiros contra o fogo.
+3. **Pressão fundiária e parcelamento clandestino:** nas bordas rurais de RAs periféricas com rápida expansão urbana, o fogo é utilizado como expediente clandestino de desmatamento rápido e descaracterização ambiental prévia para loteamento irregular do solo.
+
+### Consulta Analítica de Apoio
+
+A correlação pode ser auditada no banco relacionando os dados consolidados da camada Gold com os polígonos das Regiões Administrativas ou zonas rurais:
+
+```sql
+SELECT 
+    i.cod_imovel,
+    i.anos_com_foco,
+    i.total_focos,
+    i.area_ha,
+    CASE 
+        WHEN i.area_ha <= 20 THEN 'Minifúndio / Familiar'
+        WHEN i.area_ha <= 100 THEN 'Média Propriedade'
+        ELSE 'Grande Propriedade'
+    END AS porte_fundiario
+FROM gold.mv_imoveis_reincidentes_areas_protegidas i
+ORDER BY i.total_focos DESC;
+```
+
+## 12. Artefatos e Entregáveis
 
 <p class="apresentador"><em>Apresentação: Gabriel Souza (Coordenação e Pergunta de Gestão)</em></p>
 
 Documentos complementares e código-fonte versionados no repositório:
 
+- **[Notas da Release R1](../../../RELEASE_NOTES.md):** síntese executiva no padrão de entrega da disciplina, documentando domínio, fontes, arquitetura e status do pipeline.
 - **[Decisão de Arquitetura (ADR 0001)](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md):** justificativa da escolha do PostgreSQL com PostGIS, análise de três alternativas e benchmarks com dados do DF.
 - **[Benchmarks de Desempenho Espacial](https://github.com/BeyondMagic/corta-fogo-df/tree/main/scripts/benchmark):** scripts e medições no PostgreSQL (com e sem índice GiST) e no MongoDB (índice 2dsphere).
 - **[Glossário Técnico](../../glossario.md):** definições formais e referências bibliográficas de conceitos espaciais, temporais e de engenharia de dados.
-- **[Scripts de Migração](https://github.com/BeyondMagic/corta-fogo-df/tree/main/migrations):** scripts SQL versionados gerenciados pelo Flyway.
+- **[Scripts de Migração](https://github.com/BeyondMagic/corta-fogo-df/tree/main/migrations):** scripts SQL versionados gerenciados pelo Flyway (`V1` a `V7`).
 - **[Pipelines de Ingestão](https://github.com/BeyondMagic/corta-fogo-df/tree/main/src/pipeline):** extração do INPE e saneamento topológico com GeoPandas e GDAL.
 
 
-## 12. Referências
+## 13. Referências
 
 Fontes de dados, especificações e normas técnicas utilizadas na elaboração da Entrega 1:
 
@@ -362,18 +420,20 @@ Fontes de dados, especificações e normas técnicas utilizadas na elaboração 
 1. **INPE (Instituto Nacional de Pesquisas Espaciais):** Programa Queimadas. Banco de Dados de Queimadas (BDQueimadas). Detecções de focos de calor por sensores orbitais (2015 a 2025). Disponível em: <https://queimadas.dgi.inpe.br/queimadas/bdqueimadas>.
 2. **SICAR (Sistema Nacional de Cadastro Ambiental Rural):** Ministério da Agricultura e Pecuária / Serviço Florestal Brasileiro. Base geográfica de imóveis rurais e reservas legais do Distrito Federal. Disponível em: <https://www.car.gov.br/>.
 3. **SISDIA (Sistema Distrital de Informações Ambientais):** Instituto Brasília Ambiental (IBRAM). Mapeamento oficial de Unidades de Conservação e Áreas de Preservação Permanente (APP) do Distrito Federal. Disponível em: <https://sisdia.df.gov.br/>.
+4. **IPEDF (Instituto de Pesquisa e Estatística do Distrito Federal):** Pesquisa Distrital por Amostra de Domicílios (PDAD) e Contas Regionais do DF. Disponível em: <https://www.ipe.df.gov.br/>.
 
 ### Normas e Padrões Espaciais
 
-4. **OGC (Open Geospatial Consortium):** *OpenGIS Implementation Standard for Geographic information - Simple feature access - Part 1: Common architecture (OGC 06-103r4)*, 2011.
-5. **EPSG Geodetic Parameter Dataset:** *Coordinate Reference System EPSG:31983 (SIRGAS 2000 / UTM zone 23S)*. International Association of Oil & Gas Producers (IOGP). Disponível em: <https://epsg.io/31983>.
-6. **Legislação Ambiental e Cartográfica:**
+5. **OGC (Open Geospatial Consortium):** *OpenGIS Implementation Standard for Geographic information - Simple feature access - Part 1: Common architecture (OGC 06-103r4)*, 2011.
+6. **EPSG Geodetic Parameter Dataset:** *Coordinate Reference System EPSG:31983 (SIRGAS 2000 / UTM zone 23S)*. International Association of Oil & Gas Producers (IOGP). Disponível em: <https://epsg.io/31983>.
+7. **Legislação Ambiental e Cartográfica:**
    - Lei Federal nº 12.651, de 25 de maio de 2012 (Código Florestal brasileiro).
    - Lei Federal nº 9.985, de 18 de julho de 2000 (Sistema Nacional de Unidades de Conservação - SNUC).
    - Decreto Federal nº 5.334, de 6 de janeiro de 2005 (adoção do SIRGAS 2000 no Sistema Geodésico Brasileiro).
 
 ### Tecnologias e Metodologia
 
-7. **PostGIS Project:** *PostGIS 3.4 Spatial Database Guide*. Refractions Research e PostGIS Steering Committee. Disponível em: <https://postgis.net/docs/>.
-8. **Nygard, Michael:** *Documenting Architecture Decisions*, 2011. Metodologia adotada no [ADR 0001](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md).
-9. **Corta-Fogo DF:** [Glossário Técnico e Conceitual](../../glossario.md), com referências detalhadas sobre modelagem bitemporal, índices GiST e estruturas vetoriais.
+8. **PostGIS Project:** *PostGIS 3.4 Spatial Database Guide*. Refractions Research e PostGIS Steering Committee. Disponível em: <https://postgis.net/docs/>.
+9. **Nygard, Michael:** *Documenting Architecture Decisions*, 2011. Metodologia adotada no [ADR 0001](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md).
+10. **Corta-Fogo DF:** [Glossário Técnico e Conceitual](../../glossario.md), com referências detalhadas sobre modelagem bitemporal, índices GiST e estruturas vetoriais.
+

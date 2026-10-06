@@ -59,5 +59,21 @@ services:
     volumes:
       - ./data/raw:/app/data/raw
 
+  refresh_gold:
+    image: postgres:16-alpine
+    depends_on:
+      load:
+        condition: service_completed_successfully
+      load_camadas:
+        condition: service_completed_successfully
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+    volumes:
+      - ./scripts/carga:/scripts:ro
+    entrypoint: >
+      psql -h db -U ${POSTGRES_USER:-corta-fogo} -d ${POSTGRES_DB:-corta-fogo-df}
+      -v ON_ERROR_STOP=1 -f /scripts/refresh_gold.sql
+
 volumes:
   pgdata:
+
