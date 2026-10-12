@@ -50,3 +50,11 @@ Consumidor resolve `id_satelite` para nome por consulta via `psycopg2` com cache
 4. Reprocessamento de janela: o `MERGE` inclui predicado de partição (`target.ano = ... AND target.mes = ...`) para limitar a leitura às partições do lote.
 5. `imovel_car_analitico`: um evento só é aplicado se `lsn_origem` for maior que o armazenado. Evita que um `update` antigo sobrescreva um mais novo.
 6. O CDC não deriva partição do instante de commit nem de `ts_ms`. Usa `data_hora_evento` do payload.
+
+## 2. Riscos encontrados
+
+| ID | Risco | Mitigação |
+| --- | --- | --- |
+| R1 | Lote e consumidor escrevem na mesma tabela `foco_calor_analitico` | Conflito de commit no `deltalake` levanta exceção. Consumidor e lote devem reexecutar o `MERGE` em caso de falha |
+| R2 | `batch_ingest.py` lê a tabela inteira com `to_pandas()` para contar linhas antes e depois do `MERGE` | Usar métricas do resultado do `merge` (`execute()` retorna contadores). Não bloqueia a E2 |
+| R3 | `imovel_car` sem `REPLICA IDENTITY FULL` envia só a PK no evento `delete` | Aceitável para soft delete por `cod_imovel`. Usar `FULL` apenas se o estado anterior for exigido |
