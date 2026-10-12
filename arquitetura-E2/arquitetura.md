@@ -30,3 +30,23 @@ Serviços novos no Compose: `redpanda`, `debezium-server`, `cdc-consumer`. Parâ
 | Serialização | JSON |
 
 Geometria: o Debezium entrega colunas PostGIS como struct `{wkb, srid}`. O consumidor decodifica com `shapely.wkb`.
+
+### D3. Escopo de mutação: `foco_calor` e `imovel_car`
+
+| Tabela | Operações esperadas | Observação |
+| --- | --- | --- |
+| `foco_calor` | `create` e `read` | O trigger impede `update` e `delete`. Exceção: `TRUNCATE` da recarga |
+| `imovel_car` | `create`, `update`, `delete` | Única tabela com mutação real. Exige script de mutação |
+
+Fora do CDC na E2: `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`, `satelite`. A Gold continua em PostGIS.
+
+Consumidor resolve `id_satelite` para nome por consulta via `psycopg2` com cache, sem incluir `satelite` na publicação.
+
+### D4. Regra de dado atrasado
+
+1. Partição `ano=YYYY/mes=MM` derivada de `data_hora_evento` em UTC. A coluna de origem é `TIMESTAMPTZ` e o CSV vem sem fuso, interpretado como UTC no contêiner.
+2. `data_hora_ingestao` é coluna, nunca partição. A janela de ingestão fica consultável sem afetar o layout.
+3. Registro atrasado cai na partição do evento, sem tocar nas partições atuais (já coberto por `test_tratamento_dados_atrasados_late_arriving`).
+4. Reprocessamento de janela: o `MERGE` inclui predicado de partição (`target.ano = ... AND target.mes = ...`) para limitar a leitura às partições do lote.
+5. `imovel_car_analitico`: um evento só é aplicado se `lsn_origem` for maior que o armazenado. Evita que um `update` antigo sobrescreva um mais novo.
+6. O CDC não deriva partição do instante de commit nem de `ts_ms`. Usa `data_hora_evento` do payload.
