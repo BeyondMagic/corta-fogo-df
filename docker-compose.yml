@@ -1,6 +1,7 @@
 services:
   db:
     image: postgis/postgis:16-3.4
+    command: postgres -c wal_level=logical -c max_replication_slots=4 -c max_slot_wal_keep_size=2GB
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-corta-fogo-df}
       POSTGRES_USER: ${POSTGRES_USER:-corta-fogo}
