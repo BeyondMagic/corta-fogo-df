@@ -13,6 +13,8 @@ ENV/
 data/raw/*
 !data/raw/AREA_IMOVEL.zip
 !data/raw/RESERVA_LEGAL.zip
+data/delta/
+.pytest_cache/
 *.tar.gz
 
 # IDEs e editores

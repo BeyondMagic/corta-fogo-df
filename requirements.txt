@@ -1,0 +1,11 @@
+# Dependências do projeto Corta-Fogo DF
+deltalake>=1.0.0
+pyarrow>=15.0.0
+pandas>=2.0.0
+geopandas>=0.14.4
+shapely>=2.0.6
+psycopg2-binary>=2.9.9
+pytest>=8.0.0
+
+# Zensical
+zensical>=0.0.65
