@@ -1,60 +1,85 @@
-# Alinhamento da Arquitetura da E2
+# Arquitetura da E2
 
-## 1. Decisões arquiteturais definidas
+## 1. Visão geral
+
+```mermaid
+flowchart LR
+  CSV[CSV INPE] -->|batch_ingest.py| DF[(Delta foco_calor)]
+  PG[(PostgreSQL imovel_car)] -->|slot test_decoding| C[cdc_consumer.py]
+  C --> DI[(Delta imovel_car)]
+```
+
+| Caminho | Origem | Destino | Escopo |
+| --- | --- | --- | --- |
+| Lote | CSV do INPE (`data/processed`) | Delta `foco_calor`, partição `ano/mes` | `foco_calor` (insert-only) |
+| CDC | WAL do PostgreSQL | Delta `imovel_car` | `imovel_car` (única tabela com INSERT, UPDATE e DELETE) |
+
+`foco_calor` fica fora do CDC: o trigger `tg_foco_calor_imutavel` bloqueia UPDATE e DELETE, e o OLTP não tem a chave de deduplicação do lote (`id_foco` é identity e reinicia a cada recarga).
+
+## 2. Decisões
 
 ### D1. Formato aberto: Delta Lake via `deltalake`
 
-- Já implementado e testado. Sem JVM e sem catálogo.
-- Iceberg exigiria `pyiceberg`, catálogo (SQL ou REST) e reescrita de `batch_ingest.py` e dos testes.
-- Escrita via `write_deltalake` e `DeltaTable.merge`.
+- Parquet com log Delta. Sem JVM e sem catálogo.
+- Já implementado em `batch_ingest.py` (`MERGE`, partição, testes).
+- Iceberg exigiria `pyiceberg`, catálogo e reescrita do lote e dos testes.
 
-### D2. Conector CDC: Debezium Server (sink Kafka) + Redpanda
+### D2. CDC: decodificação lógica nativa com `psycopg2`
 
-Opções discutidas em grupo: 
+- Plugin `test_decoding` (embutido no PostgreSQL). Sem publicação. O plugin não filtra tabelas: o consumidor descarta linhas que não são de `public.imovel_car`.
+- Leitura por SQL, na conexão normal:
+  - `pg_logical_slot_peek_changes(slot, NULL, N, 'skip-empty-xacts', '1')` devolve `lsn`, `xid` e `data`.
+  - Após o commit no Delta: `pg_replication_slot_advance(slot, lsn_da_ultima_linha)`. O peek termina sempre em um `COMMIT`, então o avanço cai em fronteira de transação.
+- Parâmetros do `db`: `wal_level=logical`, `max_replication_slots=4`, `max_slot_wal_keep_size=2GB`. Vão no `command` do Compose. Não há migration `V8`.
 
-- Debezium Connector for PostgreSQL em Kafka Connect sobre Redpanda
-- Debezium Server
+### D3. Estado inicial e slot
 
-Proposta do grupo: Debezium Server publicando em Redpanda. Redpanda não executa Kafka Connect. A primeira opção exige um contêiner `debezium/connect` e um passo de registro do conector via REST, que complica o processo de orquestração. Debezium Server é configurado por arquivo de propriedades montado no contêiner.
+O consumidor, ao iniciar:
 
-Serviços novos no Compose: `redpanda`, `debezium-server`, `cdc-consumer`. Parâmetros mínimos:
+1. Cria o slot `cdc_imovel` se não existir e lê `confirmed_flush_lsn` em `pg_replication_slots`.
+2. Se o slot foi criado agora ou a tabela Delta não existe: `SELECT` completo de `imovel_car`, gravado com `operacao_cdc='I'`, `origem_ingestao='snapshot'` e `lsn_origem` igual ao LSN do passo 1.
+3. Entra no loop de consumo.
 
-| Parâmetro | Valor |
-| --- | --- |
-| `plugin.name` | `pgoutput` |
-| `publication.name` | `cdc_publication` (criada no Flyway), `publication.autocreate.mode=disabled` |
-| `slot.name` | nome fixo, único |
-| `topic.prefix` | `oltp`, gerando `oltp.public.foco_calor` e `oltp.public.imovel_car` |
-| `snapshot.mode` | `initial`. Eventos `r` são tratados como upsert e absorvidos pela deduplicação |
-| `decimal.handling.mode` | `double` (`risco_fogo`) |
-| Serialização | JSON |
+Mudanças ocorridas entre os passos 1 e 2 são reentregues pelo slot. A guarda de `lsn_origem` as torna idempotentes.
 
-Geometria: o Debezium entrega colunas PostGIS como struct `{wkb, srid}`. O consumidor decodifica com `shapely.wkb`.
+### D4. Tabela Delta `imovel_car`
 
-### D3. Escopo de mutação: `foco_calor` e `imovel_car`
+Caminho: `data/delta/imovel_car`. Sem partição (dimensão pequena). Chave: `cod_imovel`.
 
-| Tabela | Operações esperadas | Observação |
+| Coluna | Tipo | Observação |
 | --- | --- | --- |
-| `foco_calor` | `create` e `read` | O trigger impede `update` e `delete`. Exceção: `TRUNCATE` da recarga |
-| `imovel_car` | `create`, `update`, `delete` | Única tabela com mutação real. Exige script de mutação |
+| `cod_imovel` | string | chave |
+| `situacao`, `condicao` | string | |
+| `area_ha` | double | |
+| `data_download` | date | data da fonte |
+| `geom_ewkb_hex` | string | hex repassado sem decodificar |
+| `data_hora_ingestao` | timestamp | entrada na camada analítica |
+| `origem_ingestao` | string | `snapshot` ou `cdc` |
+| `operacao_cdc` | string | `I`, `U`, `D` |
+| `lsn_origem` | long | LSN do evento |
 
-Fora do CDC na E2: `reserva_legal`, `area_preservacao_permanente`, `unidade_conservacao`, `hidrografia`, `satelite`. A Gold continua em PostGIS.
+Regras do `MERGE` por `cod_imovel`:
 
-Consumidor resolve `id_satelite` para nome por consulta via `psycopg2` com cache, sem incluir `satelite` na publicação.
+- `matched` e `source.lsn_origem >= target.lsn_origem`: atualiza. Menor que o armazenado: ignora (evento fora de ordem).
+- `not matched`: insere.
+- `DELETE`: o evento só traz a chave. Grava `operacao_cdc='D'` e preserva as demais colunas (exclusão lógica). O histórico do imóvel é a razão de versionar.
+- `unchanged-toast-datum` no `geom`: a coluna é omitida do `UPDATE` e mantém o valor anterior.
+- `TRUNCATE`: ignorado. As inserções seguintes (`load_camadas.py` recarrega com `ON CONFLICT DO NOTHING`) viram upserts.
 
-### D4. Regra de dado atrasado
+### D5. Entrega: at-least-once com deduplicação no destino
 
-1. Partição `ano=YYYY/mes=MM` derivada de `data_hora_evento` em UTC. A coluna de origem é `TIMESTAMPTZ` e o CSV vem sem fuso, interpretado como UTC no contêiner.
-2. `data_hora_ingestao` é coluna, nunca partição. A janela de ingestão fica consultável sem afetar o layout.
-3. Registro atrasado cai na partição do evento, sem tocar nas partições atuais (já coberto por `test_tratamento_dados_atrasados_late_arriving`).
-4. Reprocessamento de janela: o `MERGE` inclui predicado de partição (`target.ano = ... AND target.mes = ...`) para limitar a leitura às partições do lote.
-5. `imovel_car_analitico`: um evento só é aplicado se `lsn_origem` for maior que o armazenado. Evita que um `update` antigo sobrescreva um mais novo.
-6. O CDC não deriva partição do instante de commit nem de `ts_ms`. Usa `data_hora_evento` do payload.
+- O LSN só é confirmado após o commit no Delta. Falha no meio: o slot reentrega, e `cod_imovel` mais a guarda de LSN impedem duplicata.
+- Resultado observável: processamento efetivamente único no destino.
+- Lote: `MERGE ... WHEN NOT MATCHED INSERT` por `id_foco`. Reexecução não altera a contagem.
 
-## 2. Riscos encontrados
+### D6. Dado atrasado
 
-| ID | Risco | Mitigação |
-| --- | --- | --- |
-| R1 | Lote e consumidor escrevem na mesma tabela `foco_calor_analitico` | Conflito de commit no `deltalake` levanta exceção. Consumidor e lote devem reexecutar o `MERGE` em caso de falha |
-| R2 | `batch_ingest.py` lê a tabela inteira com `to_pandas()` para contar linhas antes e depois do `MERGE` | Usar métricas do resultado do `merge` (`execute()` retorna contadores). Não bloqueia a E2 |
-| R3 | `imovel_car` sem `REPLICA IDENTITY FULL` envia só a PK no evento `delete` | Aceitável para soft delete por `cod_imovel`. Usar `FULL` apenas se o estado anterior for exigido |
+Lote (`foco_calor`):
+
+1. Partição `ano=YYYY/mes=MM` derivada de `data_hora_evento` em UTC (o CSV vem sem fuso, interpretado como UTC no contêiner).
+2. `data_hora_ingestao` é coluna, nunca partição.
+3. Registro atrasado cai na partição do evento sem tocar nas atuais (coberto por `test_tratamento_dados_atrasados_late_arriving`).
+4. Reprocessar uma janela: reexecutar o arquivo do ano. O `MERGE` inclui o predicado de partição para limitar a leitura. Se o `deltalake` não podar por colunas do `source`, passar a lista literal de partições.
+5. Limitação: o `MERGE` só insere. Correção de valores já gravados não é aplicada. Aceitável, pois focos do INPE são insert-only.
+
+CDC (`imovel_car`): a ordem é garantida por `lsn_origem`, não por tempo de relógio.
