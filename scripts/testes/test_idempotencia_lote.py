@@ -165,6 +165,34 @@ def test_deduplicacao_no_proprio_lote():
     assert df_limpo["id_foco"].nunique() == 3
 
 
+def test_contrato_colunas_e_coordenadas_metricas():
+    df_base = criar_lote_exemplo(ano=2024, mes=5, quantidade=2)
+    df = preparar_dataframe(df_base)
+
+    obrigatorias = {
+        "id_foco",
+        "latitude",
+        "longitude",
+        "x_31983",
+        "y_31983",
+        "data_hora_evento",
+        "data_hora_ingestao",
+        "ano",
+        "mes",
+        "origem_ingestao",
+        "operacao_cdc",
+    }
+    assert obrigatorias.issubset(df.columns)
+    assert (df["origem_ingestao"] == "lote").all()
+    assert (df["operacao_cdc"] == "I").all()
+    assert df["x_31983"].notna().all()
+    assert df["y_31983"].notna().all()
+    assert df["x_31983"].between(100_000, 400_000).all()
+    assert df["y_31983"].between(8_000_000, 8_500_000).all()
+    assert list(df["ano"].unique()) == ["2024"]
+    assert list(df["mes"].unique()) == ["05"]
+
+
 def main():
     """Permite execucao direta do script de teste via CLI sem necessidade de chamar o pytest."""
     print("=== Executando testes automatizados de idempotencia e particionamento Delta Lake ===")
@@ -187,7 +215,11 @@ def main():
     test_deduplicacao_no_proprio_lote()
     print("-> OK!")
 
-    print("\nTodos os 4 testes foram executados e APROVADOS com sucesso!")
+    print("\n5. Testando contrato de colunas, coords 31983 e linhagem...")
+    test_contrato_colunas_e_coordenadas_metricas()
+    print("-> OK!")
+
+    print("\nTodos os 5 testes foram executados e APROVADOS com sucesso!")
 
 
 if __name__ == "__main__":

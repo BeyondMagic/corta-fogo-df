@@ -16,6 +16,7 @@ A documentação detalhada do projeto está disponível na pasta `docs/` e publi
 
 - [Site da documentação](https://beyondmagic.github.io/corta-fogo-df/)
 - [Entrega 1: Fonte Transacional e Sistema de Origem](docs/entrega/01/README.md): escopo da primeira etapa, modelo relacional e espacial, histórico e procedimentos de carga.
+- [Esquema da tabela aberta (E2)](docs/modelagem/esquema_tabela_aberta.md): contrato Delta Lake, partição temporal e evolução de esquema.
 - [Registros de Decisões de Arquitetura (ADRs)](docs/adr/README.md): justificativas técnicas para escolhas de banco de dados, extensões espaciais e projeção cartográfica.
 - [Glossário Técnico](docs/glossario.md): conceitos espaciais, cadastrais e referências bibliográficas.
 

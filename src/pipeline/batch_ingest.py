@@ -10,14 +10,17 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import pandas as pd
 from deltalake import DeltaTable, write_deltalake
+from pyproj import Transformer
 
 # Diretorio padrao para a tabela Delta Lake
 DEFAULT_DELTA_PATH = os.getenv("DELTA_TABLE_PATH", "data/delta/foco_calor")
 DEFAULT_CSV_PATH = "data/processed/focos_df_2015_2025.csv"
+
+_TRANSFORM_4326_31983 = Transformer.from_crs("EPSG:4326", "EPSG:31983", always_xy=True)
 
 
 def calcular_id_foco(lat: float, lon: float, data_hora_evento: str, satelite: str) -> str:
@@ -65,10 +68,21 @@ def preparar_dataframe(df_orig: pd.DataFrame) -> pd.DataFrame:
     else:
         df["data_hora_ingestao"] = pd.to_datetime(df["data_hora_ingestao"], errors="coerce")
 
-    # Coordenadas numericas
+    # Coordenadas numericas (WGS84) e metricas (31983)
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df = df.dropna(subset=["latitude", "longitude"]).copy()
+
+    x_m, y_m = _TRANSFORM_4326_31983.transform(
+        df["longitude"].to_numpy(),
+        df["latitude"].to_numpy(),
+    )
+    df["x_31983"] = x_m
+    df["y_31983"] = y_m
+
+    # Linhagem do lote (foco_calor fora do CDC: sempre lote / I)
+    df["origem_ingestao"] = "lote"
+    df["operacao_cdc"] = "I"
 
     # Satelite e atributos analiticos
     if "satelite" not in df.columns:
@@ -110,11 +124,13 @@ def preparar_dataframe(df_orig: pd.DataFrame) -> pd.DataFrame:
     else:
         df["id_foco"] = df["id_foco"].astype(str)
 
-    # Ordenacao das colunas do esquema da tabela Delta
+    # Ordenacao das colunas do contrato docs/modelagem/contrato_tabela_aberta.yaml
     colunas_finais = [
         "id_foco",
         "latitude",
         "longitude",
+        "x_31983",
+        "y_31983",
         "data_hora_evento",
         "data_hora_ingestao",
         "satelite",
@@ -124,6 +140,8 @@ def preparar_dataframe(df_orig: pd.DataFrame) -> pd.DataFrame:
         "risco_fogo",
         "ano",
         "mes",
+        "origem_ingestao",
+        "operacao_cdc",
     ]
 
     df_final = df[colunas_finais].copy()

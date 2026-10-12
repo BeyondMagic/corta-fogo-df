@@ -1,0 +1,178 @@
+# Contrato de esquema da camada analitica aberta (E2 / Issue #02).
+# Formato: Delta Lake (Parquet + log _delta_log) via biblioteca deltalake.
+# Fonte de verdade para batch_ingest.py, cdc_consumer.py e testes.
+# Alinhado a arquitetura-E2/arquitetura.md (branch doc-arquitetura).
+
+versao: "1.0"
+formato: delta_lake
+motor: deltalake
+srid_metrico: 31983
+srid_geografico: 4326
+
+regras_gerais:
+  small_files: >
+    Particionar so o necessario. foco_calor usa ano+mes (granularidade mensal).
+    imovel_car nao particiona (dimensao pequena, ~21k linhas).
+    Nao particionar por dia nem por satelite.
+  evolucao: >
+    So adicao de colunas (nullable ou com default). Renomear, remover ou mudar tipo
+    exige nova versao major deste contrato e caminho Delta novo ou migracao explicita.
+  chaves_imutaveis:
+    - foco_calor.id_foco
+    - imovel_car.cod_imovel
+    - foco_calor.ano
+    - foco_calor.mes
+
+tabelas:
+
+  foco_calor:
+    nome_logico: foco_calor_analitico
+    caminho: data/delta/foco_calor
+    origem: lote
+    caminho_ingestao: src/pipeline/batch_ingest.py
+    chave_merge: id_foco
+    merge: when_not_matched_insert_only
+    particionamento:
+      colunas: [ano, mes]
+      derivadas_de: data_hora_evento
+      fuso: UTC
+      layout: "ano=YYYY/mes=MM"
+      notas: >
+        data_hora_ingestao nunca e coluna de particao. Registro atrasado cai na
+        particao do evento (ano/mes do data_hora_evento).
+    colunas:
+      - nome: id_foco
+        tipo: string
+        nulo: false
+        descricao: >
+          SHA-256 de lat|.5f, lon|.5f, data_hora_evento e satelite. Deterministico.
+          Nao usar o id identity do PostgreSQL (reinicia a cada recarga).
+      - nome: latitude
+        tipo: double
+        nulo: false
+        srid: 4326
+        descricao: Latitude WGS84 (graus).
+      - nome: longitude
+        tipo: double
+        nulo: false
+        srid: 4326
+        descricao: Longitude WGS84 (graus).
+      - nome: x_31983
+        tipo: double
+        nulo: false
+        srid: 31983
+        descricao: Coordenada leste (metros) em SIRGAS 2000 / UTM 23S.
+      - nome: y_31983
+        tipo: double
+        nulo: false
+        srid: 31983
+        descricao: Coordenada norte (metros) em SIRGAS 2000 / UTM 23S.
+      - nome: data_hora_evento
+        tipo: timestamp
+        nulo: false
+        descricao: Passagem do satelite. Base de ano/mes e da reincidencia.
+      - nome: data_hora_ingestao
+        tipo: timestamp
+        nulo: false
+        descricao: Momento da escrita na camada analitica (lote).
+      - nome: satelite
+        tipo: string
+        nulo: false
+      - nome: is_satelite_referencia
+        tipo: boolean
+        nulo: false
+        descricao: true quando satelite contem AQUA_M-T.
+      - nome: municipio
+        tipo: string
+        nulo: true
+      - nome: bioma
+        tipo: string
+        nulo: true
+      - nome: risco_fogo
+        tipo: double
+        nulo: true
+      - nome: ano
+        tipo: string
+        nulo: false
+        particao: true
+        descricao: "YYYY derivado de data_hora_evento (UTC)."
+      - nome: mes
+        tipo: string
+        nulo: false
+        particao: true
+        descricao: "MM derivado de data_hora_evento (UTC)."
+      - nome: origem_ingestao
+        tipo: string
+        nulo: false
+        valores: [lote]
+        descricao: Sempre lote. foco_calor fica fora do CDC (insert-only no OLTP).
+      - nome: operacao_cdc
+        tipo: string
+        nulo: false
+        valores: [I]
+        descricao: Sempre I. Coluna mantida para linhagem uniforme com imovel_car.
+    atributos_territoriais_futuros:
+      politica: nullable_additive
+      exemplos:
+        - cod_imovel
+        - flag_em_reserva_legal
+        - flag_em_app
+        - flag_ate_1km_uc
+      regra: >
+        Colunas novas entram nullable. Lotes antigos permanecem legiveis.
+        Preenchimento e responsabilidade do job que fizer o join espacial, nao do lote INPE.
+
+  imovel_car:
+    nome_logico: imovel_car_analitico
+    caminho: data/delta/imovel_car
+    origem: cdc
+    caminho_ingestao: cdc_consumer.py
+    chave_merge: cod_imovel
+    merge: upsert_por_lsn
+    particionamento: null
+    colunas:
+      - nome: cod_imovel
+        tipo: string
+        nulo: false
+        descricao: Chave natural DF-...
+      - nome: situacao
+        tipo: string
+        nulo: true
+      - nome: condicao
+        tipo: string
+        nulo: true
+      - nome: area_ha
+        tipo: double
+        nulo: true
+      - nome: data_download
+        tipo: date
+        nulo: true
+        descricao: Data da fonte SICAR no OLTP.
+      - nome: geom_ewkb_hex
+        tipo: string
+        nulo: true
+        descricao: Geometria MultiPolygon 31983 em EWKB hexadecimal (sem decodificar no CDC).
+      - nome: data_hora_ingestao
+        tipo: timestamp
+        nulo: false
+        descricao: Entrada na camada analitica (snapshot ou evento CDC).
+      - nome: origem_ingestao
+        tipo: string
+        nulo: false
+        valores: [snapshot, cdc]
+      - nome: operacao_cdc
+        tipo: string
+        nulo: false
+        valores: [I, U, D]
+        descricao: D e exclusao logica (preserva demais colunas).
+      - nome: lsn_origem
+        tipo: long
+        nulo: false
+        descricao: >
+          LSN do evento WAL. MERGE so atualiza se source.lsn_origem >= target.lsn_origem.
+    regras_merge:
+      - matched_lsn_maior_ou_igual: atualiza
+      - matched_lsn_menor: ignora (evento fora de ordem)
+      - not_matched: insere
+      - delete: grava operacao_cdc=D sem apagar a linha
+      - toast_inalterado: omite geom_ewkb_hex do update e mantem valor anterior
