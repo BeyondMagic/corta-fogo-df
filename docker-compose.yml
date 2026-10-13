@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} && psql -U $${POSTGRES_USER} -d $${POSTGRES_DB} -tAc 'SHOW wal_level' | grep -qx logical"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -75,6 +75,34 @@ services:
       psql -h db -U ${POSTGRES_USER:-corta-fogo} -d ${POSTGRES_DB:-corta-fogo-df}
       -v ON_ERROR_STOP=1 -f /scripts/refresh_gold.sql
 
+  batch_ingest:
+    build:
+      context: ./src/pipeline
+      dockerfile: Dockerfile.lakehouse
+    command: python batch_ingest.py
+    volumes:
+      - ./data/processed:/app/data/processed:ro
+      - lakehouse:/app/data/delta
+
+  cdc_consumer:
+    build:
+      context: ./src/pipeline
+      dockerfile: Dockerfile.lakehouse
+    command: python cdc_consumer.py
+    restart: on-failure
+    depends_on:
+      load_camadas:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+    volumes:
+      - lakehouse:/app/data/delta
+
 volumes:
   pgdata:
+  lakehouse:
 
