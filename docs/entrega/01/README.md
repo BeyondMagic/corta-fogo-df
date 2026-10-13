@@ -403,7 +403,6 @@ ORDER BY i.total_focos DESC;
 
 Documentos complementares e código-fonte versionados no repositório:
 
-- **[Notas da Release R1](../../../RELEASE_NOTES.md):** síntese executiva no padrão de entrega da disciplina, documentando domínio, fontes, arquitetura e status do pipeline.
 - **[Decisão de Arquitetura (ADR 0001)](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md):** justificativa da escolha do PostgreSQL com PostGIS, análise de três alternativas e benchmarks com dados do DF.
 - **[Benchmarks de Desempenho Espacial](https://github.com/BeyondMagic/corta-fogo-df/tree/main/scripts/benchmark):** scripts e medições no PostgreSQL (com e sem índice GiST) e no MongoDB (índice 2dsphere).
 - **[Glossário Técnico](../../glossario.md):** definições formais e referências bibliográficas de conceitos espaciais, temporais e de engenharia de dados.
