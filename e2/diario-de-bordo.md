@@ -12,10 +12,10 @@ A semana foi usada para corrigir a Entrega 1 (E1) de acordo com as observações
 
 **O que foi feito**
 
-**05/10 -** Documento de arquitetura da E2 consolidado.
-**05/10 -** Ingestão em lote dos focos de calor do INPE para uma tabela Delta Lake (`batch_ingest.py`), com `MERGE` por `id_foco`.
-**06/10 -** Testes de idempotência, partição e dado atrasado do lote (`test_idempotencia_lote.py`).
-**09/10 -** PostgreSQL configurado para decodificação lógica (`wal_level=logical`, `max_replication_slots=4`, `max_slot_wal_keep_size=2GB`).
+**05/10 -** Documento de arquitetura da E2 consolidado. </br>
+**05/10 -** Ingestão em lote dos focos de calor do INPE para uma tabela Delta Lake (`batch_ingest.py`), com `MERGE` por `id_foco`. </br>
+**06/10 -** Testes de idempotência, partição e dado atrasado do lote (`test_idempotencia_lote.py`). </br>
+**09/10 -** PostgreSQL configurado para decodificação lógica (`wal_level=logical`, `max_replication_slots=4`, `max_slot_wal_keep_size=2GB`). </br>
 
 **Decisões**
 
@@ -28,9 +28,9 @@ A semana foi usada para corrigir a Entrega 1 (E1) de acordo com as observações
 
 **O que foi feito**
 
-**10/10 -** Consumidor CDC (`cdc_consumer.py`) que grava `imovel_car` em uma tabela Delta.
-**10/10 -** Script de mutações no OLTP para provar que o CDC captura mudanças.
-**11/10 -** Testes do consumidor CDC (reprocessamento e idempotência).
+**10/10 -** Consumidor CDC (`cdc_consumer.py`) que grava `imovel_car` em uma tabela Delta. </br>
+**10/10 -** Script de mutações no OLTP para provar que o CDC captura mudanças. </br>
+**11/10 -** Testes do consumidor CDC (reprocessamento e idempotência). </br>
 
 **Decisões**
 
