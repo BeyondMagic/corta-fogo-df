@@ -80,6 +80,7 @@ services:
       context: ./src/pipeline
       dockerfile: Dockerfile.lakehouse
     command: python batch_ingest.py
+    restart: on-failure:3
     volumes:
       - ./data/processed:/app/data/processed:ro
       - lakehouse:/app/data/delta
@@ -101,6 +102,22 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
     volumes:
       - lakehouse:/app/data/delta
+
+  verificar_lakehouse:
+    profiles: ["verificacao"]
+    build:
+      context: ./src/pipeline
+      dockerfile: Dockerfile.lakehouse
+    command: python scripts/verificar_lakehouse.py
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+    volumes:
+      - lakehouse:/app/data/delta:ro
+      - ./scripts:/app/scripts:ro
 
 volumes:
   pgdata:
