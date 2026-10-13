@@ -1,154 +1,139 @@
 # 0002. Mecanismo de ingestão e formato aberto de tabela
 
-- **Status:** Em Análise
+- **Status:** Aceito
 - **Data:** 2026-10-13
 - **Decisores:** Cláudio H., Elias F., Gabriel F., Gabriel S., João V., Manoel F., Samuel R.
 
 ## Contexto
 
-O projeto Corta-Fogo DF consolida dois fluxos de dados com características operacionais e taxas de mutação distintas:
+No ADR 0001, colocamos todas as tabelas no PostgreSQL com PostGIS. Isso resolveu a validação geométrica e a integridade referencial, mas a medição da pergunta de gestão mostrou o custo dessa escolha: a junção espacial completa entre os 38.945 focos e os 21.047 imóveis levou 41,8 segundos no banco operacional. Manter esse tipo de consulta analítica rodando direto no PostgreSQL consome CPU, conexões e disco, competindo com as cargas normais do sistema.
 
-1. **Ocorrências de calor do [BDQueimadas (INPE)](../glossario.md#bdqueimadas-inpe):** série temporal contínua com detecções orbitais no Distrito Federal (38.945 focos entre 2015 e 2025). As linhas são imutáveis (apenas inserção no OLTP protegida por trigger), mas eventos de datas anteriores podem ser disponibilizados em remessas posteriores (dados atrasados ou *late-arriving data*).
-2. **Cadastros territoriais do [SICAR](../glossario.md#sicar-car-sistema-nacional-de-cadastro-ambiental-rural) e do IBRAM/SISDIA:** malhas fundiárias e áreas protegidas (21.047 imóveis rurais, 13.499 reservas legais, 2.234 áreas de preservação permanente e 84 unidades de conservação). No sistema de origem, `imovel_car` é a tabela cadastral sujeita a inserções, retificações de área/condição e cancelamentos de registro (operações de `INSERT`, `UPDATE` e `DELETE`).
+Para a Entrega 2, precisamos levar esses dados para uma camada analítica colunar em formato aberto (lakehouse), consultável por ferramentas como o DuckDB. Só que as duas fontes principais do projeto se comportam de maneiras opostas:
 
-Na Entrega 1, essas bases foram estruturadas no PostgreSQL 16 com extensão PostGIS 3.4 ([ADR 0001](01-adotar-postgresql-com-postgis-camada-gold.md)), que valida regras topológicas e chaves relacionais. Executar consultas analíticas espaciais pesadas diretamente no PostgreSQL consome CPU, I/O e conexões do banco operacional.
+1. **Focos de calor do [BDQueimadas (INPE)](../glossario.md#bdqueimadas-inpe):** chegam em arquivos de satélite com 38.945 detecções entre 2015 e 2025. O foco é um fato histórico: depois de gravado, ele nunca sofre alteração nem exclusão (a tabela tem trigger bloqueando UPDATE e DELETE). Porém, ocorrem dados atrasados (*late-arriving data*): um arquivo processado hoje pode conter detecções de meses ou anos anteriores, e esse dado precisa cair na partição do ano do evento, sem sobrepor as partições atuais.
+2. **Imóveis rurais do [SICAR](../glossario.md#sicar-car-sistema-nacional-de-cadastro-ambiental-rural):** a tabela `imovel_car` representa um cadastro vivo. Imóveis podem ser inseridos, retificados em área ou cancelados. É a única tabela do projeto que sofre `INSERT`, `UPDATE` e `DELETE`.
 
-A equipe precisa definir dois pontos arquiteturais para a Entrega 2:
-
-- O mecanismo de propagação e sincronização dos dados do sistema de origem para o ambiente analítico desacoplado.
-- O formato aberto de armazenamento colunar para persistência no lakehouse, permitindo consultas analíticas velozes via [DuckDB](../glossario.md#duckdb) sem dependência de um servidor de banco dedicado ou cluster distribuído.
+Diante disso, precisamos decidir como propagar esses dados para o lakehouse sem sobrecarregar o PostgreSQL e qual formato aberto de tabela adotar no armazenamento.
 
 ## Alternativas de ingestão consideradas
 
 ### A. Opção nula: Ingestão agendada no PostgreSQL via scripts SQL ou pg_cron
 
-Manter todo o processamento analítico dentro do próprio PostgreSQL, agendando rotinas de cópia periódica (`INSERT ... SELECT`), visões materializadas ou scripts SQL executados via extensão `pg_cron` ou cron do sistema operacional.
+Manter todo o processamento dentro do próprio PostgreSQL, criando tabelas analíticas ou visões materializadas atualizadas por scripts agendados com `pg_cron` ou pelo cron do sistema operacional.
 
-- **O que oferece:** dispensa ferramentas externas de pipeline, mantém toda a lógica em comandos SQL e utiliza a infraestrutura de banco de dados já instalada.
-- **O que cobra:** consome recursos de CPU, memória e subsistema de I/O da mesma instância utilizada pelo sistema transacional durante as rotinas de agregação. Mantém os dados presos na estrutura relacional em páginas de 8 KB do PostgreSQL, sem gerar arquivos colunares abertos para processamento analítico desacoplado. Não oferece suporte nativo a versionamento temporal aberto (*time-travel*) nem compressão colunar avançada.
+- **O que oferece:** não adiciona nenhum componente à infraestrutura. Toda a lógica continua em SQL puro e usa o PostgreSQL que já está no ar.
+- **O que cobra:** as consultas analíticas continuam disputando os mesmos recursos de CPU, memória e disco com a aplicação. O PostgreSQL guarda dados em páginas de 8 KB orientadas a linha, o que é ineficiente para varreduras de colunas em milhões de registros. Também não entrega arquivos abertos para ferramentas externas nem suporta viagens no tempo (*time-travel*) sem duplicação manual de tabelas.
 
 ### B. Captura de mudanças de dados (CDC) via decodificação lógica do WAL
 
-Configurar a leitura contínua do log de transações do PostgreSQL (Write-Ahead Log - WAL) com nível lógico (`wal_level=logical`), extraindo eventos linha a linha por meio de slots de replicação com plugins de decodificação (`test_decoding`) para atualizar a camada analítica aberta.
+Configurar o PostgreSQL com `wal_level=logical` e ler as alterações direto do log de transações (Write-Ahead Log) por meio de um slot de replicação com plugin nativo (`test_decoding`). Um consumidor em Python lê o stream de eventos e reflete as mutações na tabela aberta.
 
-- **O que oferece:** propaga modificações cadastrais com latência na escala de milissegundos (~31 ms), captura operações DML (`INSERT`, `UPDATE` e `DELETE`) sem sobrecarregar o banco com consultas de varredura periódica e registra a ordem exata das transações por meio do Log Sequence Number (LSN) de 64 bits.
-- **O que cobra:** exige gerenciar slots de replicação lógica no PostgreSQL. Se o processo consumidor falhar ou ficar inativo por período prolongado, o banco retém os arquivos de WAL no disco até o limite configurado (`max_slot_wal_keep_size=2GB`), sob risco de esgotar o armazenamento da instância operacional (`pgdata`).
+- **O que oferece:** propaga alterações cadastrais com latência de milissegundos (~32 ms no nosso teste). Captura inserções, atualizações e exclusões sem fazer consultas periódicas de varredura no banco. A ordem das operações é garantida pelo número sequencial de log (LSN), o que elimina incertezas de relógio.
+- **O que cobra:** exige monitorar o slot de replicação. Se o consumidor parar e o slot ficar aberto, o PostgreSQL acumula arquivos de WAL em disco até o limite de `max_slot_wal_keep_size` (definido em 2 GB), podendo esgotar o espaço da partição de dados do banco.
 
 ### C. Ingestão periódica em lote (Batch)
 
-Executar scripts programados em Python que extraem dados das fontes públicas (INPE) ou processam arquivos em janelas temporais definidas, aplicando regras de limpeza, particionamento temporal e deduplicação no momento da escrita.
+Executar scripts em Python que leem arquivos das fontes públicas ou do banco em horários definidos, aplicando regras de particionamento e mesclagem idempotente na escrita.
 
-- **O que oferece:** arquitetura simples e robusta sem processos residentes em segundo plano, sem sockets abertos contínuos ou filas de mensageria. Alinha o processamento à periodicidade das publicações públicas de satélite. Permite controle determinístico de idempotência e roteamento automático de registros atrasados (*late-arriving data*) para suas respectivas partições físicas.
-- **O que cobra:** a latência de atualização fica vinculada ao intervalo de disparo do agendador (minutos ou horas). Exige controle explícito de deduplicação entre execuções para evitar inserção de registros duplicados em períodos já consolidados.
+- **O que oferece:** processo simples que roda, faz o trabalho e encerra. Não mantém serviços adicionais em segundo plano, não ocupa conexões permanentes e não depende de brokers de mensageria como Kafka. Combina com a natureza das fontes públicas, que publicam arquivos em lotes diários ou anuais. Trata dados atrasados de forma determinística, gravando cada registro na sua pasta de partição correspondente.
+- **O que cobra:** a novidade dos dados fica limitada ao intervalo de agendamento (horas ou dias). Exige um identificador estável para que reexecuções não gerem duplicatas.
 
 ## Comparação de formatos abertos de tabela
 
-Para o armazenamento analítico colunar (lakehouse), avaliamos duas especificações de tabela aberta baseadas em Apache Parquet:
+Para armazenar os arquivos colunares Parquet com suporte a transações ACID e controle de versão, comparamos duas opções:
 
 ### Delta Lake
 
-Especificação aberta de tabela com controle transacional ACID, versionamento de dados e log de operações mantido no diretório `_delta_log/` em formato JSON e checkpoints compactados.
+Formato de tabela aberta que armazena os dados em arquivos Parquet e o histórico de transações em uma pasta `_delta_log/` com arquivos JSON e checkpoints compactados.
 
-- **O que oferece:** biblioteca nativa em Python (`deltalake`, desenvolvida em Rust pelo projeto delta-rs) que lê e grava tabelas Delta diretamente com PyArrow e Pandas, sem necessidade de JVM ou cluster Apache Spark. Suporta nativamente operações de `MERGE INTO`, evolução controlada de esquema, particionamento em diretórios padrão Hive (`ano=YYYY/mes=MM/`) e integração com ferramentas de consulta colunar como DuckDB via extensão `delta_scan`.
-- **O que cobra:** o ecossistema delta-rs implementa um subconjunto da especificação do Delta Lake do ecossistema Spark (sem suporte nativo a catálogos centralizados complexos fora do ecossistema Databricks/Unity), embora cubra plenamente escrita em lote, `MERGE`, deleção lógica e histórico de commits ACID para ambientes locais e conteinerizados.
+- **O que oferece:** a biblioteca `deltalake` (delta-rs, escrita em Rust com bindings para Python) permite ler e gravar tabelas Delta diretamente com PyArrow e Pandas, sem precisar de Java, JVM ou cluster Spark. Suporta `MERGE INTO`, particionamento no padrão Hive (`ano=YYYY/mes=MM/`) e é lida nativamente pelo DuckDB.
+- **O que cobra:** a biblioteca em Rust cobre as operações locais de escrita, merge e deleção, mas não implementa todos os recursos de catálogos corporativos avançados que o ecossistema Databricks oferece. Para o nosso ambiente conteinerizado, essa limitação não tem impacto prático.
 
 ### Apache Iceberg
 
-Especificação de tabela aberta voltada para grandes volumes analíticos, com controle de metadados em camadas (arquivos de metadados JSON, listas de manifestos e arquivos de manifesto individuais).
+Formato de tabela analítica voltado para grandes volumes de dados, com metadados estruturados em árvores de manifestos e arquivos de dados.
 
-- **O que oferece:** abstração completa de particionamento (particionamento oculto, sem expor colunas artificiais na consulta), evolução de esquema sem reescrita de dados e isolamento transacional estrito.
-- **O que cobra:** requer obrigatoriamente um serviço de catálogo de metadados externo ativo (REST Catalog, Apache Polaris, Nessie, JDBC ou Hive Metastore) para registrar commits concorrentes com segurança. A biblioteca Python oficial (PyIceberg) apresenta menor maturidade para operações avançadas de escrita transacional com mesclagem espacial (`MERGE`) e exigiria contêineres adicionais de catálogo na composição do Docker Compose, elevando a complexidade operacional da equipe.
+- **O que oferece:** isolamento transacional rigoroso, evolução de esquema sem reescrever dados e particionamento oculto (as consultas filtram por data sem precisar conhecer a estrutura de pastas).
+- **O que cobra:** exige um serviço de catálogo ativo (como REST Catalog, Nessie ou Hive Metastore) para coordenar escritas concorrentes, o que adicionaria mais contêineres e memória ao Compose. A biblioteca Python (`pyiceberg`) ainda tem limitações para operações complexas de escrita e mesclagem comparada à sua implementação em Java, o que exigiria trazer a JVM para o pipeline.
 
 ## Critérios de avaliação
 
-A decisão entre os mecanismos de ingestão e os formatos abertos considera cinco critérios técnicos:
+Comparamos as opções usando cinco critérios técnicos:
 
-1. **Latência de propagação:** intervalo de tempo entre o commit na origem e a sua disponibilidade para consulta na camada analítica.
-2. **Custo operacional:** quantidade de serviços adicionais no ambiente (contêineres, brokers de mensageria, JVM, catálogo de metadados) e esforço de manutenção contínua.
-3. **Impacto no OLTP:** nível de interferência da rotina de extração sobre os recursos do PostgreSQL operacional (consumo de CPU, I/O de disco, concorrência de travas e retenção de WAL).
-4. **Complexidade de schema evolution:** esforço necessário para adicionar ou evoluir colunas nas tabelas analíticas sem corromper partições históricas ou exigir reprocessamento total.
-5. **Tolerância a falhas e idempotência:** capacidade de recuperar execuções interrompidas, reprocessar remessas duplicadas e absorver dados fora de ordem temporal (*late-arriving data*) sem gerar duplicatas.
+1. **Latência de propagação:** tempo que uma alteração na origem leva para aparecer nas consultas analíticas.
+2. **Custo operacional:** quantidade de serviços no Docker Compose, consumo de memória RAM, dependência de JVM e complexidade de manutenção.
+3. **Impacto no OLTP:** quanto a ingestão consome de CPU, disco, conexões e espaço de WAL do PostgreSQL.
+4. **Evolução de esquema:** facilidade para adicionar ou alterar colunas sem quebrar cargas antigas nem reprocessar a base inteira.
+5. **Tolerância a falhas e idempotência:** garantia de que reexecuções de jobs, quedas de conexão ou eventos fora de ordem cronológica não gerem linhas duplicadas nem corrompam dados.
 
 ---
 
 ## Medição Empírica
 
-Todas as métricas apresentadas nesta seção foram colhidas com scripts automatizados reproduzíveis no repositório, utilizando dados reais do Distrito Federal (38.945 focos do INPE e 21.047 imóveis do CAR).
+Todas as medições desta seção foram obtidas com os scripts de benchmark do repositório, usando dados reais do Distrito Federal (38.945 focos do INPE e 21.047 imóveis do CAR).
 
-### 1. Benchmark de Latência Comparativa: CDC vs Lote vs Opção Nula
+### 1. Benchmark de Latência: CDC vs Lote vs Opção Nula
 
-Script de reprodução: [`scripts/benchmark/benchmark_ingestao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_ingestao.py)  
-Relatório estruturado: [`scripts/benchmark/resultados_latencia.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_latencia.md)
+- Script: [`scripts/benchmark/benchmark_ingestao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_ingestao.py)
+- Relatório detalhado: [`scripts/benchmark/resultados_latencia.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_latencia.md)
 
-| Mecanismo de Ingestão | Latência de Propagação | Frequência Típica | Granularidade | Impacto no OLTP |
+| Mecanismo | Latência medida | Frequência típica | Granularidade | Impacto no OLTP |
 | :--- | :--- | :--- | :--- | :--- |
-| **B. CDC (Decodificação Lógica)** | **~31,97 ms** | Contínua / Near-Real-Time | Por transação (tupla a tupla) | **Baixo:** leitura assíncrona do WAL via slot lógico nativo |
-| **C. Lote (Delta Lake MERGE)** | **~52,69 ms (0,053 s)** | Agendada (Diária / Mensal) | Bloco temporal (`ano/mes`) | **Nulo:** processamento desacoplado fora do SGBD |
-| **A. Opção Nula (In-database ELT)** | **~14,27 ms (0,014 s)** | Agendada via `pg_cron` / Trigger | Global ou relacional | **Alto:** disputa concorrência de CPU, lock e I/O com escrita |
+| **CDC (Decodificação Lógica)** | **~31,97 ms** | Contínua (quase tempo real) | Tupla a tupla | Baixo (leitura assíncrona do WAL via slot) |
+| **Lote (Delta Lake MERGE)** | **~52,69 ms** | Agendada (diária ou periódica) | Bloco temporal (`ano/mes`) | Nulo (processamento fora do banco) |
+| **Opção Nula (SQL no PostgreSQL)** | **~14,27 ms** | Agendada (`pg_cron` ou trigger) | Conjunto relacional | Alto (concorre por CPU, I/O e travas) |
 
-#### Análise quantitativa da Opção Nula vs CDC
-- **Onde a Opção Nula é viável:** em bancos com baixa concorrência de escrita, onde tabelas analíticas intermediárias ou visões materializadas podem ser recalculadas na madrugada sem impactar transações de usuários.
-- **Onde a Opção Nula falha e justifica o CDC:** à medida que consultas espaciais e agregações de malha fundiária crescem, o comando `INSERT ... SELECT` concorre diretamente pelos buffers compartilhados (*shared_buffers*) e I/O de disco com os processos de carga. O conector CDC desacopla totalmente a camada analítica: a leitura de eventos ocorre sequencialmente no WAL em segundo plano, entregando latência de **31,97 ms** sem bloquear tabelas ou saturar o planejador relacional.
+À primeira vista, a opção nula parece a mais rápida (14,27 ms), mas esse número esconde o problema real: ela roda dentro do próprio PostgreSQL, disputando memória compartilhada (*shared_buffers*) e bloqueios de tabela com as transações da aplicação. Conforme o volume de cruzamentos espaciais cresce, essa disputa degrada o banco inteiro.
+
+O CDC entrega uma latência de 31,97 ms lendo o WAL de forma assíncrona, sem travar tabelas nem concorrer com o planejador de consultas. Já o lote demora 52,69 ms para mesclar blocos de dados fora do banco, sem gerar impacto no OLTP.
 
 ---
 
-### 2. Benchmark de Compressão Colunar: Snappy vs ZSTD
+### 2. Benchmark de Compressão: Snappy vs ZSTD
 
-Script de reprodução: [`scripts/benchmark/benchmark_compressao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_compressao.py)  
-Relatório estruturado: [`scripts/benchmark/resultados_compressao.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_compressao.md)  
-Amostra avaliada: partição real de focos de calor do DF (`ano=2024/mes=08`, 1.183 registros normalizados).
+- Script: [`scripts/benchmark/benchmark_compressao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_compressao.py)
+- Relatório detalhado: [`scripts/benchmark/resultados_compressao.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_compressao.md)
+- Amostra: partição real de focos do DF (`ano=2024/mes=08`, com 1.183 registros).
 
-| Algoritmo de Compressão | Tamanho em Disco (MB) | Taxa de Redução vs Raw (%) | Tempo de Escrita (ms) | Query Agregada DuckDB (ms) |
+| Algoritmo | Tamanho em disco | Redução vs bruto em memória | Tempo de escrita | Consulta no DuckDB |
 | :--- | :--- | :--- | :--- | :--- |
-| **UNCOMPRESSED** | 0,1439 MB | 43,93% | 2,17 ms | 2,783 ms |
-| **SNAPPY** | 0,1359 MB | 47,04% | 2,13 ms | 2,535 ms |
-| **ZSTD (Zstandard)** | **0,0918 MB** | **64,21%** | 2,80 ms | 2,906 ms |
+| **Sem compressão** | 0,1439 MB | 43,9% | 2,17 ms | 2,78 ms |
+| **Snappy** | 0,1359 MB | 47,0% | 2,13 ms | 2,53 ms |
+| **ZSTD (Zstandard)** | **0,0918 MB** | **64,2%** | 2,80 ms | 2,90 ms |
 
-#### Justificativa da escolha de compressão
-- **Eficiência física:** o algoritmo **Zstandard (ZSTD)** proporcionou **taxa de redução de 64,21%** contra o formato bruto em memória, gerando arquivos **32,4% menores do que o Snappy** (0,0918 MB vs 0,1359 MB na partição).
-- **Desempenho de leitura no DuckDB:** o tempo de resposta em consultas analíticas de agregação vetorizada (`COUNT(*)`, `AVG(risco_fogo)` agrupado por satélite) permaneceu estatisticamente idêntico entre ZSTD (2,90 ms) e Snappy (2,53 ms), com diferença inferior a 0,4 ms.
-- **Conclusão:** para uma série histórica de 11 anos com 38.945 registros de satélite, a economia cumulativa de armazenamento viabilizada pelo ZSTD supera amplamente o custo desprezível de descompressão pelo DuckDB.
+O Zstandard (ZSTD) gerou arquivos 32,4% menores que o Snappy (0,0918 MB contra 0,1359 MB), reduzindo o volume em 64,2% em relação aos dados brutos em memória.
+
+Na leitura pelo DuckDB, uma consulta analítica agregada (`COUNT(*)`, `AVG(risco_fogo)` por satélite) levou 2,90 ms no ZSTD e 2,53 ms no Snappy. A diferença de 0,37 ms é imperceptível na prática e compensa amplamente pela economia de armazenamento em uma série histórica de 11 anos.
 
 ---
 
-### 3. Validação de Semântica At-Least-Once e Reprocessamento Forçado
+### 3. Semântica de Entrega e Testes de Falha
 
-Script de validação: [`scripts/testes/test_reprocessamento_cdc.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/testes/test_reprocessamento_cdc.py)
+- Script: [`scripts/testes/test_reprocessamento_cdc.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/testes/test_reprocessamento_cdc.py)
 
-1. **Semântica At-Least-Once no CDC comprovada na prática:**
-   - O teste simulou queda e reconexão do consumidor forçando o offset a recuar para um LSN anterior (`0/2000`), reenviando mutações já processadas e mutações desordenadas com LSN obsoleto (`0/800`).
-   - A guarda de LSN no Delta Lake (`source.lsn_origem >= target.lsn_origem`) descartou 100% dos eventos obsoletos e evitou regresso de estado.
-   - A unicidade de `cod_imovel` foi estritamente preservada (zero duplicações), confirmando que a semântica de entrega at-least-once com deduplicação no destino produz efeito observável de *processamento exatamente-uma-vez* (*effectively-once*).
+1. **At-least-once com deduplicação no destino:**
+   No teste de reprocessamento do CDC, forçamos o consumidor a recuar o offset para um LSN anterior (`0/2000`) e reenviamos mutações antigas misturadas com eventos fora de ordem (`0/800`). A cláusula de guarda no `MERGE` do Delta Lake (`source.lsn_origem >= target.lsn_origem`) descartou todos os eventos com LSN inferior ao já armazenado. A tabela manteve unicidade em `cod_imovel` com zero duplicações, confirmando que a reentrega de eventos não corrompe o estado.
 
-2. **Idempotência no Lote:**
-   - A reexecução do pipeline em lote sobre o mesmo conjunto anual de focos de calor processou 20 registros, inseriu exatamente 0 novos registros e ignorou 20 duplicatas via `MERGE ... WHEN NOT MATCHED INSERT`, mantendo a contagem total invariante.
+2. **Idempotência no lote:**
+   A reexecução do script de lote sobre os mesmos focos processou 20 registros, inseriu zero linhas e ignorou 20 duplicatas por meio do `MERGE ... WHEN NOT MATCHED INSERT`. A contagem total da tabela permaneceu inalterada.
 
-3. **Divergência Estrutural em Cenário de Falha:**
-   - **Falha no Lote:** isolada à partição/job em execução. Custo no OLTP é nulo. A recuperação consiste na simples reexecução pontual do job idempotente.
-   - **Falha no CDC:** cumulativa no stream. O PostgreSQL retém arquivos de WAL no diretório `pgdata` enquanto o slot `cdc_imovel` não avançar seu `confirmed_flush_lsn`. Exige monitoramento ativo para evitar esgotamento de disco antes de atingir `max_slot_wal_keep_size`.
+3. **Comportamento em caso de falha:**
+   Se o lote falhar, o impacto fica restrito àquele job: basta corrigir o problema e rodar o lote de novo. Se o consumidor CDC falhar, o efeito se acumula no PostgreSQL: os arquivos de WAL não são descartados enquanto o slot `cdc_imovel` não avançar. Isso reforça a necessidade de manter o consumidor ativo ou monitorar o tamanho do WAL retido.
 
 ---
 
 ## Decisão
 
-Adotamos formalmente uma **arquitetura híbrida de ingestão** associada ao formato aberto **Delta Lake**:
+Adotamos uma abordagem híbrida de ingestão com **Delta Lake** como formato de tabela aberta:
 
-1. **Ingestão em Lote (Batch) para `foco_calor`:**
-   - Executada por [`src/pipeline/batch_ingest.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/batch_ingest.py).
-   - Armazenada em `data/delta/foco_calor` com particionamento temporal `ano=YYYY/mes=MM/` baseado em `data_hora_evento` (UTC).
-   - Idempotência assegurada por chave primária sintética `id_foco` (SHA-256 de coordenadas, timestamp e satélite) via operação `MERGE INTO`.
+1. **Ingestão em lote para `foco_calor`:**
+   Executada por [`src/pipeline/batch_ingest.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/batch_ingest.py). Os focos do INPE são gravados em `data/delta/foco_calor`, particionados no padrão `ano=YYYY/mes=MM/` a partir de `data_hora_evento`. A idempotência é garantida gerando um identificador determinístico `id_foco` (hash SHA-256 das coordenadas, data/hora e satélite), aplicando `MERGE INTO` para gravar apenas detecções novas. Dados com datas anteriores caem direto na partição do ano correspondente, sem alterar as demais.
 
-2. **Captura de Mudanças (CDC) para `imovel_car`:**
-   - Executada por [`src/pipeline/cdc_consumer.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/cdc_consumer.py).
-   - Consome continuamente alterações do slot lógico nativo `cdc_imovel` com plugin `test_decoding`, sem brokers externos (sem Kafka) e sem dependência de JVM.
-   - Armazenada em `data/delta/imovel_car` sem particionamento (dimensão cadastral leve).
-   - Regra de `MERGE` orientada por `cod_imovel` e guarda estrita `source.lsn_origem >= target.lsn_origem`.
-   - Suporte a soft-delete (`operacao_cdc='D'`) e preservação de geometrias TOAST (`unchanged-toast-datum`).
+2. **Captura de mudanças (CDC) para `imovel_car`:**
+   Executada por [`src/pipeline/cdc_consumer.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/cdc_consumer.py). O script consome o slot de replicação lógica `cdc_imovel` com o plugin nativo `test_decoding` e `psycopg2`, sem intermediários como Kafka ou Debezium. Os dados vão para `data/delta/imovel_car` sem partição, aplicando `MERGE` por `cod_imovel` com a guarda `source.lsn_origem >= target.lsn_origem`. Exclusões no banco são refletidas como exclusão lógica (`operacao_cdc='D'`), preservando geometrias compactadas pelo mecanismo TOAST.
 
-3. **Formato Aberto de Tabela e Compressão:**
-   - **Delta Lake** gerenciado via biblioteca `deltalake` (delta-rs).
-   - Compressão colunar **Zstandard (ZSTD)** recomendada para dados históricos consolidados, admitindo Snappy como formato padrão Parquet.
-   - Leitura analítica direta vetorizada via **DuckDB** (`delta_scan`).
+3. **Formato de tabela e compressão:**
+   Usamos a biblioteca `deltalake` (delta-rs) em Python, sem JVM e sem catálogo externo. Os dados históricos usam compressão Zstandard (ZSTD), e as consultas analíticas rodam no DuckDB por meio da função `delta_scan`.
 
 ---
 
@@ -156,27 +141,27 @@ Adotamos formalmente uma **arquitetura híbrida de ingestão** associada ao form
 
 **O que ganhamos:**
 
-- **Isolamento de Carga:** cruzamentos espaciais analíticos e consultas temporais pesadas rodam no DuckDB sobre arquivos colunares sem onerar a CPU ou as transações do PostgreSQL operacional.
-- **Stack Leve e Autocontida:** todo o ciclo de ingestão e consumo opera em contêineres Python leves via `deltalake` e `psycopg2`, sem necessidade de Spark, Hadoop, JVM ou brokers de mensagens.
-- **Idempotência e Tolerância a Falhas:** reprocessamentos de arquivos em lote e retransmissões de eventos CDC no modelo At-Least-Once não corrompem o estado nem duplicam registros na camada analítica.
-- **Roteamento Automático de Dados Atrasados:** focos de satélite antigos recebidos em lotes recentes são alocados deterministicamente em suas partições históricas de ano e mês sem exigir regravação das partições vigentes.
-- **Economia Volumétrica:** compressão colunar com redução superior a 64% em relação aos dados brutos em memória.
+- As consultas espaciais analíticas saem do PostgreSQL e rodam no DuckDB sobre arquivos Parquet, liberando o banco operacional para transações normais.
+- O pipeline inteiro roda em Python leve com `deltalake` e `psycopg2`, sem exigir Spark, Hadoop, JVM ou contêineres de mensageria no Docker Compose.
+- Reprocessamentos de lote e retransmissões do CDC não duplicam linhas. O hash `id_foco` protege os focos e a guarda de LSN protege os imóveis.
+- Focos antigos recebidos em lotes recentes são direcionados automaticamente para suas partições históricas de ano e mês.
+- A compressão ZSTD entrega mais de 64% de redução em relação ao tamanho bruto em memória, com velocidade de leitura equivalente ao Snappy no DuckDB.
 
 **O que perdemos:**
 
-- **Gestão de Slots WAL:** o consumidor CDC precisa permanecer em execução para drenar o slot de replicação, exigindo governança para que o PostgreSQL não acumule arquivos WAL no volume `pgdata`.
-- **Limitações do ecossistema delta-rs:** recursos avançados da especificação completa do Spark (como catálogos federados centralizados Unity/Hive) não estão presentes, sendo suficiente para o escopo local/conteinerizado do projeto.
+- O slot de replicação do CDC exige monitoramento. Se o consumidor parar e ficar inativo por muito tempo, o PostgreSQL acumula arquivos de WAL até o limite de 2 GB.
+- A biblioteca `deltalake` em Python não traz recursos de catálogos corporativos distribuídos que existem no Spark, embora atenda com folga o escopo local e conteinerizado do projeto.
 
 **O que se torna irreversível:**
 
-- A camada analítica passa a depender da especificação do Delta Lake e de seus logs de transação ACID no diretório `_delta_log/`. Substituir o formato por Apache Iceberg no futuro exigirá ferramentas de conversão de metadados ou reingestão integral dos dados físicos.
+- A camada analítica passa a depender da especificação do Delta Lake e dos seus logs em `_delta_log/`. Migrar para Apache Iceberg no futuro exigirá ferramentas de conversão de metadados ou reprocessamento dos dados físicos.
 
 ---
 
 ## Gatilho de revisão
 
-Esta decisão será revisada caso:
+Revisaremos esta decisão caso:
 
-1. O volume de detecções de focos de calor exija ingestão contínua em tempo real (subminuto com streaming direto de satélites), tornando a janela em lote insuficiente.
-2. A organização exija governança distribuída com catálogo de metadados corporativo multi-motor (ex: Trino, Spark, Flink e DuckDB operando simultaneamente em nuvem), momento em que o **Apache Iceberg com catálogo REST** deverá ser reavaliado.
-3. O volume retido de WAL no PostgreSQL atinja frequentemente o patamar de alerta (`max_slot_wal_keep_size`), exigindo migração para ferramenta externa de captura como Debezium com Kafka intermediário.
+1. O INPE passe a disponibilizar focos em fluxo contínuo de tempo real (subminuto por streaming), tornando a janela em lote insuficiente.
+2. O projeto passe a exigir um catálogo corporativo compartilhado por múltiplos motores analíticos concorrentes em nuvem (como Trino, Spark e Flink operando juntos), cenário em que o Apache Iceberg com catálogo REST deverá ser avaliado.
+3. A retenção de WAL no PostgreSQL atinja com frequência o limite de 2 GB por inatividade do consumidor, justificando adotar uma infraestrutura externa de mensageria com Debezium e Kafka.
