@@ -231,7 +231,9 @@ def parse_linha_test_decoding(data_str: str) -> Optional[Dict[str, Any]]:
             dados_new = corpo.replace("new-tuple:", "").strip()
 
         campos = parse_valores_tupla(dados_new)
-        if cod_imovel_old and "cod_imovel" not in campos:
+        # O old-key sempre traz a PK real. No new-tuple a PK pode vir como
+        # unchanged-toast-datum quando o valor esta fora de linha.
+        if cod_imovel_old:
             campos["cod_imovel"] = cod_imovel_old
 
         campos["operacao_cdc"] = "U"

@@ -118,6 +118,22 @@ def test_parse_linha_test_decoding_update_com_toast():
     assert evento["geom"] == "unchanged-toast-datum"
 
 
+def test_parse_update_pk_toast_usa_old_key():
+    """Captura real do PG16: a PK do new-tuple vem como unchanged-toast-datum, a PK real esta no old-key."""
+    msg = (
+        "table public.imovel_car: UPDATE: old-key: "
+        "cod_imovel[character varying]:'DF-5300108-A55B9407F4DD45ECBCBCE09C1AFAE947' "
+        "new-tuple: cod_imovel[character varying]:unchanged-toast-datum "
+        "situacao[character varying]:'PE' condicao[character varying]:'debug2' "
+        "area_ha[numeric]:886.1151 data_download[date]:'2026-09-27' "
+        "geom[geometry]:unchanged-toast-datum"
+    )
+    evento = parse_linha_test_decoding(msg)
+    assert evento["operacao_cdc"] == "U"
+    assert evento["cod_imovel"] == "DF-5300108-A55B9407F4DD45ECBCBCE09C1AFAE947"
+    assert evento["condicao"] == "debug2"
+
+
 def test_parse_linha_test_decoding_formato_oficial_postgis():
     """Valida parsing de formato oficial emitido pelo plugin test_decoding no PostgreSQL 16."""
     msg = (
