@@ -18,6 +18,7 @@ extra_javascript = [
 nav = [
   { "Visão Geral" = "index.md" },
   { "Entrega 1" = "entrega/01/README.md" },
+  { "Entrega 2" = "entrega/02/README.md" },
   { "Decisões de Arquitetura" = [
       { "Visão Geral" = "adr/README.md" },
       { "1ª: Banco de Dados" = "adr/01-adotar-postgresql-com-postgis-camada-gold.md" }
