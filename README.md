@@ -35,7 +35,16 @@ O ambiente utiliza Docker e Docker Compose.
 docker compose up
 ```
 
-O comando inicia o PostgreSQL 16 com PostGIS na porta 5434, aplica as migrações do Flyway e executa os contêineres de carga dos dados de satélite e das camadas territoriais.
+O comando inicia o PostgreSQL 16 com PostGIS na porta 5434 (com `wal_level=logical`), aplica as migrações do Flyway e executa os serviços abaixo:
+
+| Serviço | O que faz |
+| :--- | :--- |
+| `load`, `load_camadas` | Carga no PostgreSQL dos focos de calor e das camadas territoriais (UC, APP, imóveis do CAR, reserva legal). |
+| `refresh_gold` | Atualiza a camada Gold materializada, depois das duas cargas. |
+| `batch_ingest` | Ingestão em lote idempotente dos focos de calor na tabela Delta `foco_calor`, particionada por `ano/mes`. |
+| `cdc_consumer` | Depois do `load_camadas`: cria o slot `cdc_imovel`, faz o snapshot de `imovel_car` na tabela Delta e passa a consumir as mudanças do PostgreSQL. |
+
+As tabelas Delta ficam no volume nomeado `lakehouse`. O volume é removido junto com o banco pelo `down -v`, para o Delta nunca sobreviver a um banco recriado (o `MERGE` do `cdc_consumer` ignora eventos com LSN menor que o já gravado).
 
 Para parar os contêineres e remover os volumes de dados:
 
@@ -43,7 +52,25 @@ Para parar os contêineres e remover os volumes de dados:
 docker compose down -v
 ```
 
-Para conferir o total de registros carregados e ver detalhes de validação, consulte o [guia de reprodução na Entrega 1](docs/entrega/01/README.md#10-como-reproduzir-a-carga).
+### Verificar o ciclo CDC e a camada analítica
+
+Com o ambiente no ar, o script de mutações executa um INSERT e um DELETE em `foco_calor` e um UPDATE em `imovel_car`, cada um em transação própria (precisa de `pip install psycopg2-binary` no host):
+
+```bash
+python scripts/cdc/gerar_mutacoes_oltp.py
+```
+
+Em seguida, o serviço `verificar_lakehouse` lê as tabelas Delta direto com DuckDB e compara com o PostgreSQL:
+
+```bash
+docker compose run --rm verificar_lakehouse
+```
+
+A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor` ou se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
+
+A tabela `imovel_car` do Delta preserva exclusões como `operacao_cdc='D'` em vez de apagar a linha. As mutações de `foco_calor` não passam pelo CDC: a tabela é insert-only no PostgreSQL e o Delta de `foco_calor` vem do lote.
+
+Para conferir o total de registros carregados no PostgreSQL e ver detalhes de validação, consulte o [guia de reprodução na Entrega 1](docs/entrega/01/README.md#10-como-reproduzir-a-carga).
 
 ## Equipe
 
