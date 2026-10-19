@@ -119,6 +119,21 @@ services:
       - lakehouse:/app/data/delta:ro
       - ./scripts:/app/scripts:ro
 
+  demo_reentrega:
+    profiles: ["demonstracao"]
+    build:
+      context: ./src/pipeline
+      dockerfile: Dockerfile.lakehouse
+    command: python scripts/testes/demo_reentrega_cdc.py
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+    volumes:
+      - ./scripts:/app/scripts:ro
+
 volumes:
   pgdata:
   lakehouse:

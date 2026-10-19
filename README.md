@@ -68,6 +68,14 @@ docker compose run --rm verificar_lakehouse
 
 A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor` ou se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
 
+### Demonstrar a semântica de entrega (at-least-once com deduplicação)
+
+```bash
+docker compose run --rm demo_reentrega
+```
+
+O script usa o código de produção do `cdc_consumer` com um slot próprio (`cdc_demo`) e um Delta descartável, sem interferir no consumidor em execução. Ele faz 3 retificações reais em `imovel_car`, simula a queda do consumidor depois do commit no Delta e antes do avanço do slot, e deixa o slot reentregar os mesmos eventos. Reprova (exit 1) se o Delta ganhar duplicatas ou divergir do estado anterior à reentrega. Ao final, reverte as retificações e remove o slot.
+
 A tabela `imovel_car` do Delta preserva exclusões como `operacao_cdc='D'` em vez de apagar a linha. As mutações de `foco_calor` não passam pelo CDC: a tabela é insert-only no PostgreSQL e o Delta de `foco_calor` vem do lote.
 
 Para conferir o total de registros carregados no PostgreSQL e ver detalhes de validação, consulte o [guia de reprodução na Entrega 1](docs/entrega/01/README.md#10-como-reproduzir-a-carga).
