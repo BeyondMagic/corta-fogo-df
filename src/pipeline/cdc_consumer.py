@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import psycopg2
 import pyarrow as pa
-from deltalake import DeltaTable, write_deltalake
+from deltalake import DeltaTable, WriterProperties, write_deltalake
 
 # Esquema padrao da tabela aberta Delta Lake para imovel_car (contrato_tabela_aberta.yaml)
 SCHEMA_IMOVEL_DELTA = pa.schema(
@@ -43,6 +43,9 @@ SCHEMA_IMOVEL_DELTA = pa.schema(
 # Diretorio padrao da tabela Delta Lake de imovel_car
 DEFAULT_DELTA_PATH = os.getenv("DELTA_IMOVEL_PATH", "data/delta/imovel_car")
 DEFAULT_SLOT_NAME = os.getenv("CDC_SLOT_NAME", "cdc_imovel")
+
+# Mesma compressao do lote (ADR 0002): ZSTD.
+WRITER_PROPERTIES = WriterProperties(compression="ZSTD")
 
 log = logging.getLogger("cdc_consumer")
 
@@ -167,7 +170,7 @@ def executar_snapshot_inicial(conn, delta_path: str = DEFAULT_DELTA_PATH, lsn_in
 
     tabela_arrow = preparar_tabela_arrow(df)
     log.info("Gravando %d registros no snapshot Delta Lake em '%s'...", len(df), delta_path)
-    write_deltalake(delta_path, tabela_arrow, mode="overwrite")
+    write_deltalake(delta_path, tabela_arrow, mode="overwrite", writer_properties=WRITER_PROPERTIES)
     log.info("Snapshot gravado com sucesso.")
     return len(df)
 
@@ -312,7 +315,7 @@ def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DEL
 
     if not DeltaTable.is_deltatable(delta_path):
         log.info("Tabela Delta '%s' nao existe. Criando com o lote atual...", delta_path)
-        write_deltalake(delta_path, tabela_arrow, mode="error")
+        write_deltalake(delta_path, tabela_arrow, mode="error", writer_properties=WRITER_PROPERTIES)
         return len(df_mudancas)
 
     dt = DeltaTable(delta_path)
@@ -336,6 +339,7 @@ def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DEL
             predicate="target.cod_imovel = source.cod_imovel",
             source_alias="source",
             target_alias="target",
+            writer_properties=WRITER_PROPERTIES,
         )
         .when_matched_update(
             predicate="source.lsn_origem >= target.lsn_origem",

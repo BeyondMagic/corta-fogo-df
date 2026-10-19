@@ -13,12 +13,15 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-from deltalake import DeltaTable, write_deltalake
+from deltalake import DeltaTable, WriterProperties, write_deltalake
 from pyproj import Transformer
 
 # Diretorio padrao para a tabela Delta Lake
 DEFAULT_DELTA_PATH = os.getenv("DELTA_TABLE_PATH", "data/delta/foco_calor")
 DEFAULT_CSV_PATH = "data/processed/focos_df_2015_2025.csv"
+
+# ZSTD gerou arquivos 32,4% menores que Snappy no benchmark de compressao (ADR 0002).
+WRITER_PROPERTIES = WriterProperties(compression="ZSTD")
 
 _TRANSFORM_4326_31983 = Transformer.from_crs("EPSG:4326", "EPSG:31983", always_xy=True)
 
@@ -176,6 +179,7 @@ def salvar_em_delta(df: pd.DataFrame, delta_path: str) -> dict:
             df,
             partition_by=["ano", "mes"],
             mode="error",
+            writer_properties=WRITER_PROPERTIES,
         )
         return {
             "status": "criada",
@@ -195,6 +199,7 @@ def salvar_em_delta(df: pd.DataFrame, delta_path: str) -> dict:
             predicate="target.id_foco = source.id_foco",
             source_alias="source",
             target_alias="target",
+            writer_properties=WRITER_PROPERTIES,
         )
         .when_not_matched_insert_all()
         .execute()
