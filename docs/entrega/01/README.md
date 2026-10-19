@@ -1,4 +1,8 @@
-# Entrega 1: Fonte Transacional e Sistema de Origem
+---
+icon: material/numeric-1-box
+---
+
+# :material-numeric-1-box: Entrega 1: Fonte Transacional e Sistema de Origem
 
 > Plataforma Corta-Fogo DF: ingestão transacional, modelagem relacional e espacial no PostgreSQL com PostGIS para cruzamento de ocorrências de calor e perímetros territoriais no Distrito Federal.
 

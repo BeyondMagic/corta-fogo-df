@@ -1,4 +1,8 @@
-# Glossário Técnico e Referências
+---
+icon: material/book-open-page-variant
+---
+
+# :material-book-open-page-variant: Glossário Técnico e Referências
 
 Termos, acrônimos e conceitos de engenharia de dados, cartografia e modelagem espacial adotados no projeto Corta-Fogo DF, acompanhados de suas definições formais e referências técnicas.
 

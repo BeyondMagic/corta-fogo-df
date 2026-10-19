@@ -1,4 +1,8 @@
-# 0001. Adotar PostgreSQL com PostGIS como banco principal
+---
+icon: material/database
+---
+
+# :material-database: 0001. Adotar PostgreSQL com PostGIS como banco principal
 
 - **Status:** Aceito
 - **Data:** 2026-09-25

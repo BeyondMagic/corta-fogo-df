@@ -1,4 +1,8 @@
-# Esquema da tabela aberta (E2)
+---
+icon: material/table
+---
+
+# :material-table: Esquema da tabela aberta (E2)
 
 Entrega da Issue #02 (Modelagem). Contrato máquina: [`contrato_tabela_aberta.yaml`](contrato_tabela_aberta.yaml).
 Arquitetura: `arquitetura-E2/arquitetura.md`.
@@ -64,7 +68,7 @@ Regra de MERGE: atualiza só se `source.lsn_origem >= target.lsn_origem`.
 | :--- | :--- | :--- |
 | `origem_ingestao` | `lote` | `snapshot` / `cdc` |
 | `operacao_cdc` | `I` | `I` / `U` / `D` |
-| Extra | — | `lsn_origem` |
+| Extra | - | `lsn_origem` |
 
 ## Evolução de esquema
 

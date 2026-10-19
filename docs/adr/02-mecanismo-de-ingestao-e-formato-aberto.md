@@ -1,4 +1,8 @@
-# 0002. Mecanismo de ingestão e formato aberto de tabela
+---
+icon: material/database-sync
+---
+
+# :material-database-sync: 0002. Mecanismo de ingestão e formato aberto de tabela
 
 - **Status:** Aceito
 - **Data:** 2026-10-13

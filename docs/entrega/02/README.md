@@ -1,4 +1,8 @@
-# Entrega 2: Ingestão em Lote e Captura de Mudanças
+---
+icon: material/numeric-2-box
+---
+
+# :material-numeric-2-box: Entrega 2: Ingestão em Lote e Captura de Mudanças
 
 > Plataforma Corta-Fogo DF: ingestão em lote e captura de mudanças (CDC) do PostgreSQL com PostGIS para o armazenamento analítico em formato aberto (Parquet com tabela Delta Lake).
 

@@ -1,4 +1,8 @@
-# Decisões de Arquitetura
+---
+icon: material/scale-balance
+---
+
+# :material-scale-balance: Decisões de Arquitetura
 
 Estruturadas segundo o [Guia de ADR da disciplina](https://unb-bd2.github.io/PlanoEnsino/adr/).
 
