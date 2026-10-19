@@ -4,7 +4,7 @@ Você está trabalhando no repositório UnB-QueimadaFlora (Foco no Incêndio DF)
 
 ## 1. Diretriz de escrita e comunicação (Obrigatório)
 
-Antes de produzir qualquer texto, documentação ou resposta, leia e siga estritamente a skill [`.agents/skills/writing/SKILL.md`](.agents/skills/writing/SKILL.md).
+Antes de produzir qualquer texto, documentação ou resposta, leia e siga estritamente a skill [`.agents/skills/humanizer/SKILL.md`](.agents/skills/humanizer/SKILL.md).
 
 - O público é composto exclusivamente por programadores. Seja direto, técnico e preciso.
 - Elimine adjetivos vazios (como robusto, crucial, vital, inovador).
