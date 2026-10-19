@@ -9,10 +9,13 @@ copyright = "Grupo G5 | Sistemas de Bancos de Dados 2 | FCTE / UnB (2026.2)"
 repo_url = "https://github.com/BeyondMagic/corta-fogo-df"
 repo_name = "BeyondMagic/corta-fogo-df"
 edit_uri = "edit/main/docs/"
-extra_css = ["stylesheets/extra.css"]
+extra_css = [
+  "stylesheets/extra.css",
+  "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.css"
+]
 extra_javascript = [
   "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
-  "javascripts/extra.js"
+  "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.mjs"
 ]
 
 nav = [
