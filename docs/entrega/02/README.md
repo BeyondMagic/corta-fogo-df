@@ -13,11 +13,14 @@ icon: material/numeric-2-box
 ```mermaid
 flowchart LR
     subgraph lote["Caminho em lote"]
+        direction TB
         csv["CSV do INPE"] -->|"batch_ingest.py"| df[("Delta: foco_calor")]
     end
     subgraph cdc["Caminho de mudanças (CDC)"]
+        direction TB
         pg[("PostgreSQL: imovel_car")] -->|"WAL (slot test_decoding)"| cons["cdc_consumer.py"] --> di[("Delta: imovel_car")]
     end
+    csv ~~~ pg
 ```
 
 <p style="text-align: center; font-size: 0.9em; color: #666;">Figura 1: Os dois caminhos de ingestão da Entrega 2</p>
@@ -44,14 +47,14 @@ flowchart LR
 
 <p class="apresentador"><em>Apresentação: João V. Farias (ADR)</em></p>
 
-A decisão de arquitetura da Entrega 2 define como tiramos a carga analítica do PostgreSQL e organizamos o armazenamento em tabelas abertas:
+Síntese da decisão para isolar a carga analítica do PostgreSQL e estruturar o armazenamento em tabelas abertas:
 
-- **Contexto:** na Entrega 1, a junção espacial completa demorou 41,8 segundos no PostgreSQL. Manter consultas desse porte disputando memória e CPU com a aplicação operacional não escala. Além disso, as duas fontes do projeto têm comportamentos opostos: os focos de calor são imutáveis e chegam em arquivos de satélite com possíveis atrasos temporais, enquanto os imóveis rurais sofrem alterações cadastrais contínuas (inclusões, retificações e cancelamentos).
-- **Alternativas avaliadas:** comparamos três caminhos de ingestão (rodar SQL agendado no próprio banco, capturar mudanças do WAL via CDC ou fazer cargas periódicas em lote) e dois formatos de tabela aberta (Delta Lake e Apache Iceberg).
-- **Medições práticas:** a opção de rodar SQL no banco parece rápida em testes isolados (~14 ms), mas concorre diretamente por recursos com o banco operacional. O CDC captura mutações do WAL com latência de ~32 ms de forma assíncrona, e a ingestão em lote grava em ~53 ms fora do banco. Nos testes de compressão, o algoritmo Zstandard (ZSTD) gerou arquivos 32,4% menores que o Snappy (64,2% de redução frente ao dado bruto em memória), sem perda perceptível de velocidade no DuckDB (~2,9 ms contra ~2,5 ms). Nos testes de falha, forçar o recuo do LSN no CDC não duplicou nenhum imóvel graças à guarda de versão.
-- **Decisão:** adotamos uma solução híbrida com Delta Lake via biblioteca `deltalake` em Python, sem necessidade de JVM ou Spark. Os focos entram em lote particionados por `ano=YYYY/mes=MM/` com chave determinística `id_foco`. Os imóveis são sincronizados via CDC nativo do PostgreSQL (`test_decoding`) com `MERGE` controlado por LSN. Usamos compressão ZSTD nos arquivos Parquet e consultas analíticas no DuckDB.
-- **Consequências:** isolamos o processamento analítico pesado fora do PostgreSQL usando uma pilha leve em Python. Reprocessar dados não gera duplicatas. Em contrapartida, precisamos monitorar o slot de replicação para evitar que o PostgreSQL acumule arquivos de WAL se o consumidor ficar inativo.
-- **Gatilho de revisão:** se o INPE passar a emitir dados em fluxo contínuo de tempo real (subminuto via streaming) ou se o projeto exigir um catálogo compartilhado por vários motores analíticos em nuvem (como Trino e Spark), reavaliaremos o uso do Apache Iceberg com catálogo REST.
+- **Contexto:** o cruzamento espacial completo levou 41,8 s no PostgreSQL. Além disso, as fontes têm dinâmicas opostas: focos de calor são imutáveis e chegam com atrasos, enquanto imóveis rurais sofrem alterações cadastrais contínuas.
+- **Alternativas:** ingestão via SQL agendado no banco, captura de mudanças (CDC) pelo WAL ou cargas em lote; formatos Delta Lake e Apache Iceberg.
+- **Medições:** o SQL interno concorre com o banco operacional. O CDC consome eventos em ~32 ms e o lote grava em ~53 ms fora do PostgreSQL. Em compressão, ZSTD superou Snappy em 32,4% (64,2% de redução total), mantendo leitura no DuckDB em ~2,9 ms. Testes de falha com recuo de LSN confirmaram zero duplicatas.
+- **Decisão:** arquitetura híbrida com Delta Lake via biblioteca `deltalake` (Rust e Python puro, sem JVM ou Spark). Focos entram em lote particionados por `ano/mes` com hash determinístico; imóveis entram por CDC nativo com `MERGE` controlado por LSN.
+- **Consequências:** consultas pesadas rodam fora do OLTP com garantia de idempotência. O trade-off é a necessidade de monitorar o slot de replicação para evitar acúmulo de WAL em disco.
+- **Gatilho de revisão:** chegada de stream em tempo real pelo INPE ou exigência de catálogo compartilhado na nuvem (avaliando Iceberg com catálogo REST).
 
 ## 4. Formato Aberto: Delta Lake
 
