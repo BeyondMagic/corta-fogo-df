@@ -1,0 +1,30 @@
+name: corta_fogo_df
+version: "1.0.0"
+config-version: 2
+
+profile: corta_fogo_df
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  raio_uc_m: 1000
+  fuso_local: "America/Sao_Paulo"
+
+models:
+  corta_fogo_df:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: table
+      +schema: intermediate

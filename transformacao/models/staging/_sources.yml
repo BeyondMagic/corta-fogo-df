@@ -1,0 +1,34 @@
+version: 2
+
+sources:
+  - name: lakehouse
+    description: >
+      Tabelas abertas Delta Lake geradas na Entrega 2 (contrato em
+      docs/modelagem/contrato_tabela_aberta.yaml). Lidas pelo DuckDB via delta_scan.
+    tables:
+      - name: foco_calor
+        description: >
+          Focos de calor do BDQueimadas (INPE) no Distrito Federal entre 2015 e 2025,
+          ingeridos em lote por src/pipeline/batch_ingest.py e particionados por ano e mes.
+        meta:
+          external_location: "delta_scan('{{ env_var('DELTA_DIR', '../data/delta') }}/foco_calor')"
+      - name: imovel_car
+        description: >
+          Imoveis rurais do SICAR no Distrito Federal, sincronizados via snapshot inicial
+          e captura de mudancas (CDC) do WAL por src/pipeline/cdc_consumer.py.
+        meta:
+          external_location: "delta_scan('{{ env_var('DELTA_DIR', '../data/delta') }}/imovel_car')"
+
+  - name: oltp
+    description: >
+      Camadas territoriais curadas no PostgreSQL/PostGIS (EPSG:31983, geometrias validadas
+      com ST_IsValid), anexadas em modo somente leitura via extensao postgres do DuckDB.
+    database: oltp
+    schema: public
+    tables:
+      - name: unidade_conservacao
+        description: Poligonos de Unidades de Conservacao no Distrito Federal (IBRAM/SISDIA).
+      - name: area_preservacao_permanente
+        description: Poligonos de Areas de Preservacao Permanente no Distrito Federal (nascentes, bordas de chapada e reservatorios).
+      - name: reserva_legal
+        description: Poligonos de Reserva Legal vinculados aos imoveis rurais do SICAR no Distrito Federal.

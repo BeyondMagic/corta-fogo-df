@@ -1,0 +1,18 @@
+corta_fogo_df:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../data/warehouse/corta_fogo.duckdb') }}"
+      threads: 4
+      extensions:
+        - delta
+        - spatial
+        - postgres
+      settings:
+        TimeZone: "UTC"
+      attach:
+        - path: "host={{ env_var('DB_HOST', 'localhost') }} port={{ env_var('DB_PORT', '5434') }} dbname={{ env_var('DB_NAME', 'corta-fogo-df') }} user={{ env_var('DB_USER', 'corta-fogo') }} password={{ env_var('DB_PASSWORD', 'corta-fogo') }}"
+          type: postgres
+          alias: oltp
+          read_only: true
