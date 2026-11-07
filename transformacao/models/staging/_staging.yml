@@ -1,0 +1,159 @@
+version: 2
+
+models:
+  - name: stg_focos_calor
+    description: >
+      Granularidade: uma linha por deteccao de foco de calor no tempo e no espaco por
+      sensor orbital (id_foco), correspondente a cada registro ativo da tabela Delta
+      foco_calor. Padroniza carimbos de tempo para TIMESTAMPTZ em UTC, deriva a data
+      local em America/Sao_Paulo, converte ano e mes de particao para inteiro e monta
+      a geometria pontual em EPSG:31983.
+    columns:
+      - name: id_foco
+        description: Hash SHA-256 deterministico de latitude, longitude, data_hora_evento e satelite.
+      - name: satelite
+        description: Nome do satelite detector padronizado em caixa alta.
+      - name: is_satelite_referencia
+        description: Verdadeiro quando o foco foi captado pelo satelite de referencia do INPE (AQUA_M-T).
+      - name: data_hora_evento
+        description: Carimbo de tempo da passagem do satelite em UTC (TIMESTAMPTZ). Base de ano, mes e reincidencia.
+      - name: data_hora_ingestao
+        description: Carimbo de tempo da escrita do registro na camada Delta em UTC (TIMESTAMPTZ).
+      - name: data_evento_local
+        description: Data do evento convertida para o fuso local do Distrito Federal (America/Sao_Paulo).
+      - name: ano
+        description: Ano civil em UTC derivado de data_hora_evento, igual a coluna de particao do Delta.
+      - name: mes
+        description: Mes civil (1 a 12) em UTC derivado de data_hora_evento, igual a coluna de particao do Delta.
+      - name: latitude
+        description: Latitude geografica em graus decimais (EPSG:4326).
+      - name: longitude
+        description: Longitude geografica em graus decimais (EPSG:4326).
+      - name: x_31983
+        description: Coordenada leste em metros (SIRGAS 2000 / UTM zona 23S, EPSG:31983).
+      - name: y_31983
+        description: Coordenada norte em metros (SIRGAS 2000 / UTM zona 23S, EPSG:31983).
+      - name: geom
+        description: Geometria pontual em EPSG:31983 construida a partir de x_31983 e y_31983.
+      - name: municipio
+        description: Municipio padronizado em caixa alta.
+      - name: bioma
+        description: Bioma informado pelo BDQueimadas (Cerrado no recorte do DF).
+      - name: risco_fogo
+        description: Indice de risco de fogo do INPE no intervalo de 0 a 1 (nulo quando ausente na fonte).
+      - name: origem_ingestao
+        description: Canal de entrada na camada Delta (sempre lote para focos de calor).
+      - name: operacao_cdc
+        description: Codigo de operacao para compatibilidade de linhagem (sempre I para focos de calor).
+
+  - name: stg_imoveis_car
+    description: >
+      Granularidade: uma linha por imovel rural cadastrado no SICAR/DF (cod_imovel),
+      refletindo o estado mais recente consolidado por LSN na tabela Delta imovel_car,
+      inclusive registros com exclusao logica (operacao_cdc = 'D'). Decodifica o EWKB
+      hexadecimal para geometria em EPSG:31983 e expoe a flag booleana is_excluido
+      para consumo pelo snapshot SCD Tipo 2 (Issue #19).
+    columns:
+      - name: cod_imovel
+        description: Codigo identificador natural do imovel rural no SICAR (padrao DF-...).
+      - name: situacao
+        description: "Situacao cadastral do imovel no SICAR (AT, PE ou CA)."
+      - name: condicao
+        description: Condicao de analise do cadastro no SICAR.
+      - name: area_ha
+        description: Area declarada do imovel rural em hectares.
+      - name: data_download
+        description: Data em que o recorte do SICAR foi obtido na fonte publica.
+      - name: geom_ewkb_hex
+        description: Representacao hexadecimal EWKB da geometria MultiPolygon em EPSG:31983, preservada para auditoria e hash de mudanca no snapshot.
+      - name: geom
+        description: >
+          Geometria MultiPolygon decodificada em EPSG:31983. Representa o perimetro
+          atual do imovel na tabela Delta; o historico de alteracoes cadastrais passa
+          a ser acumulado a partir do snapshot SCD Tipo 2 (Issue #19).
+      - name: data_hora_ingestao
+        description: Momento da entrada ou ultima atualizacao do registro na camada Delta (TIMESTAMPTZ em UTC).
+      - name: origem_ingestao
+        description: Origem do registro na tabela Delta (snapshot ou cdc).
+      - name: operacao_cdc
+        description: Ultima operacao capturada no WAL (I para insercao, U para atualizacao, D para exclusao logica).
+      - name: is_excluido
+        description: Verdadeiro quando operacao_cdc = 'D' (exclusao logica preservada no Delta).
+      - name: lsn_origem
+        description: Log Sequence Number (inteiro de 64 bits) da transacao de origem no PostgreSQL.
+
+  - name: stg_unidades_conservacao
+    description: >
+      Granularidade: uma linha por poligono de Unidade de Conservacao (id_uc) carregado
+      no PostGIS a partir do SISDIA/IBRAM.
+    columns:
+      - name: id_uc
+        description: >
+          Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
+          completa do banco (docker compose down -v) e so e consistente dentro do mesmo
+          ciclo de execucao do dbt.
+      - name: nome
+        description: Nome oficial da Unidade de Conservacao.
+      - name: categoria
+        description: "Categoria de manejo da unidade (Parque Ecologico, APA, Estacao Ecologica, entre outras)."
+      - name: grupo
+        description: Grupo do SNUC (protecao_integral ou uso_sustentavel).
+      - name: area_ha
+        description: Area da unidade em hectares.
+      - name: fonte
+        description: Orgao ou sistema fornecedor da camada.
+      - name: data_download
+        description: Data de obtencao do arquivo GeoJSON na fonte.
+      - name: data_hora_ingestao
+        description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
+      - name: geom
+        description: Geometria MultiPolygon da Unidade de Conservacao em EPSG:31983.
+
+  - name: stg_areas_preservacao_permanente
+    description: >
+      Granularidade: uma linha por poligono de Area de Preservacao Permanente (id_app)
+      carregado no PostGIS (nascentes, bordas de chapada e reservatorios).
+    columns:
+      - name: id_app
+        description: >
+          Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
+          completa do banco (docker compose down -v) e so e consistente dentro do mesmo
+          ciclo de execucao do dbt.
+      - name: cod_imovel
+        description: Codigo do imovel CAR quando a APP provem do SICAR; nulo para camadas distritais do IBRAM/SISDIA.
+      - name: tipo
+        description: Tipologia da APP (nascente, borda de chapada, reservatorio).
+      - name: area_ha
+        description: Area do poligono em hectares.
+      - name: fonte
+        description: Orgao ou sistema fornecedor da camada.
+      - name: data_download
+        description: Data de obtencao do arquivo na fonte.
+      - name: data_hora_ingestao
+        description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
+      - name: geom
+        description: Geometria MultiPolygon da APP em EPSG:31983.
+
+  - name: stg_reservas_legais
+    description: >
+      Granularidade: uma linha por feicao de Reserva Legal (id_reserva) declarada no
+      SICAR/DF e carregada no PostGIS. Um mesmo imovel rural pode possuir mais de uma
+      feicao de Reserva Legal.
+    columns:
+      - name: id_reserva
+        description: >
+          Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
+          completa do banco (docker compose down -v) e so e consistente dentro do mesmo
+          ciclo de execucao do dbt.
+      - name: cod_imovel
+        description: Codigo do imovel rural proprietario da Reserva Legal (padrao DF-...).
+      - name: situacao
+        description: Situacao cadastral da feicao de Reserva Legal no SICAR.
+      - name: area_ha
+        description: Area da feicao de Reserva Legal em hectares.
+      - name: data_download
+        description: Data do recorte SICAR utilizado na carga.
+      - name: data_hora_ingestao
+        description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
+      - name: geom
+        description: Geometria MultiPolygon da Reserva Legal em EPSG:31983.
