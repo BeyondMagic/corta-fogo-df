@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: int_focos_imoveis
+    description: >
+      Granularidade: uma linha por par (id_foco, cod_imovel) de imovel rural ativo
+      (not is_excluido) cujo poligono atual intersecta o ponto do foco de calor.
+      Focos fora da malha cadastral nao aparecem neste modelo; focos em zonas de
+      sobreposicao de declaracoes do SICAR geram uma linha para cada imovel atingido.
+      O cruzamento espacial utiliza a geometria corrente do imovel na tabela Delta;
+      a vinculacao com a versao historica vigente na data do evento fica a cargo da
+      camada Gold (Issue #18) em conjunto com o snapshot SCD Tipo 2 (Issue #19) por
+      meio de cod_imovel e data_hora_evento.
+    columns:
+      - name: id_foco
+        description: Identificador SHA-256 do foco de calor.
+      - name: cod_imovel
+        description: Codigo do imovel rural no SICAR que contem espacialmente o foco.
+      - name: data_hora_evento
+        description: Carimbo de tempo da passagem do satelite em UTC (TIMESTAMPTZ).
+      - name: data_evento_local
+        description: Data do foco no fuso local (America/Sao_Paulo).
+      - name: ano
+        description: Ano civil em UTC derivado de data_hora_evento.
+      - name: mes
+        description: Mes civil (1 a 12) em UTC derivado de data_hora_evento.
+      - name: satelite
+        description: Nome do satelite detector.
+      - name: is_satelite_referencia
+        description: Verdadeiro quando o foco pertence ao satelite de referencia (AQUA_M-T).
+      - name: situacao_imovel
+        description: Situacao cadastral corrente do imovel no SICAR.
+      - name: condicao_imovel
+        description: Condicao de analise corrente do cadastro no SICAR.
+      - name: area_ha_imovel
+        description: Area declarada corrente do imovel em hectares.
+
+  - name: int_focos_areas_protegidas
+    description: >
+      Granularidade: uma linha por par (id_foco, tipo_area, id_feicao) em que o foco
+      de calor atende a um dos criterios espaciais da pergunta de gestao: intersecao
+      com Reserva Legal (reserva_legal), intersecao com Area de Preservacao Permanente
+      (app) ou distancia de ate 1.000 metros de Unidade de Conservacao (uc_1km).
+    columns:
+      - name: id_foco
+        description: Identificador SHA-256 do foco de calor.
+      - name: tipo_area
+        description: Categoria do criterio territorial atingido (reserva_legal, app ou uc_1km).
+      - name: id_feicao
+        description: >
+          id_uc, id_app ou id_reserva vindo do PostGIS (IDENTITY). Muda a cada recarga
+          completa do banco (docker compose down -v) e so e consistente com modelos
+          construidos no mesmo ciclo de execucao do dbt. Se a dim_territorio (Issue #18)
+          precisar de chave substituta estavel entre recargas, deve derivar um hash de
+          tipo_area concatenado a geometria.
+      - name: cod_imovel_feicao
+        description: Codigo do imovel CAR proprietario da feicao (sempre preenchido em reserva_legal, opcional em app e nulo em uc_1km).
+      - name: nome_area
+        description: Nome da Unidade de Conservacao ou tipologia da APP (nulo para Reserva Legal).
+      - name: categoria_area
+        description: Categoria de manejo da UC, tipologia da APP ou situacao da Reserva Legal.
+      - name: distancia_m
+        description: Distancia euclidiana em metros (EPSG:31983) entre o foco e a feicao (zero quando o ponto cai no interior do poligono).
+
+  - name: int_focos_territorio
+    description: >
+      Granularidade: uma linha por deteccao de foco de calor no tempo e no espaco por
+      sensor orbital (id_foco), identica ao modelo stg_focos_calor. Consolida para cada
+      foco a quantidade de imoveis rurais atingidos e os indicadores booleanos de
+      ocorrencia em Reserva Legal, APP e faixa de 1 km de Unidade de Conservacao,
+      servindo de entrada direta para a tabela fato atomica fato_foco_calor (Issue #18).
+    columns:
+      - name: id_foco
+        description: Identificador SHA-256 do foco de calor (chave primaria do modelo).
+      - name: satelite
+        description: Nome do satelite detector em caixa alta.
+      - name: is_satelite_referencia
+        description: Verdadeiro quando o foco foi detectado pelo satelite de referencia (AQUA_M-T).
+      - name: data_hora_evento
+        description: Carimbo de tempo da deteccao em UTC (TIMESTAMPTZ).
+      - name: data_hora_ingestao
+        description: Carimbo de tempo da escrita na camada Delta em UTC (TIMESTAMPTZ).
+      - name: data_evento_local
+        description: Data do evento no fuso local (America/Sao_Paulo).
+      - name: ano
+        description: Ano civil em UTC derivado de data_hora_evento.
+      - name: mes
+        description: Mes civil (1 a 12) em UTC derivado de data_hora_evento.
+      - name: latitude
+        description: Latitude em graus decimais (EPSG:4326).
+      - name: longitude
+        description: Longitude em graus decimais (EPSG:4326).
+      - name: x_31983
+        description: Coordenada leste em metros (EPSG:31983).
+      - name: y_31983
+        description: Coordenada norte em metros (EPSG:31983).
+      - name: geom
+        description: Geometria pontual em EPSG:31983.
+      - name: municipio
+        description: Municipio em caixa alta.
+      - name: bioma
+        description: Bioma informado pelo BDQueimadas.
+      - name: risco_fogo
+        description: Indice de risco de fogo no intervalo de 0 a 1.
+      - name: origem_ingestao
+        description: Canal de ingestao do registro na camada Delta.
+      - name: operacao_cdc
+        description: Codigo de operacao de linhagem.
+      - name: qtd_imoveis
+        description: Quantidade de imoveis rurais ativos do SICAR que contem espacialmente o foco.
+      - name: em_imovel_car
+        description: Verdadeiro quando o foco cai dentro de ao menos um imovel rural ativo do SICAR.
+      - name: em_reserva_legal
+        description: Verdadeiro quando o foco intersecta ao menos um poligono de Reserva Legal.
+      - name: em_app
+        description: Verdadeiro quando o foco intersecta ao menos um poligono de Area de Preservacao Permanente.
+      - name: ate_1km_uc
+        description: Verdadeiro quando o foco esta a ate 1.000 metros de ao menos uma Unidade de Conservacao.
+      - name: distancia_min_uc_m
+        description: Menor distancia em metros ate uma Unidade de Conservacao dentro do raio de 1.000 metros (nulo quando fora da faixa).
+      - name: em_area_protegida
+        description: Verdadeiro quando o foco atende a qualquer um dos tres criterios de protecao (em_reserva_legal, em_app ou ate_1km_uc).
