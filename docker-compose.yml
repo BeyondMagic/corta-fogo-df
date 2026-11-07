@@ -134,7 +134,27 @@ services:
     volumes:
       - ./scripts:/app/scripts:ro
 
+  dbt:
+    profiles: ["transformacao"]
+    build:
+      context: ./transformacao
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+      DELTA_DIR: /app/data/delta
+      DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+    volumes:
+      - lakehouse:/app/data/delta:ro
+      - warehouse:/app/data/warehouse
+
 volumes:
   pgdata:
   lakehouse:
+  warehouse:
 
