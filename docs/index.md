@@ -15,14 +15,14 @@ Plataforma de engenharia de dados para cruzamento espacial e temporal de focos d
 A equipe é formada por sete integrantes, cada um responsável por uma frente de trabalho das entregas distribuídas ao longo do semestre.
 
 | Integrante | [Entrega 1](./entrega/01/README.md) | [Entrega 2](./entrega/02/README.md) | Entrega 3 | Entrega 4 |
-| :-------------------------------------------------------------------------------------------- | :------------------------------- | :---------------------------------- | :-------: | :-------: |
-| [Cláudio Henrique](https://github.com/BeyondMagic/corta-fogo-df/commits?author=claudiohsc)    | Infraestrutura                   | Infraestrutura e Lakehouse          |     -     |     -     |
-| [Elias F.](https://github.com/BeyondMagic/corta-fogo-df/commits?author=EliasOliver21)         | Caracterização e Métricas        | Semântica de Entrega e Benchmarks   |     -     |     -     |
-| [Gabriel Fernando](https://github.com/BeyondMagic/corta-fogo-df/commits?author=MMcLovin)      | Ingestão de camadas territoriais | Consumidor CDC e Replicação         |     -     |     -     |
-| [Gabriel Souza](https://github.com/BeyondMagic/corta-fogo-df/commits?author=GabrielMS00)      | Coordenação e Pergunta de Gestão | Coordenação e Arquitetura           |     -     |     -     |
-| [João V. Farias](https://github.com/BeyondMagic/corta-fogo-df/commits?author=beyondmagic)     | ADR e ingestão de dados de focos | ADR e Ingestão em Lote              |     -     |     -     |
-| [Manoel Felipe](https://github.com/BeyondMagic/corta-fogo-df/commits?author=Manoel835)       | Modelagem de Dados               | Modelagem de Tabela Aberta          |     -     |     -     |
-| [Samuel Ribeiro](https://github.com/BeyondMagic/corta-fogo-df/commits?author=SamuelRicosta) | Migrações                        | Mutações OLTP e Artefatos           |     -     |     -     |
+| :-------------------------------------------------------------------------------------------- | :------------------------------- | :---------------------------------- | :------------------------------------------------------------------------ | :-------: |
+| [Cláudio Henrique](https://github.com/BeyondMagic/corta-fogo-df/commits?author=claudiohsc)    | Infraestrutura                   | Infraestrutura e Lakehouse          | [Orquestração e Dagster](https://github.com/BeyondMagic/corta-fogo-df/issues/22)         |     -     |
+| [Elias F.](https://github.com/BeyondMagic/corta-fogo-df/commits?author=EliasOliver21)         | Caracterização e Métricas        | Semântica de Entrega e Benchmarks   | [Testes e Distribuição](https://github.com/BeyondMagic/corta-fogo-df/issues/21)          |     -     |
+| [Gabriel Fernando](https://github.com/BeyondMagic/corta-fogo-df/commits?author=MMcLovin)      | Ingestão de camadas territoriais | Consumidor CDC e Replicação         | [Camadas dbt e Staging](https://github.com/BeyondMagic/corta-fogo-df/issues/20)          |     -     |
+| [Gabriel Souza](https://github.com/BeyondMagic/corta-fogo-df/commits?author=GabrielMS00)      | Coordenação e Pergunta de Gestão | Coordenação e Arquitetura           | [Coordenação e Pergunta de Gestão](https://github.com/BeyondMagic/corta-fogo-df/issues/17) |     -     |
+| [João V. Farias](https://github.com/BeyondMagic/corta-fogo-df/commits?author=beyondmagic)     | ADR e ingestão de dados de focos | ADR e Ingestão em Lote              | [ADR e Mapa Interativo](https://github.com/BeyondMagic/corta-fogo-df/issues/23)          |     -     |
+| [Manoel Felipe](https://github.com/BeyondMagic/corta-fogo-df/commits?author=Manoel835)       | Modelagem de Dados               | Modelagem de Tabela Aberta          | [Modelagem Dimensional Gold](https://github.com/BeyondMagic/corta-fogo-df/issues/18)     |     -     |
+| [Samuel Ribeiro](https://github.com/BeyondMagic/corta-fogo-df/commits?author=SamuelRicosta) | Migrações                        | Mutações OLTP e Artefatos           | [Dimensão SCD Tipo 2](https://github.com/BeyondMagic/corta-fogo-df/issues/19)            |     -     |
 
 <!-- AI: vamos fazer uma tabela com o nome completo e matrícula dentro de um snippet (que abre quando aperta) -->
 
