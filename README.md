@@ -43,6 +43,7 @@ O comando inicia o PostgreSQL 16 com PostGIS na porta 5434 (com `wal_level=logic
 | `refresh_gold` | Atualiza a camada Gold materializada, depois das duas cargas. |
 | `batch_ingest` | Ingestão em lote idempotente dos focos de calor na tabela Delta `foco_calor`, particionada por `ano/mes`. |
 | `cdc_consumer` | Depois do `load_camadas`: cria o slot `cdc_imovel`, faz o snapshot de `imovel_car` na tabela Delta e passa a consumir as mudanças do PostgreSQL. |
+| `dbt` (profile `transformacao`) | Executa os modelos `staging` e `intermediate` no DuckDB (`docker compose --profile transformacao run --rm dbt run`), gravando em `warehouse`. Ver [`transformacao/README.md`](transformacao/README.md). |
 
 As tabelas Delta ficam no volume nomeado `lakehouse`. O volume é removido junto com o banco pelo `down -v`, para o Delta nunca sobreviver a um banco recriado (o `MERGE` do `cdc_consumer` ignora eventos com LSN menor que o já gravado).
 
