@@ -14,8 +14,17 @@ data/raw/*
 !data/raw/AREA_IMOVEL.zip
 !data/raw/RESERVA_LEGAL.zip
 data/delta/
+data/warehouse/
+*.duckdb
+*.duckdb.wal
 .pytest_cache/
 *.tar.gz
+
+# dbt
+transformacao/target/
+transformacao/logs/
+transformacao/dbt_packages/
+.user.yml
 
 # IDEs e editores
 .idea/
