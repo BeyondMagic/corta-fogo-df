@@ -1,0 +1,92 @@
+version: 2
+
+models:
+  - name: dim_imovel_car
+    description: >
+      Granularidade: uma linha por versao cadastral de imovel rural do SICAR/DF
+      (cod_imovel, dbt_valid_from), derivada do snapshot SCD Tipo 2 snp_imovel_car
+      (Issue #19). Retificacoes de area, alteracoes de perimetro e mudancas de
+      situacao cadastral (inclusao, retificacao, cancelamento) geram nova versao
+      sem sobrescrever a anterior. Versoes identicas causadas por reentrega do CDC
+      (mesmo lsn_origem) sao descartadas. O cruzamento com focos de calor deve usar
+      dbt_valid_from <= data_hora_evento < dbt_valid_to, o que associa cada foco a
+      versao do cadastro vigente na data do evento. Testes singulares em
+      tests/dim_imovel_car_*.sql garantem uma versao corrente por imovel e vigencias
+      contiguas, sem sobreposicao nem lacuna.
+    columns:
+      - name: sk_imovel
+        description: >
+          Chave substituta da versao: md5 de cod_imovel e lsn_origem. Deterministica
+          e estavel entre reconstrucoes da tabela a partir do mesmo snapshot.
+        data_tests:
+          - unique
+          - not_null
+      - name: cod_imovel
+        description: Codigo identificador natural do imovel rural no SICAR (padrao DF-...).
+        data_tests:
+          - not_null
+      - name: numero_versao
+        description: Ordem da versao dentro do imovel, iniciando em 1.
+      - name: situacao
+        description: "Situacao cadastral do imovel na versao (AT, PE ou CA)."
+      - name: condicao
+        description: Condicao de analise do cadastro na versao.
+      - name: area_ha
+        description: Area declarada do imovel na versao, em hectares.
+      - name: data_download
+        description: Data em que o recorte do SICAR foi obtido na fonte publica.
+      - name: geom_ewkb_hex
+        description: EWKB hexadecimal do perimetro da versao em EPSG:31983.
+      - name: geom
+        description: Perimetro MultiPolygon da versao em EPSG:31983, para o cruzamento espacial historico.
+      - name: is_excluido
+        description: Verdadeiro quando a versao registra o cancelamento do cadastro (exclusao logica no CDC).
+      - name: operacao_cdc
+        description: Operacao do WAL que originou a versao (I, U ou D).
+      - name: lsn_origem
+        description: Log Sequence Number da transacao de origem no PostgreSQL.
+      - name: data_hora_ingestao
+        description: Momento em que a versao foi gravada na tabela Delta (TIMESTAMPTZ em UTC).
+      - name: dbt_valid_from
+        description: >
+          Inicio da validade da versao (inclusivo). Igual ao dbt_valid_from do snapshot
+          (data_hora_ingestao, estrategia timestamp), exceto na primeira versao de cada
+          imovel, que vale desde var('inicio_vigencia_aberta'): o snapshot so observa o
+          cadastro a partir da carga inicial do CDC, e a versao mais antiga conhecida e
+          assumida para focos anteriores. O instante real da gravacao fica em data_hora_ingestao.
+        data_tests:
+          - not_null
+      - name: dbt_valid_to
+        description: >
+          Fim da validade da versao (exclusivo): dbt_valid_from da versao seguinte, ou
+          var('fim_vigencia_aberta') na versao corrente. Nunca nulo, para que o cruzamento
+          temporal dispense coalesce.
+        data_tests:
+          - not_null
+      - name: is_current
+        description: Verdadeiro na versao corrente do imovel (dbt_valid_to igual a var('fim_vigencia_aberta')). Exatamente uma por cod_imovel.
+        data_tests:
+          - not_null
+
+unit_tests:
+  - name: dim_imovel_car_preserva_versao_anterior_para_focos_antigos
+    description: >
+      Demonstracao do criterio de aceite da Issue #19. Um imovel e retificado (area e
+      perimetro) e depois cancelado; uma reentrega do CDC repete a retificacao. A
+      dimensao deve manter tres versoes, descartar a duplicata e abrir a primeira
+      versao para focos anteriores a carga inicial.
+    model: dim_imovel_car
+    given:
+      - input: ref('snp_imovel_car')
+        rows:
+          - {cod_imovel: DF-1, situacao: AT, area_ha: 100.0, is_excluido: false, operacao_cdc: I, lsn_origem: 10, data_hora_ingestao: "2026-01-10 00:00:00+00", dbt_valid_from: "2026-01-10 00:00:00+00", dbt_valid_to: "2026-03-01 00:00:00+00"}
+          - {cod_imovel: DF-1, situacao: AT, area_ha: 120.0, is_excluido: false, operacao_cdc: U, lsn_origem: 20, data_hora_ingestao: "2026-03-01 00:00:00+00", dbt_valid_from: "2026-03-01 00:00:00+00", dbt_valid_to: "2026-03-02 00:00:00+00"}
+          - {cod_imovel: DF-1, situacao: AT, area_ha: 120.0, is_excluido: false, operacao_cdc: U, lsn_origem: 20, data_hora_ingestao: "2026-03-02 00:00:00+00", dbt_valid_from: "2026-03-02 00:00:00+00", dbt_valid_to: "2026-06-01 00:00:00+00"}
+          - {cod_imovel: DF-1, situacao: CA, area_ha: 120.0, is_excluido: true,  operacao_cdc: D, lsn_origem: 30, data_hora_ingestao: "2026-06-01 00:00:00+00", dbt_valid_from: "2026-06-01 00:00:00+00", dbt_valid_to: null}
+          - {cod_imovel: DF-2, situacao: AT, area_ha: 50.0,  is_excluido: false, operacao_cdc: I, lsn_origem: 10, data_hora_ingestao: "2026-01-10 00:00:00+00", dbt_valid_from: "2026-01-10 00:00:00+00", dbt_valid_to: null}
+    expect:
+      rows:
+        - {cod_imovel: DF-1, numero_versao: 1, area_ha: 100.0, is_excluido: false, is_current: false, dbt_valid_from: "1900-01-01 00:00:00+00", dbt_valid_to: "2026-03-01 00:00:00+00"}
+        - {cod_imovel: DF-1, numero_versao: 2, area_ha: 120.0, is_excluido: false, is_current: false, dbt_valid_from: "2026-03-01 00:00:00+00", dbt_valid_to: "2026-06-01 00:00:00+00"}
+        - {cod_imovel: DF-1, numero_versao: 3, area_ha: 120.0, is_excluido: true,  is_current: true,  dbt_valid_from: "2026-06-01 00:00:00+00", dbt_valid_to: "9999-12-31 00:00:00+00"}
+        - {cod_imovel: DF-2, numero_versao: 1, area_ha: 50.0,  is_excluido: false, is_current: true,  dbt_valid_from: "1900-01-01 00:00:00+00", dbt_valid_to: "9999-12-31 00:00:00+00"}

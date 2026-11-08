@@ -18,4 +18,4 @@ RUN mkdir -p /opt/dagster/home /opt/dagster/storage
 COPY dagster.yaml workspace.yaml /opt/dagster/home/
 COPY corta_fogo_dagster ./corta_fogo_dagster
 
-COPY demo_backfill.py ./
+COPY demo_backfill.py demo_scd2_imovel.py ./

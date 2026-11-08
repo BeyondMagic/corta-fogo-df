@@ -19,6 +19,9 @@ clean-targets:
 vars:
   raio_uc_m: 1000
   fuso_local: "America/Sao_Paulo"
+  # Abertura e fechamento da validade das versoes extremas de dim_imovel_car (SCD Tipo 2).
+  inicio_vigencia_aberta: "1900-01-01 00:00:00+00"
+  fim_vigencia_aberta: "9999-12-31 00:00:00+00"
 
 models:
   corta_fogo_df:
@@ -28,3 +31,6 @@ models:
     intermediate:
       +materialized: table
       +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: gold

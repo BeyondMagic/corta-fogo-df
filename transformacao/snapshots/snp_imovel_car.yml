@@ -1,0 +1,22 @@
+version: 2
+
+snapshots:
+  - name: snp_imovel_car
+    relation: ref('stg_imoveis_car')
+    description: >
+      Historico SCD Tipo 2 dos imoveis rurais do SICAR/DF (Issue #19). Cada execucao
+      compara o estado corrente de stg_imoveis_car com a ultima versao gravada e, quando
+      data_hora_ingestao avancou, fecha a versao anterior (dbt_valid_to) e abre uma nova.
+      Retificacoes de area, alteracoes de perimetro e mudancas de situacao cadastral,
+      inclusive cancelamentos (is_excluido), viram versoes; nada e sobrescrito.
+      Estrategia timestamp sobre data_hora_ingestao: dbt_valid_from e o instante em que
+      a mudanca foi gravada no Delta pelo cdc_consumer, e nao o horario da execucao do
+      dbt, o que torna os metadados temporais deterministicos.
+      Limitacao: a tabela Delta imovel_car guarda apenas o estado mais recente de cada
+      imovel; varias mudancas do mesmo imovel entre duas execucoes do snapshot resultam
+      em uma unica versao nova (a ultima). O consumo analitico deve usar dim_imovel_car.
+    config:
+      schema: snapshots
+      unique_key: cod_imovel
+      strategy: timestamp
+      updated_at: data_hora_ingestao

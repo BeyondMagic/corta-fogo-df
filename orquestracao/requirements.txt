@@ -8,3 +8,4 @@ pandas
 pyarrow
 deltalake
 pyproj
+psycopg2-binary

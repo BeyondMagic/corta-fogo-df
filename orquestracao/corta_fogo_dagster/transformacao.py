@@ -16,7 +16,14 @@ def _manifest_desatualizado() -> bool:
     if not manifest.exists():
         return True
     base = PROJETO_DBT.project_dir
-    fontes = [*base.glob("models/**/*"), *base.glob("macros/**/*"), base / "dbt_project.yml", base / "profiles.yml"]
+    fontes = [
+        *base.glob("models/**/*"),
+        *base.glob("snapshots/**/*"),
+        *base.glob("macros/**/*"),
+        *base.glob("tests/**/*"),
+        base / "dbt_project.yml",
+        base / "profiles.yml",
+    ]
     return any(f.is_file() and f.stat().st_mtime > manifest.stat().st_mtime for f in fontes)
 
 
