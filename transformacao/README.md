@@ -34,6 +34,13 @@ Descrições de colunas e contratos de cada modelo estão em [`models/staging/_s
 | `intermediate` | `int_focos_territorio` | `table` | Uma linha por detecção de foco (`id_foco`), consolidando flags territoriais e contagem de imóveis atingidos. |
 | `snapshots` | `snp_imovel_car` | `snapshot` | Uma linha por versão observada de cada imóvel (`cod_imovel`, `dbt_valid_from`), estratégia `timestamp` sobre `data_hora_ingestao`. |
 | `gold` | `dim_imovel_car` | `table` | Uma linha por versão cadastral de imóvel (`sk_imovel`), com `dbt_valid_from`, `dbt_valid_to` (sempre preenchidos) e `is_current`. |
+| `gold` | `dim_tempo` | `table` | Uma linha por data civil 2015–2025, com `is_estacao_seca` (maio–setembro). |
+| `gold` | `dim_satelite` | `table` | Uma linha por satélite detector, com `is_referencia`. |
+| `gold` | `dim_territorio` | `table` | Uma linha por feição UC/APP/RL; `sk_territorio` estável (hash tipo+WKT); amortecimento 1 km nas UCs. |
+| `gold` | `fato_foco_calor` | `table` | Uma linha por detecção de foco (`id_foco`); chaves para tempo e satélite; flags territoriais. |
+| `gold` | `mart_reincidencia_imovel_ano` | `table` | Uma linha por imóvel×ano com foco em área protegida; flag `imovel_reincidente` (≥ 2 anos). |
+
+Especificação conceitual: [`docs/modelagem/esquema_dimensional_gold.md`](../docs/modelagem/esquema_dimensional_gold.md).
 
 A consulta [`analyses/conferencia_mv_gold.sql`](analyses/conferencia_mv_gold.sql) reproduz a regra da `gold.mv_imoveis_reincidentes_areas_protegidas` (migração `V7`) sobre os modelos `int_focos_imoveis` e `int_focos_areas_protegidas` para conferência de contagem.
 

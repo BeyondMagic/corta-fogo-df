@@ -68,6 +68,180 @@ models:
         data_tests:
           - not_null
 
+  - name: dim_tempo
+    description: >
+      Granularidade: uma linha por data civil no calendario de 2015-01-01 a 2025-12-31.
+      Inclui o atributo is_estacao_seca do Distrito Federal (maio a setembro).
+    columns:
+      - name: sk_tempo
+        description: Chave substituta YYYYMMDD (inteiro) da data civil.
+        data_tests:
+          - unique
+          - not_null
+      - name: data
+        description: Data civil (DATE).
+        data_tests:
+          - unique
+          - not_null
+      - name: ano
+        description: Ano civil da data.
+      - name: mes
+        description: Mes civil (1 a 12).
+      - name: dia
+        description: Dia do mes (1 a 31).
+      - name: nome_mes
+        description: Nome do mes em portugues.
+      - name: is_estacao_seca
+        description: Verdadeiro quando o mes esta entre maio e setembro (estacao seca do DF).
+        data_tests:
+          - not_null
+
+  - name: dim_satelite
+    description: >
+      Granularidade: uma linha por satelite detector presente em stg_focos_calor.
+      Expoe a flag is_referencia para series comparaveis (AQUA_M-T).
+    columns:
+      - name: sk_satelite
+        description: Chave substituta md5(satelite).
+        data_tests:
+          - unique
+          - not_null
+      - name: satelite
+        description: Nome do satelite em caixa alta.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_referencia
+        description: Verdadeiro quando o satelite e o de referencia do INPE (AQUA_M-T).
+        data_tests:
+          - not_null
+
+  - name: dim_territorio
+    description: >
+      Granularidade: uma linha por feicao protegida (Unidade de Conservacao, APP ou
+      Reserva Legal). Chave substituta estavel entre recargas via hash de tipo_area e
+      WKT da geometria. raio_amortecimento_m vale 1000 para UC e 0 para APP/RL.
+    columns:
+      - name: sk_territorio
+        description: md5(tipo_area || '|' || ST_AsText(geom)), estavel entre docker compose down -v.
+        data_tests:
+          - unique
+          - not_null
+      - name: tipo_area
+        description: "unidade_conservacao, app ou reserva_legal."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['unidade_conservacao', 'app', 'reserva_legal']
+      - name: id_feicao_origem
+        description: IDENTITY do PostGIS no ciclo atual (auditoria; nao usar como chave entre recargas).
+      - name: nome_area
+        description: Nome da UC ou tipologia da APP (nulo em Reserva Legal).
+      - name: categoria_area
+        description: Categoria de manejo da UC, tipologia da APP ou situacao da RL.
+      - name: grupo_area
+        description: Grupo SNUC da UC (nulo em APP e RL).
+      - name: cod_imovel
+        description: Codigo CAR dono da feicao (RL e APP opcional; nulo em UC).
+      - name: area_ha
+        description: Area da feicao em hectares.
+      - name: raio_amortecimento_m
+        description: Raio em metros do criterio espacial (1000 para UC, 0 para intersecao em APP/RL).
+        data_tests:
+          - not_null
+      - name: data_download
+        description: Data do download da camada territorial.
+      - name: geom
+        description: Poligono MultiPolygon em EPSG:31983.
+
+  - name: fato_foco_calor
+    description: >
+      Granularidade: uma linha por deteccao de foco de calor no tempo e no espaco por
+      sensor orbital (id_foco). Fato atomica da estrela Gold. Nao explode por imovel:
+      a relacao N:N com o CAR fica em int_focos_imoveis e no mart de reincidencia.
+      Derivada de int_focos_territorio com chaves para dim_tempo e dim_satelite.
+    columns:
+      - name: id_foco
+        description: Hash SHA-256 deterministico do foco (chave primaria da fato).
+        data_tests:
+          - unique
+          - not_null
+      - name: sk_tempo
+        description: Chave para dim_tempo, derivada de data_evento_local (YYYYMMDD).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_tempo')
+                field: sk_tempo
+      - name: sk_satelite
+        description: Chave para dim_satelite (md5 do nome do satelite).
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_satelite')
+                field: sk_satelite
+      - name: data_hora_evento
+        description: Passagem do satelite em UTC.
+        data_tests:
+          - not_null
+      - name: em_area_protegida
+        description: Verdadeiro se o foco atende RL, APP ou faixa de 1 km de UC.
+      - name: qtd_imoveis
+        description: Quantidade de imoveis ativos do SICAR que contem o foco.
+      - name: em_reserva_legal
+        description: Foco intersecta ao menos uma Reserva Legal.
+      - name: em_app
+        description: Foco intersecta ao menos uma APP.
+      - name: ate_1km_uc
+        description: Foco a ate 1.000 m de ao menos uma UC.
+
+  - name: mart_reincidencia_imovel_ano
+    description: >
+      Granularidade: uma linha por imovel rural por ano civil UTC (2015 a 2025) em que
+      houve foco dentro do imovel e em Reserva Legal do mesmo imovel, APP ou faixa de
+      1 km de UC. Materializa metricas da pergunta de gestao. Atributos cadastrais
+      (sk_imovel, situacao, area_ha) vem da versao SCD2 vigente no foco mais recente
+      daquele ano. imovel_reincidente e verdadeiro quando o imovel tem pelo menos dois
+      anos distintos nessa condicao.
+    columns:
+      - name: cod_imovel
+        description: Codigo do imovel no SICAR.
+        data_tests:
+          - not_null
+      - name: ano
+        description: Ano civil UTC do evento.
+        data_tests:
+          - not_null
+      - name: sk_imovel
+        description: Versao SCD2 do imovel associada ao foco mais recente do ano.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_imovel_car')
+                field: sk_imovel
+      - name: total_focos
+        description: Focos distintos no imovel e em area protegida naquele ano.
+        data_tests:
+          - not_null
+      - name: atinge_reserva_legal
+        description: Houve foco na Reserva Legal do imovel no ano.
+      - name: atinge_app
+        description: Houve foco em APP no ano.
+      - name: atinge_uc_1km
+        description: Houve foco a ate 1 km de UC no ano.
+      - name: anos_com_foco_protegido
+        description: Quantidade de anos distintos (2015-2025) com foco protegido no imovel.
+      - name: lista_anos_protegidos
+        description: Lista ordenada dos anos com foco protegido no imovel.
+      - name: imovel_reincidente
+        description: Verdadeiro quando anos_com_foco_protegido >= 2.
+        data_tests:
+          - not_null
+
 unit_tests:
   - name: dim_imovel_car_preserva_versao_anterior_para_focos_antigos
     description: >
