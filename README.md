@@ -69,6 +69,14 @@ docker compose run --rm verificar_lakehouse
 
 A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor` ou se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
 
+### Orquestração (Dagster)
+
+```bash
+docker compose --profile orquestracao up -d --build
+```
+
+Interface em <http://localhost:3000>, com o grafo de assets do dbt, retry com recuo exponencial e backfill por partição mensal. Detalhes e comandos de demonstração em [orquestracao/README.md](orquestracao/README.md).
+
 ### Demonstrar a semântica de entrega (at-least-once com deduplicação)
 
 ```bash

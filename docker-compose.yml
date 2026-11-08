@@ -1,3 +1,30 @@
+x-dagster: &dagster
+  profiles: ["orquestracao"]
+  build:
+    context: ./orquestracao
+  depends_on:
+    db:
+      condition: service_healthy
+  environment:
+    DB_HOST: db
+    DB_PORT: 5432
+    DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+    DB_USER: ${POSTGRES_USER:-corta-fogo}
+    DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+    DELTA_DIR: /app/data/delta
+    DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+    DBT_PROJECT_DIR: /app/transformacao
+    PIPELINE_DIR: /app/src/pipeline
+    CSV_FOCOS: /app/data/processed/focos_df_2015_2025.csv
+    FALHAS_INDUZIDAS: ${FALHAS_INDUZIDAS:-0}
+  volumes:
+    - lakehouse:/app/data/delta
+    - warehouse:/app/data/warehouse
+    - dagster_state:/opt/dagster/storage
+    - ./transformacao:/app/transformacao
+    - ./src/pipeline:/app/src/pipeline:ro
+    - ./data/processed:/app/data/processed:ro
+
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -153,8 +180,19 @@ services:
       - lakehouse:/app/data/delta:ro
       - warehouse:/app/data/warehouse
 
+  dagster_webserver:
+    <<: *dagster
+    command: dagster-webserver -h 0.0.0.0 -p 3000 -w /opt/dagster/home/workspace.yaml
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+
+  dagster_daemon:
+    <<: *dagster
+    command: dagster-daemon run -w /opt/dagster/home/workspace.yaml
+
 volumes:
   pgdata:
   lakehouse:
   warehouse:
+  dagster_state:
 
