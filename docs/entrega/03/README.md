@@ -268,6 +268,13 @@ O mapa permite navegar por toda a série histórica de 11 anos (38.945 detecçõ
     <label class="cf-toggle-label">
       <input type="checkbox" id="cf-check-ucs" checked /> Unidades de Conservação e Amortecimento (1 km)
     </label>
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+      <span style="font-weight: 600; font-size: 11px; color: var(--md-default-fg-color--light, #64748b);">Mapa Base:</span>
+      <select id="cf-select-basemap" style="font-size: 11px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--md-default-fg-color--lightest, #cbd5e1); background: var(--md-default-bg-color, #ffffff); color: var(--md-default-fg-color, #334155); cursor: pointer;">
+        <option value="osm">OpenStreetMap (Padrão)</option>
+        <option value="esri">ESRI Light Gray (Neutro)</option>
+      </select>
+    </div>
   </div>
 
   <!-- Contêiner do Mapa Leaflet -->

@@ -12,6 +12,9 @@
   let playTimer = null;
   let currentYear = 2024; // Padrão no ano de maior ocorrência
   let canvasRenderer = null;
+  let osmLayer = null;
+  let esriLayer = null;
+  let currentBaseLayer = null;
 
   function initMap() {
     const mapContainer = document.getElementById('corta-fogo-map');
@@ -42,12 +45,26 @@
 
     canvasRenderer = L.canvas({ padding: 0.5 });
 
-    // Tiles base elegantes (CartoDB Positron / OpenStreetMap)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: 'abcd',
+    // Tiles base 100% abertos e sem exigencia de API Key
+    osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
-    }).addTo(mapInstance);
+    });
+
+    esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors',
+      maxZoom: 16
+    });
+
+    currentBaseLayer = osmLayer;
+    osmLayer.addTo(mapInstance);
+
+    const baseMaps = {
+      'OpenStreetMap (Padrão)': osmLayer,
+      'ESRI Light Gray (Neutro)': esriLayer
+    };
+
+    L.control.layers(baseMaps, null, { position: 'topright' }).addTo(mapInstance);
 
     // Camadas de grupos
     ucsLayer = L.layerGroup().addTo(mapInstance);
@@ -275,6 +292,27 @@
         this.checked ? mapInstance.addLayer(focosLayer) : mapInstance.removeLayer(focosLayer);
       });
     }
+
+    const basemapSelect = document.getElementById('cf-select-basemap');
+    if (basemapSelect) {
+      basemapSelect.addEventListener('change', function () {
+        mapInstance.removeLayer(currentBaseLayer);
+        if (this.value === 'esri') {
+          currentBaseLayer = esriLayer;
+        } else {
+          currentBaseLayer = osmLayer;
+        }
+        mapInstance.addLayer(currentBaseLayer);
+        currentBaseLayer.bringToBack();
+      });
+    }
+
+    mapInstance.on('baselayerchange', function (e) {
+      currentBaseLayer = e.layer;
+      if (basemapSelect) {
+        basemapSelect.value = (e.name.indexOf('ESRI') !== -1) ? 'esri' : 'osm';
+      }
+    });
   }
 
   function startPlay() {
