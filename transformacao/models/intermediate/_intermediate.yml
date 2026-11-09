@@ -11,23 +11,53 @@ models:
       a vinculacao com a versao historica vigente na data do evento fica a cargo da
       camada Gold (Issue #18) em conjunto com o snapshot SCD Tipo 2 (Issue #19) por
       meio de cod_imovel e data_hora_evento.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - id_foco
+              - cod_imovel
     columns:
       - name: id_foco
         description: Identificador SHA-256 do foco de calor.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fato_foco_calor')
+                field: id_foco
       - name: cod_imovel
         description: Codigo do imovel rural no SICAR que contem espacialmente o foco.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_imovel_car')
+                field: cod_imovel
       - name: data_hora_evento
         description: Carimbo de tempo da passagem do satelite em UTC (TIMESTAMPTZ).
+        data_tests:
+          - not_null
       - name: data_evento_local
         description: Data do foco no fuso local (America/Sao_Paulo).
+        data_tests:
+          - not_null
       - name: ano
         description: Ano civil em UTC derivado de data_hora_evento.
+        data_tests:
+          - not_null
       - name: mes
         description: Mes civil (1 a 12) em UTC derivado de data_hora_evento.
+        data_tests:
+          - not_null
       - name: satelite
         description: Nome do satelite detector.
+        data_tests:
+          - not_null
       - name: is_satelite_referencia
         description: Verdadeiro quando o foco pertence ao satelite de referencia (AQUA_M-T).
+        data_tests:
+          - not_null
       - name: situacao_imovel
         description: Situacao cadastral corrente do imovel no SICAR.
       - name: condicao_imovel
@@ -41,18 +71,44 @@ models:
       de calor atende a um dos criterios espaciais da pergunta de gestao: intersecao
       com Reserva Legal (reserva_legal), intersecao com Area de Preservacao Permanente
       (app) ou distancia de ate 1.000 metros de Unidade de Conservacao (uc_1km).
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - id_foco
+              - tipo_area
+              - id_feicao
     columns:
       - name: id_foco
         description: Identificador SHA-256 do foco de calor.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fato_foco_calor')
+                field: id_foco
+      - name: sk_territorio
+        description: Chave substituta deterministica da feicao protegida em dim_territorio.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_territorio')
+                field: sk_territorio
       - name: tipo_area
         description: Categoria do criterio territorial atingido (reserva_legal, app ou uc_1km).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['reserva_legal', 'app', 'uc_1km']
       - name: id_feicao
         description: >
           id_uc, id_app ou id_reserva vindo do PostGIS (IDENTITY). Muda a cada recarga
           completa do banco (docker compose down -v) e so e consistente com modelos
-          construidos no mesmo ciclo de execucao do dbt. Se a dim_territorio (Issue #18)
-          precisar de chave substituta estavel entre recargas, deve derivar um hash de
-          tipo_area concatenado a geometria.
+          construidos no mesmo ciclo de execucao do dbt.
+        data_tests:
+          - not_null
       - name: cod_imovel_feicao
         description: Codigo do imovel CAR proprietario da feicao (sempre preenchido em reserva_legal, opcional em app e nulo em uc_1km).
       - name: nome_area
@@ -61,6 +117,8 @@ models:
         description: Categoria de manejo da UC, tipologia da APP ou situacao da Reserva Legal.
       - name: distancia_m
         description: Distancia euclidiana em metros (EPSG:31983) entre o foco e a feicao (zero quando o ponto cai no interior do poligono).
+        data_tests:
+          - not_null
 
   - name: int_focos_territorio
     description: >
@@ -72,30 +130,57 @@ models:
     columns:
       - name: id_foco
         description: Identificador SHA-256 do foco de calor (chave primaria do modelo).
+        data_tests:
+          - unique
+          - not_null
       - name: satelite
         description: Nome do satelite detector em caixa alta.
+        data_tests:
+          - not_null
       - name: is_satelite_referencia
         description: Verdadeiro quando o foco foi detectado pelo satelite de referencia (AQUA_M-T).
+        data_tests:
+          - not_null
       - name: data_hora_evento
         description: Carimbo de tempo da deteccao em UTC (TIMESTAMPTZ).
+        data_tests:
+          - not_null
       - name: data_hora_ingestao
         description: Carimbo de tempo da escrita na camada Delta em UTC (TIMESTAMPTZ).
+        data_tests:
+          - not_null
       - name: data_evento_local
         description: Data do evento no fuso local (America/Sao_Paulo).
+        data_tests:
+          - not_null
       - name: ano
         description: Ano civil em UTC derivado de data_hora_evento.
+        data_tests:
+          - not_null
       - name: mes
         description: Mes civil (1 a 12) em UTC derivado de data_hora_evento.
+        data_tests:
+          - not_null
       - name: latitude
         description: Latitude em graus decimais (EPSG:4326).
+        data_tests:
+          - not_null
       - name: longitude
         description: Longitude em graus decimais (EPSG:4326).
+        data_tests:
+          - not_null
       - name: x_31983
         description: Coordenada leste em metros (EPSG:31983).
+        data_tests:
+          - not_null
       - name: y_31983
         description: Coordenada norte em metros (EPSG:31983).
+        data_tests:
+          - not_null
       - name: geom
         description: Geometria pontual em EPSG:31983.
+        data_tests:
+          - not_null
       - name: municipio
         description: Municipio em caixa alta.
       - name: bioma
@@ -104,19 +189,35 @@ models:
         description: Indice de risco de fogo no intervalo de 0 a 1.
       - name: origem_ingestao
         description: Canal de ingestao do registro na camada Delta.
+        data_tests:
+          - not_null
       - name: operacao_cdc
         description: Codigo de operacao de linhagem.
+        data_tests:
+          - not_null
       - name: qtd_imoveis
         description: Quantidade de imoveis rurais ativos do SICAR que contem espacialmente o foco.
+        data_tests:
+          - not_null
       - name: em_imovel_car
         description: Verdadeiro quando o foco cai dentro de ao menos um imovel rural ativo do SICAR.
+        data_tests:
+          - not_null
       - name: em_reserva_legal
         description: Verdadeiro quando o foco intersecta ao menos um poligono de Reserva Legal.
+        data_tests:
+          - not_null
       - name: em_app
         description: Verdadeiro quando o foco intersecta ao menos um poligono de Area de Preservacao Permanente.
+        data_tests:
+          - not_null
       - name: ate_1km_uc
         description: Verdadeiro quando o foco esta a ate 1.000 metros de ao menos uma Unidade de Conservacao.
+        data_tests:
+          - not_null
       - name: distancia_min_uc_m
         description: Menor distancia em metros ate uma Unidade de Conservacao dentro do raio de 1.000 metros (nulo quando fora da faixa).
       - name: em_area_protegida
         description: Verdadeiro quando o foco atende a qualquer um dos tres criterios de protecao (em_reserva_legal, em_app ou ate_1km_uc).
+        data_tests:
+          - not_null

@@ -11,30 +11,61 @@ models:
     columns:
       - name: id_foco
         description: Hash SHA-256 deterministico de latitude, longitude, data_hora_evento e satelite.
+        data_tests:
+          - unique
+          - not_null
       - name: satelite
         description: Nome do satelite detector padronizado em caixa alta.
+        data_tests:
+          - not_null
       - name: is_satelite_referencia
         description: Verdadeiro quando o foco foi captado pelo satelite de referencia do INPE (AQUA_M-T).
+        data_tests:
+          - not_null
       - name: data_hora_evento
         description: Carimbo de tempo da passagem do satelite em UTC (TIMESTAMPTZ). Base de ano, mes e reincidencia.
+        data_tests:
+          - not_null
       - name: data_hora_ingestao
         description: Carimbo de tempo da escrita do registro na camada Delta em UTC (TIMESTAMPTZ).
+        data_tests:
+          - not_null
       - name: data_evento_local
         description: Data do evento convertida para o fuso local do Distrito Federal (America/Sao_Paulo).
+        data_tests:
+          - not_null
       - name: ano
         description: Ano civil em UTC derivado de data_hora_evento, igual a coluna de particao do Delta.
+        data_tests:
+          - not_null
       - name: mes
         description: Mes civil (1 a 12) em UTC derivado de data_hora_evento, igual a coluna de particao do Delta.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                quote: false
       - name: latitude
         description: Latitude geografica em graus decimais (EPSG:4326).
+        data_tests:
+          - not_null
       - name: longitude
         description: Longitude geografica em graus decimais (EPSG:4326).
+        data_tests:
+          - not_null
       - name: x_31983
         description: Coordenada leste em metros (SIRGAS 2000 / UTM zona 23S, EPSG:31983).
+        data_tests:
+          - not_null
       - name: y_31983
         description: Coordenada norte em metros (SIRGAS 2000 / UTM zona 23S, EPSG:31983).
+        data_tests:
+          - not_null
       - name: geom
         description: Geometria pontual em EPSG:31983 construida a partir de x_31983 e y_31983.
+        data_tests:
+          - not_null
       - name: municipio
         description: Municipio padronizado em caixa alta.
       - name: bioma
@@ -43,8 +74,18 @@ models:
         description: Indice de risco de fogo do INPE no intervalo de 0 a 1 (nulo quando ausente na fonte).
       - name: origem_ingestao
         description: Canal de entrada na camada Delta (sempre lote para focos de calor).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['lote']
       - name: operacao_cdc
         description: Codigo de operacao para compatibilidade de linhagem (sempre I para focos de calor).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['I']
 
   - name: stg_imoveis_car
     description: >
@@ -56,6 +97,9 @@ models:
     columns:
       - name: cod_imovel
         description: Codigo identificador natural do imovel rural no SICAR (padrao DF-...).
+        data_tests:
+          - unique
+          - not_null
       - name: situacao
         description: "Situacao cadastral do imovel no SICAR (AT, PE ou CA)."
       - name: condicao
@@ -66,21 +110,41 @@ models:
         description: Data em que o recorte do SICAR foi obtido na fonte publica.
       - name: geom_ewkb_hex
         description: Representacao hexadecimal EWKB da geometria MultiPolygon em EPSG:31983, preservada para auditoria e hash de mudanca no snapshot.
+        data_tests:
+          - not_null
       - name: geom
         description: >
           Geometria MultiPolygon decodificada em EPSG:31983. Representa o perimetro
           atual do imovel na tabela Delta; o historico de alteracoes cadastrais passa
           a ser acumulado a partir do snapshot SCD Tipo 2 (Issue #19).
+        data_tests:
+          - not_null
       - name: data_hora_ingestao
         description: Momento da entrada ou ultima atualizacao do registro na camada Delta (TIMESTAMPTZ em UTC).
+        data_tests:
+          - not_null
       - name: origem_ingestao
         description: Origem do registro na tabela Delta (snapshot ou cdc).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['snapshot', 'cdc']
       - name: operacao_cdc
         description: Ultima operacao capturada no WAL (I para insercao, U para atualizacao, D para exclusao logica).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['I', 'U', 'D']
       - name: is_excluido
         description: Verdadeiro quando operacao_cdc = 'D' (exclusao logica preservada no Delta).
+        data_tests:
+          - not_null
       - name: lsn_origem
         description: Log Sequence Number (inteiro de 64 bits) da transacao de origem no PostgreSQL.
+        data_tests:
+          - not_null
 
   - name: stg_unidades_conservacao
     description: >
@@ -92,8 +156,13 @@ models:
           Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
           completa do banco (docker compose down -v) e so e consistente dentro do mesmo
           ciclo de execucao do dbt.
+        data_tests:
+          - unique
+          - not_null
       - name: nome
         description: Nome oficial da Unidade de Conservacao.
+        data_tests:
+          - not_null
       - name: categoria
         description: "Categoria de manejo da unidade (Parque Ecologico, APA, Estacao Ecologica, entre outras)."
       - name: grupo
@@ -108,6 +177,8 @@ models:
         description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
       - name: geom
         description: Geometria MultiPolygon da Unidade de Conservacao em EPSG:31983.
+        data_tests:
+          - not_null
 
   - name: stg_areas_preservacao_permanente
     description: >
@@ -119,10 +190,15 @@ models:
           Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
           completa do banco (docker compose down -v) e so e consistente dentro do mesmo
           ciclo de execucao do dbt.
+        data_tests:
+          - unique
+          - not_null
       - name: cod_imovel
         description: Codigo do imovel CAR quando a APP provem do SICAR; nulo para camadas distritais do IBRAM/SISDIA.
       - name: tipo
         description: Tipologia da APP (nascente, borda de chapada, reservatorio).
+        data_tests:
+          - not_null
       - name: area_ha
         description: Area do poligono em hectares.
       - name: fonte
@@ -133,6 +209,8 @@ models:
         description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
       - name: geom
         description: Geometria MultiPolygon da APP em EPSG:31983.
+        data_tests:
+          - not_null
 
   - name: stg_reservas_legais
     description: >
@@ -145,8 +223,13 @@ models:
           Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
           completa do banco (docker compose down -v) e so e consistente dentro do mesmo
           ciclo de execucao do dbt.
+        data_tests:
+          - unique
+          - not_null
       - name: cod_imovel
         description: Codigo do imovel rural proprietario da Reserva Legal (padrao DF-...).
+        data_tests:
+          - not_null
       - name: situacao
         description: Situacao cadastral da feicao de Reserva Legal no SICAR.
       - name: area_ha
@@ -157,3 +240,5 @@ models:
         description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
       - name: geom
         description: Geometria MultiPolygon da Reserva Legal em EPSG:31983.
+        data_tests:
+          - not_null

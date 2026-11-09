@@ -13,6 +13,12 @@ models:
       versao do cadastro vigente na data do evento. Testes singulares em
       tests/dim_imovel_car_*.sql garantem uma versao corrente por imovel e vigencias
       contiguas, sem sobreposicao nem lacuna.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - cod_imovel
+              - numero_versao
     columns:
       - name: sk_imovel
         description: >
@@ -27,6 +33,8 @@ models:
           - not_null
       - name: numero_versao
         description: Ordem da versao dentro do imovel, iniciando em 1.
+        data_tests:
+          - not_null
       - name: situacao
         description: "Situacao cadastral do imovel na versao (AT, PE ou CA)."
       - name: condicao
@@ -37,16 +45,31 @@ models:
         description: Data em que o recorte do SICAR foi obtido na fonte publica.
       - name: geom_ewkb_hex
         description: EWKB hexadecimal do perimetro da versao em EPSG:31983.
+        data_tests:
+          - not_null
       - name: geom
         description: Perimetro MultiPolygon da versao em EPSG:31983, para o cruzamento espacial historico.
+        data_tests:
+          - not_null
       - name: is_excluido
         description: Verdadeiro quando a versao registra o cancelamento do cadastro (exclusao logica no CDC).
+        data_tests:
+          - not_null
       - name: operacao_cdc
         description: Operacao do WAL que originou a versao (I, U ou D).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['I', 'U', 'D']
       - name: lsn_origem
         description: Log Sequence Number da transacao de origem no PostgreSQL.
+        data_tests:
+          - not_null
       - name: data_hora_ingestao
         description: Momento em que a versao foi gravada na tabela Delta (TIMESTAMPTZ em UTC).
+        data_tests:
+          - not_null
       - name: dbt_valid_from
         description: >
           Inicio da validade da versao (inclusivo). Igual ao dbt_valid_from do snapshot
@@ -85,12 +108,28 @@ models:
           - not_null
       - name: ano
         description: Ano civil da data.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+                quote: false
       - name: mes
         description: Mes civil (1 a 12).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                quote: false
       - name: dia
         description: Dia do mes (1 a 31).
+        data_tests:
+          - not_null
       - name: nome_mes
         description: Nome do mes em portugues.
+        data_tests:
+          - not_null
       - name: is_estacao_seca
         description: Verdadeiro quando o mes esta entre maio e setembro (estacao seca do DF).
         data_tests:
@@ -136,6 +175,8 @@ models:
                 values: ['unidade_conservacao', 'app', 'reserva_legal']
       - name: id_feicao_origem
         description: IDENTITY do PostGIS no ciclo atual (auditoria; nao usar como chave entre recargas).
+        data_tests:
+          - not_null
       - name: nome_area
         description: Nome da UC ou tipologia da APP (nulo em Reserva Legal).
       - name: categoria_area
@@ -150,10 +191,16 @@ models:
         description: Raio em metros do criterio espacial (1000 para UC, 0 para intersecao em APP/RL).
         data_tests:
           - not_null
+          - accepted_values:
+              arguments:
+                values: [0.0, 1000.0]
+                quote: false
       - name: data_download
         description: Data do download da camada territorial.
       - name: geom
         description: Poligono MultiPolygon em EPSG:31983.
+        data_tests:
+          - not_null
 
   - name: fato_foco_calor
     description: >
@@ -183,20 +230,102 @@ models:
               arguments:
                 to: ref('dim_satelite')
                 field: sk_satelite
+      - name: satelite
+        description: Nome do satelite detector.
+        data_tests:
+          - not_null
+      - name: is_satelite_referencia
+        description: Verdadeiro se captado pelo satelite de referencia (AQUA_M-T).
+        data_tests:
+          - not_null
       - name: data_hora_evento
         description: Passagem do satelite em UTC.
         data_tests:
           - not_null
-      - name: em_area_protegida
-        description: Verdadeiro se o foco atende RL, APP ou faixa de 1 km de UC.
+      - name: data_hora_ingestao
+        description: Momento da escrita na camada Delta em UTC.
+        data_tests:
+          - not_null
+      - name: data_evento_local
+        description: Data do evento no fuso local (America/Sao_Paulo).
+        data_tests:
+          - not_null
+      - name: ano
+        description: Ano civil UTC do evento.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+                quote: false
+      - name: mes
+        description: Mes civil UTC do evento (1 a 12).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                quote: false
+      - name: latitude
+        description: Latitude geografica WGS84.
+        data_tests:
+          - not_null
+      - name: longitude
+        description: Longitude geografica WGS84.
+        data_tests:
+          - not_null
+      - name: x_31983
+        description: Coordenada leste metrica em EPSG:31983.
+        data_tests:
+          - not_null
+      - name: y_31983
+        description: Coordenada norte metrica em EPSG:31983.
+        data_tests:
+          - not_null
+      - name: geom
+        description: Geometria pontual em EPSG:31983.
+        data_tests:
+          - not_null
+      - name: origem_ingestao
+        description: Canal de entrada na camada Delta.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['lote']
+      - name: operacao_cdc
+        description: Codigo de operacao de linhagem.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['I']
       - name: qtd_imoveis
         description: Quantidade de imoveis ativos do SICAR que contem o foco.
+        data_tests:
+          - not_null
+      - name: em_imovel_car
+        description: Verdadeiro se o foco intersecta ao menos um imovel ativo do SICAR.
+        data_tests:
+          - not_null
       - name: em_reserva_legal
         description: Foco intersecta ao menos uma Reserva Legal.
+        data_tests:
+          - not_null
       - name: em_app
         description: Foco intersecta ao menos uma APP.
+        data_tests:
+          - not_null
       - name: ate_1km_uc
         description: Foco a ate 1.000 m de ao menos uma UC.
+        data_tests:
+          - not_null
+      - name: distancia_min_uc_m
+        description: Menor distancia em metros ate uma UC na faixa de 1 km (nulo se fora da faixa).
+      - name: em_area_protegida
+        description: Verdadeiro se o foco atende RL, APP ou faixa de 1 km de UC.
+        data_tests:
+          - not_null
 
   - name: mart_reincidencia_imovel_ano
     description: >
@@ -206,15 +335,29 @@ models:
       (sk_imovel, situacao, area_ha) vem da versao SCD2 vigente no foco mais recente
       daquele ano. imovel_reincidente e verdadeiro quando o imovel tem pelo menos dois
       anos distintos nessa condicao.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - cod_imovel
+              - ano
     columns:
       - name: cod_imovel
         description: Codigo do imovel no SICAR.
         data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_imovel_car')
+                field: cod_imovel
       - name: ano
         description: Ano civil UTC do evento.
         data_tests:
           - not_null
+          - accepted_values:
+              arguments:
+                values: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+                quote: false
       - name: sk_imovel
         description: Versao SCD2 do imovel associada ao foco mais recente do ano.
         data_tests:
@@ -229,14 +372,24 @@ models:
           - not_null
       - name: atinge_reserva_legal
         description: Houve foco na Reserva Legal do imovel no ano.
+        data_tests:
+          - not_null
       - name: atinge_app
         description: Houve foco em APP no ano.
+        data_tests:
+          - not_null
       - name: atinge_uc_1km
         description: Houve foco a ate 1 km de UC no ano.
+        data_tests:
+          - not_null
       - name: anos_com_foco_protegido
         description: Quantidade de anos distintos (2015-2025) com foco protegido no imovel.
+        data_tests:
+          - not_null
       - name: lista_anos_protegidos
         description: Lista ordenada dos anos com foco protegido no imovel.
+        data_tests:
+          - not_null
       - name: imovel_reincidente
         description: Verdadeiro quando anos_com_foco_protegido >= 2.
         data_tests:

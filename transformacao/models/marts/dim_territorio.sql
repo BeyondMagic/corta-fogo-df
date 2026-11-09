@@ -1,5 +1,6 @@
 -- Dimensao conformada de feicoes protegidas (UC, APP, Reserva Legal).
--- sk_territorio estavel entre recargas: md5(tipo_area || WKT da geometria).
+-- sk_territorio estavel entre recargas: md5(tipo_area || '|' || coalesce(cod_imovel, '') || '|' || WKT da geometria).
+-- Poligonos identicos na mesma classe e mesmo cod_imovel sao deduplicados.
 -- id_feicao_origem e o IDENTITY do PostGIS do ciclo atual (so auditoria intra-run).
 
 with uc as (
@@ -20,7 +21,7 @@ with uc as (
 
 app as (
     select
-        md5('app|' || st_astext(geom))                                  as sk_territorio,
+        md5('app|' || coalesce(cod_imovel, '') || '|' || st_astext(geom)) as sk_territorio,
         'app'::varchar                                                  as tipo_area,
         id_app                                                          as id_feicao_origem,
         tipo                                                            as nome_area,
@@ -36,7 +37,7 @@ app as (
 
 reserva as (
     select
-        md5('reserva_legal|' || st_astext(geom))                        as sk_territorio,
+        md5('reserva_legal|' || coalesce(cod_imovel, '') || '|' || st_astext(geom)) as sk_territorio,
         'reserva_legal'::varchar                                        as tipo_area,
         id_reserva                                                      as id_feicao_origem,
         null::varchar                                                   as nome_area,
@@ -48,10 +49,19 @@ reserva as (
         data_download,
         geom
     from {{ ref('stg_reservas_legais') }}
+),
+
+unificado as (
+    select * from uc
+    union all
+    select * from app
+    union all
+    select * from reserva
 )
 
-select * from uc
-union all
-select * from app
-union all
-select * from reserva
+select *
+from unificado
+qualify row_number() over (
+    partition by sk_territorio
+    order by id_feicao_origem
+) = 1

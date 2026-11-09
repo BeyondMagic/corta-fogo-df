@@ -58,6 +58,23 @@ O unit test `dim_imovel_car_preserva_versao_anterior_para_focos_antigos` ([`_mar
 docker compose --profile orquestracao exec dagster_webserver python /opt/dagster/app/demo_scd2_imovel.py
 ```
 
+## Bateria de testes de dados (Issue #21)
+
+A suíte automatizada cobre testes de esquema, integridade referencial, volume histórico e distribuições estatística e espacial:
+
+1. **Testes de esquema e chaves primárias:** testes `unique` e `not_null` em todas as PKs e surrogate keys das camadas Staging, Intermediate e Gold, além de testes genéricos de unicidade composta (`unique_combination_of_columns`) em tabelas associativas e agregadas (`int_focos_imoveis`, `int_focos_areas_protegidas`, `mart_reincidencia_imovel_ano`).
+2. **Integridade referencial:** testes `relationships` entre fatos, modelos intermediários e dimensões conformadas (`fato_foco_calor` -> `dim_tempo`, `dim_satelite`; `int_focos_imoveis` -> `dim_imovel_car`, `fato_foco_calor`; `int_focos_areas_protegidas` -> `dim_territorio`, `fato_foco_calor`; `mart_reincidencia_imovel_ano` -> `dim_imovel_car`).
+3. **Volume histórico anual:** [`tests/fato_foco_calor_volume_historico_anual.sql`](tests/fato_foco_calor_volume_historico_anual.sql) confere se cada ano da série (2015 a 2025) contém no mínimo 500 focos totais e 80 detecções no satélite de referência AQUA_M-T, prevenindo ingestão truncada.
+4. **Distribuição sazonal:** [`tests/fato_foco_calor_distribuicao_sazonal_seca.sql`](tests/fato_foco_calor_distribuicao_sazonal_seca.sql) valida se pelo menos 70% dos focos concentram-se no período de seca do DF (maio a setembro via `is_estacao_seca`), tanto no acumulado da série quanto ano a ano.
+5. **Distribuição espacial e integridade geométrica:** [`tests/fato_foco_calor_distribuicao_espacial_df.sql`](tests/fato_foco_calor_distribuicao_espacial_df.sql) valida que 100% dos focos e geometrias de imóveis e feições territoriais estão situados no envelope do Distrito Federal em EPSG:31983 e EPSG:4326, com validação topológica (`ST_IsValid` e não vazias).
+6. **Integridade da dimensão temporal SCD2:** testes singulares [`tests/dim_imovel_car_uma_versao_corrente.sql`](tests/dim_imovel_car_uma_versao_corrente.sql) e [`tests/dim_imovel_car_vigencias_contiguas.sql`](tests/dim_imovel_car_vigencias_contiguas.sql).
+
+Comando para execução dos testes:
+
+```bash
+docker compose --profile transformacao run --rm dbt test
+```
+
 ## Limitações
 
 - Chaves `IDENTITY` das feições territoriais (`id_uc`, `id_app`, `id_reserva`) mudam a cada recarga completa do banco (`down -v`): ver descrição de `id_feicao` em [`models/intermediate/_intermediate.yml`](models/intermediate/_intermediate.yml).
