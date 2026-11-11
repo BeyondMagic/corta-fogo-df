@@ -18,7 +18,20 @@
 
   function initMap() {
     const mapContainer = document.getElementById('corta-fogo-map');
-    if (!mapContainer) return;
+    if (!mapContainer) {
+      if (playTimer) {
+        clearInterval(playTimer);
+        playTimer = null;
+        isPlaying = false;
+      }
+      if (mapInstance) {
+        try {
+          mapInstance.remove();
+        } catch (e) {}
+        mapInstance = null;
+      }
+      return;
+    }
     if (mapContainer.dataset.initialized === 'true') return;
 
     if (typeof L === 'undefined') {
@@ -29,6 +42,18 @@
     if (!window.DADOS_MAPA_DF) {
       setTimeout(initMap, 150);
       return;
+    }
+
+    if (playTimer) {
+      clearInterval(playTimer);
+      playTimer = null;
+      isPlaying = false;
+    }
+    if (mapInstance) {
+      try {
+        mapInstance.remove();
+      } catch (e) {}
+      mapInstance = null;
     }
 
     mapContainer.dataset.initialized = 'true';
@@ -42,6 +67,12 @@
       maxZoom: 15,
       zoomControl: true
     });
+
+    setTimeout(() => {
+      if (mapInstance) {
+        mapInstance.invalidateSize();
+      }
+    }, 200);
 
     canvasRenderer = L.canvas({ padding: 0.5 });
 

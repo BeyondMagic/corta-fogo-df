@@ -24,6 +24,7 @@ extra_javascript = [
 
 nav = [
   { "Visão Geral" = "index.md" },
+  { "Mapa Interativo" = "mapa.md" },
   { "Entrega 1" = "entrega/01/README.md" },
   { "Entrega 2" = "entrega/02/README.md" },
   { "Entrega 3" = "entrega/03/README.md" },

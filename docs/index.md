@@ -7,6 +7,8 @@ icon: material/home
 Plataforma de engenharia de dados para cruzamento espacial e temporal de focos de calor, áreas públicas protegidas e imóveis rurais no Distrito Federal.
 
 > Projeto desenvolvido para a disciplina [Sistemas de Bancos de Dados 2 (FCTE / UnB, Turma 03, Semestre 2026.2)](https://unb-bd2.github.io/PlanoEnsino/projeto/).
+>
+> Explore os dados e os cruzamentos territoriais no [Mapa Interativo do DF](mapa.md) com linha do tempo de 2015 a 2025.
 
 ## Equipe
 

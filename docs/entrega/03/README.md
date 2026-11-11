@@ -332,7 +332,7 @@ Os oito itens da [página da E3](https://unb-bd2.github.io/PlanoEnsino/projeto/e
 | 5 | Consulta otimizada com `EXPLAIN (ANALYZE, BUFFERS)` antes e depois | Parcial | Só na E1: `scripts/benchmark/benchmark_pergunta_gestao.sql` e ADR 0001, com e sem índice GiST. Falta o plano antes e depois na camada analítica. |
 | 6 | Freshness e SLA declarado para ao menos uma tabela de consumo | Pendente | Não há métrica de freshness nem SLA no repositório. |
 | 7 | ADR sobre modelagem analítica ou ferramenta de transformação | Atendido | Seção 8; ADR 0003, aceito em 09/11/2026. |
-| 8 | Painel que responda à pergunta de gestão | Parcial | O mapa usa focos reais, mas as camadas de UC e de imóveis são amostra ilustrativa (seção 12). A resposta calculada pelo modelo está nas seções 9 a 11. |
+| 8 | Painel que responda à pergunta de gestão | Parcial | O [mapa interativo](../../mapa.md) usa focos reais com linha do tempo, mas as camadas de UC e de imóveis são amostra ilustrativa (seção 12). A resposta calculada pelo modelo está nas seções 9 a 11. |
 
 ## 14. Artefatos e Entregáveis
 
@@ -345,5 +345,5 @@ Código, testes e documentos da Entrega 3, versionados no repositório:
 - **[Projeto dbt (`transformacao/`)](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao):** staging, intermediate, snapshot, gold, testes e consultas em `analyses/`.
 - **[Consulta final](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/consulta_pergunta_gestao.sql) e [resumo da pergunta de gestão](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/resumo_pergunta_gestao.sql):** consultas que geram os números das seções 9 a 11.
 - **[Orquestração (`orquestracao/`)](https://github.com/BeyondMagic/corta-fogo-df/tree/main/orquestracao):** ativos, agenda, retry e demonstrações de backfill e de SCD Tipo 2.
-- **[Mapa interativo](https://github.com/BeyondMagic/corta-fogo-df/blob/main/docs/javascripts/mapa_corta_fogo.js):** componente Leaflet e [gerador dos dados](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_mapa.py).
+- **[Mapa interativo](../../mapa.md):** painel com linha do tempo de 11 anos e componente Leaflet ([código JS](https://github.com/BeyondMagic/corta-fogo-df/blob/main/docs/javascripts/mapa_corta_fogo.js) e [gerador dos dados](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_mapa.py)).
 - **[Docker Compose](https://github.com/BeyondMagic/corta-fogo-df/blob/main/docker-compose.yml):** perfis `transformacao` e `orquestracao`.
