@@ -111,6 +111,25 @@
 
     L.control.layers(baseMaps, null, { position: 'topright' }).addTo(mapInstance);
 
+    // Botão de tela cheia no Leaflet (canto superior esquerdo, abaixo do zoom)
+    const FullscreenControl = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        const btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control leaflet-control-custom cf-leaflet-fs-btn');
+        btn.type = 'button';
+        btn.title = 'Alternar tela cheia';
+        btn.setAttribute('aria-label', 'Alternar tela cheia');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+        btn.onclick = function (e) {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleFullscreen();
+        };
+        return btn;
+      }
+    });
+    mapInstance.addControl(new FullscreenControl());
+
     // Ordem de camadas no mapa (do fundo para o topo):
     // 1. Faixa de amortecimento (1.000 m)
     // 2. Polígonos de UCs (84 áreas oficiais)
@@ -457,6 +476,104 @@
         basemapSelect.value = (e.name.indexOf('ESRI') !== -1) ? 'esri' : 'osm';
       }
     });
+
+    // Configura botão de alternância de tela cheia
+    const fsBtn = document.getElementById('cf-btn-fullscreen');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        toggleFullscreen();
+      });
+    }
+
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        const card = document.querySelector('.cf-map-card');
+        if (card && card.classList.contains('cf-fullscreen-fallback')) {
+          exitFallbackFullscreen(card);
+        }
+      }
+    });
+  }
+
+  function toggleFullscreen() {
+    const card = document.querySelector('.cf-map-card');
+    if (!card) return;
+
+    const isFs = (document.fullscreenElement === card) ||
+                 (document.webkitFullscreenElement === card) ||
+                 card.classList.contains('cf-fullscreen-fallback');
+
+    if (!isFs) {
+      if (card.requestFullscreen) {
+        card.requestFullscreen().catch(() => {
+          enterFallbackFullscreen(card);
+        });
+      } else if (card.webkitRequestFullscreen) {
+        card.webkitRequestFullscreen();
+      } else {
+        enterFallbackFullscreen(card);
+      }
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitFullscreenElement) {
+        document.webkitExitFullscreen();
+      } else {
+        exitFallbackFullscreen(card);
+      }
+    }
+  }
+
+  function enterFallbackFullscreen(card) {
+    card.classList.add('cf-fullscreen-fallback');
+    syncFullscreenState();
+  }
+
+  function exitFallbackFullscreen(card) {
+    card.classList.remove('cf-fullscreen-fallback');
+    syncFullscreenState();
+  }
+
+  function syncFullscreenState() {
+    const card = document.querySelector('.cf-map-card');
+    if (!card) return;
+
+    const isFs = (document.fullscreenElement === card) ||
+                 (document.webkitFullscreenElement === card) ||
+                 card.classList.contains('cf-fullscreen-fallback');
+
+    // Atualiza botão dos controles
+    const fsBtn = document.getElementById('cf-btn-fullscreen');
+    if (fsBtn) {
+      fsBtn.setAttribute('aria-pressed', isFs ? 'true' : 'false');
+      const iconEnter = fsBtn.querySelector('.cf-icon-fs-enter');
+      const iconExit = fsBtn.querySelector('.cf-icon-fs-exit');
+      const textSpan = fsBtn.querySelector('.cf-fs-text');
+      if (iconEnter) iconEnter.style.display = isFs ? 'none' : 'inline-block';
+      if (iconExit) iconExit.style.display = isFs ? 'inline-block' : 'none';
+      if (textSpan) textSpan.textContent = isFs ? 'Sair da Tela Cheia' : 'Tela Cheia';
+    }
+
+    // Atualiza botão do Leaflet
+    const leafletFsBtn = document.querySelector('.cf-leaflet-fs-btn');
+    if (leafletFsBtn) {
+      leafletFsBtn.title = isFs ? 'Sair da tela cheia' : 'Alternar tela cheia';
+      leafletFsBtn.setAttribute('aria-label', isFs ? 'Sair da tela cheia' : 'Alternar tela cheia');
+      leafletFsBtn.innerHTML = isFs
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+    }
+
+    // Redimensiona o Leaflet suavemente para acomodar as novas dimensões do viewport
+    setTimeout(() => {
+      if (mapInstance) mapInstance.invalidateSize();
+    }, 100);
+    setTimeout(() => {
+      if (mapInstance) mapInstance.invalidateSize();
+    }, 300);
   }
 
   function startPlay() {

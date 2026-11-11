@@ -116,13 +116,20 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
       <input type="checkbox" id="cf-check-imoveis" checked />
       Top 10 Imóveis CAR reincidentes
     </label>
-    <label class="cf-toggle-label" style="margin-left: auto;">
-      Mapa base:
-      <select id="cf-select-basemap" style="margin-left: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: var(--md-default-bg-color, #fff); color: var(--md-default-fg-color, #333);">
-        <option value="osm">OpenStreetMap</option>
-        <option value="esri">ESRI Neutro</option>
-      </select>
-    </label>
+    <div class="cf-controls-right">
+      <label class="cf-toggle-label">
+        Mapa base:
+        <select id="cf-select-basemap" style="margin-left: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: var(--md-default-bg-color, #fff); color: var(--md-default-fg-color, #333);">
+          <option value="osm">OpenStreetMap</option>
+          <option value="esri">ESRI Neutro</option>
+        </select>
+      </label>
+      <button id="cf-btn-fullscreen" class="cf-btn-fullscreen" type="button" aria-label="Alternar tela cheia" title="Alternar modo tela cheia">
+        <svg class="cf-icon-fs-enter" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg class="cf-icon-fs-exit" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: none;"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+        <span class="cf-fs-text">Tela Cheia</span>
+      </button>
+    </div>
   </div>
 
   <!-- Elemento do Mapa Leaflet -->
@@ -163,6 +170,7 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
 3. **Filtro de satélite de referência:** o INPE utiliza o sensor orbital `AQUA_M-T` como referência para comparações temporais homogêneas. Ao marcar "Apenas satélite de referência", o mapa remove os sensores secundários, isolando o subconjunto de 2.350 registros calibrados.
 4. **Delimitação real de UCs e amortecimento:** as 84 Unidades de Conservação do DF são exibidas com seus perímetros poligonais exatos (diferenciando Proteção Integral e Uso Sustentável). A camada da faixa de amortecimento de 1 km pode ser alternada de forma independente.
 5. **Polígonos cadastrais sob demanda:** clique sobre qualquer um dos 10 marcadores roxos de imóveis rurais críticos para projetar o polígono oficial cadastrado no SICAR, além de consultar o total de focos, anos com reincidência e sobreposições com APP e Reserva Legal.
+6. **Alternância para tela cheia:** utilize o botão "Tela Cheia" nos controles ou no canto superior esquerdo do mapa para expandir o painel e explorar a distribuição espacial dos focos com resolução ampliada.
 
 ---
 
