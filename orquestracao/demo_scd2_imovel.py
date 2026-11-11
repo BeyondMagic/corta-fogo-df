@@ -65,6 +65,9 @@ class Ambiente:
         comando = [
             "dbt", "build", "--project-dir", str(PROJETO_DBT),
             "--target-path", str(self.base / "target"), "--log-path", str(self.base / "logs"),
+            # cautious: so roda testes cujos pais estao todos na selecao. Com o padrao (eager), a
+            # demonstracao puxava testes de outros modelos (fato, int_focos_*) que nao existem
+            # no warehouse isolado.
             "--indirect-selection", "cautious",
             "--select", *selecao,
         ]

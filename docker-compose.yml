@@ -185,10 +185,23 @@ services:
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /opt/dagster/home/workspace.yaml
     ports:
       - "${DAGSTER_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/server_info')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
+  # O daemon sobe depois do webserver: os dois criam o SQLite do Dagster na primeira
+  # execucao, e a criacao simultanea deixa o alembic_version com dois heads (nenhum
+  # asset carrega).
   dagster_daemon:
     <<: *dagster
     command: dagster-daemon run -w /opt/dagster/home/workspace.yaml
+    depends_on:
+      db:
+        condition: service_healthy
+      dagster_webserver:
+        condition: service_healthy
 
 volumes:
   pgdata:
