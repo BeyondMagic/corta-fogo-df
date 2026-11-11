@@ -65,6 +65,7 @@ class Ambiente:
         comando = [
             "dbt", "build", "--project-dir", str(PROJETO_DBT),
             "--target-path", str(self.base / "target"), "--log-path", str(self.base / "logs"),
+            "--indirect-selection", "cautious",
             "--select", *selecao,
         ]
         saida = subprocess.run(comando, env=env, capture_output=True, text=True)

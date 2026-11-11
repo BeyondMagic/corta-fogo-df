@@ -14,7 +14,7 @@ Plataforma de engenharia de dados para cruzamento espacial e temporal de focos d
 
 A equipe é formada por sete integrantes, cada um responsável por uma frente de trabalho das entregas distribuídas ao longo do semestre.
 
-| Integrante | [Entrega 1](./entrega/01/README.md) | [Entrega 2](./entrega/02/README.md) | Entrega 3 | Entrega 4 |
+| Integrante | [Entrega 1](./entrega/01/README.md) | [Entrega 2](./entrega/02/README.md) | [Entrega 3](./entrega/03/README.md) | Entrega 4 |
 | :-------------------------------------------------------------------------------------------- | :------------------------------- | :---------------------------------- | :------------------------------------------------------------------------ | :-------: |
 | [Cláudio Henrique](https://github.com/BeyondMagic/corta-fogo-df/commits?author=claudiohsc)    | Infraestrutura                   | Infraestrutura e Lakehouse          | [Orquestração e Dagster](https://github.com/BeyondMagic/corta-fogo-df/issues/22)         |     -     |
 | [Elias F.](https://github.com/BeyondMagic/corta-fogo-df/commits?author=EliasOliver21)         | Caracterização e Métricas        | Semântica de Entrega e Benchmarks   | [Testes e Distribuição](https://github.com/BeyondMagic/corta-fogo-df/issues/21)          |     -     |
