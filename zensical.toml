@@ -34,6 +34,7 @@ nav = [
       { "2ª: Ingestão e Formato" = "adr/02-mecanismo-de-ingestao-e-formato-aberto.md" },
       { "3ª: Modelagem e Transformação" = "adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md" }
   ]},
+  { "Dicionário de Dados" = "dicionario_dados.md" },
   { "Glossário" = "glossario.md" }
   # { "Diretrizes Técnicas" = [
   #     { "Contexto do Projeto" = "ai/CONTEXT.md" },
