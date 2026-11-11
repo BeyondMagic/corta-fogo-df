@@ -10,43 +10,55 @@ icon: material/numeric-3-box
 
 <p class="apresentador"><em>Apresentação: Gabriel Souza</em></p>
 
-Na Entrega 3, os dados que chegaram ao lakehouse na E2 passam a ser modelados, testados e agendados. O modelo responde à pergunta de gestão da E1:
-
 > **Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em áreas de reserva legal, de preservação permanente ou a até 1 km de unidades de conservação entre 2015 e 2025?**
 
 Um imóvel é reincidente quando tem foco em uma dessas áreas em pelo menos 2 anos civis (UTC) distintos. Todos os satélites entram na contagem.
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 70, "curve": "basis", "padding": 14}}}%%
 flowchart LR
     subgraph fontes["Fontes"]
-        lk_f[("Delta: foco_calor")]
-        lk_i[("Delta: imovel_car")]
-        pg[("PostGIS: UC, APP e reserva legal")]
+        direction TB
+        lk_f[("Delta<br/>foco_calor")]
+        lk_i[("Delta<br/>imovel_car")]
+        pg[("PostGIS<br/>UC · APP · reserva legal")]
+        lk_f ~~~ lk_i ~~~ pg
     end
+
     subgraph staging["Staging (views)"]
-        stg_f["stg_focos_calor"]
-        stg_i["stg_imoveis_car"]
-        stg_t["stg_unidades_conservacao<br/>stg_areas_preservacao_permanente<br/>stg_reservas_legais"]
+        direction TB
+        stg_f[["stg_focos_calor"]]
+        stg_i[["stg_imoveis_car"]]
+        stg_t[["stg_unidades_conservacao<br/>stg_areas_preservacao_permanente<br/>stg_reservas_legais"]]
+        stg_f ~~~ stg_i ~~~ stg_t
     end
+
     subgraph inter["Intermediate (tabelas)"]
+        direction TB
         int_fi["int_focos_imoveis"]
         int_ap["int_focos_areas_protegidas"]
         int_ft["int_focos_territorio"]
+        int_fi ~~~ int_ap ~~~ int_ft
     end
-    snp["snp_imovel_car<br/>(snapshot SCD2)"]
+
     subgraph gold["Gold (tabelas)"]
+        direction TB
+        snp[("snp_imovel_car<br/>snapshot SCD2")]
         dim_t["dim_tempo"]
         dim_s["dim_satelite"]
         dim_terr["dim_territorio"]
         dim_car["dim_imovel_car"]
         fato["fato_foco_calor"]
-        mart["mart_reincidencia_imovel_ano"]
+        mart(["mart_reincidencia_imovel_ano"])
+        snp ~~~ dim_t ~~~ dim_s ~~~ dim_terr ~~~ dim_car ~~~ fato ~~~ mart
     end
-    dagster["Dagster: agenda, retry e backfill"]
+
+    dagster["Dagster<br/>agenda · retry · backfill"]
 
     lk_f --> stg_f
     lk_i --> stg_i
     pg --> stg_t
+
     stg_f --> int_fi
     stg_i --> int_fi
     stg_f --> int_ap
@@ -54,17 +66,41 @@ flowchart LR
     stg_f --> int_ft
     int_fi --> int_ft
     int_ap --> int_ft
+
     stg_i --> snp
     snp --> dim_car
     stg_f --> dim_s
     stg_t --> dim_terr
+
     int_ft --> fato
     dim_car --> mart
     int_fi --> mart
     int_ap --> mart
+
     dagster -.-> staging
     dagster -.-> inter
     dagster -.-> gold
+
+    classDef fonte fill:#FFF4E5,stroke:#B26A00,stroke-width:2px,color:#5C3A00;
+    classDef staging fill:#F1F3F5,stroke:#6C757D,stroke-width:2px,color:#2B3035;
+    classDef inter fill:#E7F0FA,stroke:#1E6BB8,stroke-width:2px,color:#10395E;
+    classDef gold fill:#FFF8D6,stroke:#A67C00,stroke-width:2px,color:#5A4300;
+    classDef snap fill:#EEE9FB,stroke:#5B3FA8,stroke-width:2px,color:#33246B;
+    classDef mart fill:#A67C00,stroke:#6B4E00,stroke-width:3px,color:#FFFFFF;
+    classDef orchestration fill:#E6F4F1,stroke:#0F766E,stroke-width:2px,stroke-dasharray:4 3,color:#0B4F4A;
+
+    class lk_f,lk_i,pg fonte;
+    class stg_f,stg_i,stg_t staging;
+    class int_fi,int_ap,int_ft inter;
+    class dim_t,dim_s,dim_terr,dim_car,fato gold;
+    class snp snap;
+    class mart mart;
+    class dagster orchestration;
+
+    style fontes fill:#FFFBF3,stroke:#D9A24A,stroke-width:2px;
+    style staging fill:#FAFBFC,stroke:#ADB5BD,stroke-width:2px;
+    style inter fill:#F5F9FD,stroke:#7FA9D4,stroke-width:2px;
+    style gold fill:#FFFDF0,stroke:#D4B24A,stroke-width:2px;
 ```
 
 <p style="text-align: center; font-size: 0.9em; color: #64748b;">Figura 1: Linhagem dos modelos dbt, das tabelas abertas da E2 ao mart de reincidência</p>
