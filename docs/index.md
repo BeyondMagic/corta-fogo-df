@@ -8,7 +8,7 @@ Plataforma de engenharia de dados para cruzamento espacial e temporal de focos d
 
 > Projeto desenvolvido para a disciplina [Sistemas de Bancos de Dados 2 (FCTE / UnB, Turma 03, Semestre 2026.2)](https://unb-bd2.github.io/PlanoEnsino/projeto/).
 >
-> Explore os dados e os cruzamentos territoriais no [Mapa Interativo do DF](mapa.md) com linha do tempo de 2015 a 2025 ou consulte as estruturas no [Dicionário de Dados](dicionario_dados.md).
+> Explore os dados e os cruzamentos territoriais no [Mapa Interativo do DF](mapa.md) com linha do tempo de 2015 a 2025, consulte as estruturas no [Dicionário de Dados](dicionario_dados.md) ou acompanhe o histórico de atividades no [Diário de Bordo](diario_de_bordo.md).
 
 ## Equipe
 
