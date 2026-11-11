@@ -171,10 +171,33 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
 4. **Delimitação real de UCs e amortecimento:** as 84 Unidades de Conservação do DF são exibidas com seus perímetros poligonais exatos (diferenciando Proteção Integral e Uso Sustentável). A camada da faixa de amortecimento de 1 km pode ser alternada de forma independente.
 5. **Polígonos cadastrais sob demanda:** clique sobre qualquer um dos 10 marcadores roxos de imóveis rurais críticos para projetar o polígono oficial cadastrado no SICAR, além de consultar o total de focos, anos com reincidência e sobreposições com APP e Reserva Legal.
 6. **Alternância para tela cheia:** utilize o botão "Tela Cheia" nos controles ou no canto superior esquerdo do mapa para expandir o painel e explorar a distribuição espacial dos focos com resolução ampliada.
+7. **Inspeção da pegada do sensor:** clique em qualquer ponto de foco para abrir o detalhamento com a dimensão nominal e área aproximada abrangida pelo pixel do satélite (ex: 375 m × 375 m / ~14,1 ha para VIIRS; 1.000 m × 1.000 m / ~100 ha para MODIS).
 
 ---
 
-## 6. Fontes e Rastreabilidade dos Dados
+## 6. Metodologia: Focos de Calor Orbitais vs. Cicatrizes de Queimada
+
+Uma dúvida técnica frequente em sensoriamento remoto aplicado a incêndios florestais é se o dado pontual do foco de calor delimita a área total queimada. A resposta técnica é **não**:
+
+!!! note "Por que focos de calor são representados como pontos e não polígonos?"
+    Os dados do BDQueimadas (INPE) registram **anomalias térmicas instantâneas** captadas por radiômetros orbitais no momento exato da passagem do satélite. O sensor não desenha o contorno do fogo; ele divide a superfície terrestre em uma grade de varredura regular (pixels).
+    
+    - **O que a coordenada (latitude e longitude) representa:** é o **centroide matemático** do pixel de varredura orbital onde uma temperatura significativamente superior à vizinhança foi identificada.
+    - **Sensibilidade subpixel:** uma linha de fogo ativa de apenas 30 metros de extensão com temperatura em torno de 800 °C é suficiente para aquecer a resposta espectral média de um pixel inteiro de 1 km × 1 km (100 hectares no satélite AQUA/MODIS), ativando a detecção.
+    - **Foco pontual vs. Cicatriz de queima:** a cicatriz (área contínua consumida pelo fogo) é um produto poligonal posterior (como o MapBiomas Fogo ou o produto MODIS MCD64A1), obtido por contraste de índices de vegetação (NBR, NDVI) antes e depois do evento. Na plataforma Corta-Fogo DF, o objetivo central é o monitoramento temporal de detecções e reincidência cadastral, motivo pelo qual a unidade básica de análise é o foco georreferenciado e sua pegada nominal de pixel.
+
+### Resolução Espacial e Pegada no Solo por Família de Sensores
+
+| Família de Sensores | Satélites Principais | Tipo de Órbita | Dimensão Nominal do Pixel | Área Abrangida no Solo | Proporção na Base do DF |
+| :--- | :--- | :--- | :--- | ---: | ---: |
+| **VIIRS (I-Band 375 m)** | Suomi-NPP, NOAA-20, NOAA-21 | Polar (Sol-Síncrona) | 375 m × 375 m | ~14,1 ha (~0,14 km²) | 73,0% (28.436 focos) |
+| **MODIS (1.000 m)** | AQUA_M-T (Referência), TERRA | Polar (Sol-Síncrona) | 1.000 m × 1.000 m | ~100,0 ha (~1,00 km²) | 10,6% (4.124 focos) |
+| **GOES (ABI 2.000 m)** | GOES-16, GOES-19 | Geoestacionária (~35.786 km) | 2.000 m × 2.000 m | ~400,0 ha (~4,00 km²) | 11,5% (4.483 focos) |
+| **AVHRR / Outros** | NOAA-18, NOAA-19, MetOp-B | Polar (Sol-Síncrona) | 1.100 m × 1.100 m | ~121,0 ha (~1,21 km²) | 4,9% (1.902 focos) |
+
+---
+
+## 7. Fontes e Rastreabilidade dos Dados
 
 | Camada | Fonte Pública Oficial | Período / Versão | Papel na Plataforma |
 | :--- | :--- | :--- | :--- |

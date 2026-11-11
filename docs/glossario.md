@@ -148,6 +148,31 @@ Banco de Dados de Queimadas mantido pelo Instituto Nacional de Pesquisas Espacia
 
 ---
 
+## 6. Sensoriamento Remoto e Detecção de Queimadas
+
+### Foco de Calor (Detecção Pontual Orbital)
+
+Registro instantâneo de uma anomalia térmica superficial captada por sensores radiométricos a bordo de satélites em bandas de infravermelho médio (aproximadamente 3,7 a 4 µm) e infravermelho termal[^20]. O algoritmo de detecção compara a radiância do pixel inspecionado com o sinal médio de sua vizinhança contextual.
+
+- **Uso no projeto:** a coordenada geográfica informada pelo INPE corresponde ao centroide matemático do pixel do satélite no momento da passagem orbital. Não representa o perímetro ou desenho contínuo das chamas.
+
+### Pegada do Sensor (Pixel Footprint)
+
+Área nominal de projeção no solo abrangida por um único pixel do detector orbital no ponto nadir (diretamente abaixo do satélite). Varia expressivamente conforme a arquitetura óptica e a altitude do sensor:
+
+- **VIIRS (Suomi-NPP / JPSS):** 375 m × 375 m (~14,1 hectares por pixel).
+- **MODIS (AQUA / TERRA):** 1.000 m × 1.000 m (~100 hectares por pixel).
+- **GOES (ABI):** 2.000 m × 2.000 m (~400 hectares por pixel).
+- **Uso no projeto:** exibida dinamicamente no popup e no tooltip de cada foco no mapa interativo, permitindo contextualizar a escala espacial da detecção.
+
+### Cicatriz de Queimada (Área Queimada Mapeada)
+
+Polígono contínuo resultante do mapeamento pós-fogo que delimita a superfície de vegetação efetivamente carbonizada ou danificada por incêndios em determinado intervalo de tempo. É apurada mediante o cálculo de índices espectrais de queima (como NBR, Normalized Burn Ratio) aplicados sobre imagens de média/alta resolução antes e após a queima (ex: produtos MapBiomas Fogo ou MODIS MCD64A1).
+
+- **Uso no projeto:** conceito complementar aos focos de calor. Enquanto o foco de calor sinaliza o momento do fogo com alta taxa de revisita diária, a cicatriz consolida a área final consumida. O projeto Corta-Fogo DF atua sobre a série de focos georreferenciados para avaliar a reincidência e a proximidade com áreas protegidas.
+
+---
+
 ## Referências
 
 [^1]: Open Geospatial Consortium (OGC). _OpenGIS Implementation Standard for Geographic information - Simple feature access - Part 1: Common architecture (OGC 06-103r4)_. Wayland: OGC, 2011.

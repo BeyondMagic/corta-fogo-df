@@ -32,6 +32,24 @@ def round_coords(obj, decimals=4):
     return obj
 
 
+def obter_tipo_sensor(nome_satelite):
+    """
+    Classifica a familia do sensor orbital com base no nome do satelite:
+    0: VIIRS (375 m / ~14,1 ha)
+    1: MODIS (1.000 m / ~100 ha)
+    2: GOES (2.000 m / ~400 ha)
+    3: AVHRR / Outros (1.100 m / ~121 ha)
+    """
+    sat = (nome_satelite or "").upper()
+    if "NPP" in sat or "NOAA-20" in sat or "NOAA-21" in sat or "375" in sat:
+        return 0
+    if "AQUA" in sat or "TERRA" in sat or "MODIS" in sat:
+        return 1
+    if "GOES" in sat or "MSG" in sat:
+        return 2
+    return 3
+
+
 def carregar_focos_e_estatisticas(csv_path):
     focos_ano = defaultdict(list)
     stats_ano = {}
@@ -54,8 +72,10 @@ def carregar_focos_e_estatisticas(csv_path):
             is_seca = 1 if 5 <= mes <= 9 else 0
             lat = round(float(row["latitude"]), 3)
             lon = round(float(row["longitude"]), 3)
+            sat = row.get("satelite", "")
+            tipo_sensor = obter_tipo_sensor(sat)
 
-            focos_ano[ano].append([lat, lon, is_ref, is_seca, mes])
+            focos_ano[ano].append([lat, lon, is_ref, is_seca, mes, tipo_sensor])
             s = stats_ano[ano]
             s["total"] += 1
             if is_seca:
@@ -311,9 +331,49 @@ def main():
     print("Processando 10 imoveis CAR reincidentes criticos...")
     imoveis = processar_imoveis_reincidentes(car_zip_path)
 
+    metadata_sensores = {
+        "0": {
+            "nome": "VIIRS (375 m)",
+            "sensor": "VIIRS I-Band",
+            "resolucao_m": 375,
+            "dimensao": "375 m × 375 m",
+            "area_ha": 14.1,
+            "orbita": "Polar (Suomi-NPP / NOAA-20 / NOAA-21)",
+            "descricao": "Sensor de alta resolução espacial com pixel nominal de 375 metros (~14,1 hectares no ponto nadir)."
+        },
+        "1": {
+            "nome": "MODIS (1.000 m)",
+            "sensor": "MODIS Térmico",
+            "resolucao_m": 1000,
+            "dimensao": "1.000 m × 1.000 m",
+            "area_ha": 100.0,
+            "orbita": "Polar (AQUA / TERRA)",
+            "descricao": "Sensor do satélite de referência padrão do INPE (AQUA_M-T) com pixel nominal de 1 km² (~100 hectares)."
+        },
+        "2": {
+            "nome": "GOES (2.000 m)",
+            "sensor": "ABI / Banda Térmica",
+            "resolucao_m": 2000,
+            "dimensao": "2.000 m × 2.000 m",
+            "area_ha": 400.0,
+            "orbita": "Geoestacionária (GOES-East)",
+            "descricao": "Sensor de alta taxa de repetição temporal (10-15 min) com pegada de pixel nominal de ~400 hectares."
+        },
+        "3": {
+            "nome": "AVHRR / Outros (1.100 m)",
+            "sensor": "AVHRR / Radiômetro de Varredura",
+            "resolucao_m": 1100,
+            "dimensao": "1.100 m × 1.100 m",
+            "area_ha": 121.0,
+            "orbita": "Polar (NOAA / MetOp)",
+            "descricao": "Sensores polares clássicos com resolução espacial nominal de 1,1 km (~121 hectares)."
+        }
+    }
+
     bundle = {
         "stats_ano": stats_ano,
         "focos_ano": focos_ano,
+        "metadata_sensores": metadata_sensores,
         "ucs_geojson": ucs_geojson,
         "buffers_geojson": buffers_geojson,
         "imoveis_reincidentes": imoveis,

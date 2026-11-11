@@ -356,12 +356,12 @@
       }
 
       pontos.forEach(pt => {
-        const [lat, lon, isRef, isSeca, mes] = pt;
+        const [lat, lon, isRef, isSeca, mes, sensorTipo] = pt;
         if (onlyRef && !isRef) return;
 
         // Estilo visual: cor mais vívida para satélite de referência e seca
         const cor = isRef ? '#dc2626' : (isSeca ? '#ea580c' : '#f59e0b');
-        const raio = isRef ? 4 : 2.5;
+        const raio = isRef ? 4.5 : (sensorTipo === 0 ? 2.5 : 3.5);
 
         const circle = L.circleMarker([lat, lon], {
           radius: raio,
@@ -372,10 +372,46 @@
           renderer: canvasRenderer
         });
 
+        const meta = (window.DADOS_MAPA_DF.metadata_sensores && window.DADOS_MAPA_DF.metadata_sensores[String(sensorTipo)]) || {
+          nome: isRef ? 'MODIS (1.000 m)' : 'Sensor Orbital',
+          dimensao: isRef ? '1.000 m × 1.000 m' : 'Variável',
+          area_ha: isRef ? 100.0 : 14.1,
+          orbita: isRef ? 'Polar (AQUA)' : 'Órbita Polar / Geoestacionária',
+          sensor: isRef ? 'MODIS Térmico' : 'Sensor Orbital'
+        };
+
+        const tipoBadge = isRef
+          ? '<span style="background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Satélite de Referência (AQUA_M-T)</span>'
+          : '<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Sensor Secundário</span>';
+
+        const estacaoBadge = isSeca
+          ? '<span style="background: #ffedd5; color: #9a3412; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Estiagem (Mai a Set)</span>'
+          : '<span style="background: #e0f2fe; color: #075985; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Período Chuvoso</span>';
+
+        const popupContent = `
+          <div style="font-family: inherit; font-size: 13px; line-height: 1.45; min-width: 250px;">
+            <strong style="color: #c2410c; font-size: 14px;">Detecção de Foco de Calor (${ano})</strong><br/>
+            <div style="margin: 4px 0 6px; display: flex; gap: 4px; flex-wrap: wrap;">${tipoBadge} ${estacaoBadge}</div>
+            <hr style="margin: 6px 0; border: none; border-top: 1px solid #e2e8f0;"/>
+            <b>Coordenadas do centroide:</b> ${lat.toFixed(4)}°, ${lon.toFixed(4)}°<br/>
+            <b>Mês do evento:</b> ${mes} (${ano})<br/>
+            <div style="margin-top: 6px; padding: 6px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;">
+              <b style="color: #0f172a;">Pegada Espacial do Sensor (${meta.nome}):</b><br/>
+              <b>Dimensão do pixel no solo:</b> ${meta.dimensao}<br/>
+              <b>Área nominal do pixel:</b> ~${meta.area_ha.toLocaleString('pt-BR')} ha (~${(meta.area_ha / 100).toFixed(2)} km²)<br/>
+              <b>Órbita:</b> ${meta.orbita}
+            </div>
+            <p style="margin: 6px 0 0; color: #64748b; font-size: 11px; line-height: 1.35;">
+              <em>Nota metodológica: o ponto indica o centroide do pixel orbital de ${meta.dimensao} onde foi registrada a anomalia térmica, e não a área contínua carbonizada pelas chamas (cicatriz).</em>
+            </p>
+          </div>
+        `;
+
         circle.bindTooltip(
-          `Foco em ${ano} (mês ${mes}) - ${isRef ? 'AQUA_M-T (Referência)' : 'Sensor Secundário'}`,
+          `Foco em ${ano} (mês ${mes}) - ${meta.nome} [~${meta.area_ha} ha]`,
           { sticky: true }
         );
+        circle.bindPopup(popupContent);
 
         focosLayer.addLayer(circle);
       });

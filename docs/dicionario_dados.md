@@ -65,11 +65,11 @@ Tabela fato atômica do modelo dimensional estrela. Não multiplica linhas por c
 | `data_evento_local` | `DATE` | Temporal / NOT NULL | Data civil convertida para o fuso local (`America/Sao_Paulo`). | Conversão temporal da passagem |
 | `ano` | `INTEGER` | Partição / NOT NULL | Ano civil UTC do evento (2015 a 2025). | `date_part('year', data_hora_evento)` |
 | `mes` | `INTEGER` | Partição / NOT NULL | Mês civil UTC do evento (1 a 12). | `date_part('month', data_hora_evento)` |
-| `latitude` | `DOUBLE` | Espacial / NOT NULL | Latitude geográfica expressa em graus decimais (WGS 84, EPSG:4326). | `stg_focos_calor.latitude` |
-| `longitude` | `DOUBLE` | Espacial / NOT NULL | Longitude geográfica expressa em graus decimais (WGS 84, EPSG:4326). | `stg_focos_calor.longitude` |
+| `latitude` | `DOUBLE` | Espacial / NOT NULL | Latitude geográfica expressa em graus decimais (WGS 84, EPSG:4326), correspondendo ao centroide do pixel do sensor orbital. | `stg_focos_calor.latitude` |
+| `longitude` | `DOUBLE` | Espacial / NOT NULL | Longitude geográfica expressa em graus decimais (WGS 84, EPSG:4326), correspondendo ao centroide do pixel do sensor orbital. | `stg_focos_calor.longitude` |
 | `x_31983` | `DOUBLE` | Métrica / NOT NULL | Coordenada plana Leste (Easting) projetada em metros (SIRGAS 2000 UTM 23S). | `stg_focos_calor.x_31983` |
 | `y_31983` | `DOUBLE` | Métrica / NOT NULL | Coordenada plana Norte (Northing) projetada em metros (SIRGAS 2000 UTM 23S). | `stg_focos_calor.y_31983` |
-| `geom` | `GEOMETRY` | Espacial / NOT NULL | Ponto geométrico bidimensional com SRID fixo em EPSG:31983. | `ST_Point(x_31983, y_31983)` |
+| `geom` | `GEOMETRY` | Espacial / NOT NULL | Ponto geométrico bidimensional com SRID fixo em EPSG:31983. Representa o centroide do pixel do satélite (pegada nominal de 375 m a 1.000 m no solo, e não o polígono contínuo da cicatriz de queima). | `ST_Point(x_31983, y_31983)` |
 | `origem_ingestao` | `VARCHAR(20)` | Linhagem / NOT NULL | Identificador do canal de extração de origem (sempre `lote`). | Constante de pipeline |
 | `operacao_cdc` | `VARCHAR(1)` | Linhagem / NOT NULL | Código de linhagem da operação (sempre `I` para inserção). | Constante de pipeline |
 | `qtd_imoveis` | `INTEGER` | Métrica / NOT NULL | Quantidade de imóveis rurais cadastrados no CAR cujo perímetro contém o foco. | Junção espacial com `stg_imoveis_car` |
@@ -206,10 +206,10 @@ Armazena a série temporal completa de focos de calor com tipagem estrita, coord
 | Coluna | Tipo Delta | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
 | :--- | :--- | :--- | :--- | :--- |
 | `id_foco` | `string` | PK lógica / NOT NULL | Hash SHA-256 de latitude, longitude, data/hora e satélite. Chave primária e critério de deduplicação idempotente. | Cálculo de ingestão em lote |
-| `latitude` | `double` | Espacial / NOT NULL | Latitude WGS 84 (-16.05 a -15.45 no quadrilátero do DF). | BDQueimadas CSV |
-| `longitude` | `double` | Espacial / NOT NULL | Longitude WGS 84 (-48.30 a -47.30 no quadrilátero do DF). | BDQueimadas CSV |
-| `x_31983` | `double` | Métrica / NOT NULL | Coordenada Leste projetada em metros (SIRGAS 2000 UTM 23S). | Reprojeção via `pyproj` |
-| `y_31983` | `double` | Métrica / NOT NULL | Coordenada Norte projetada em metros (SIRGAS 2000 UTM 23S). | Reprojeção via `pyproj` |
+| `latitude` | `double` | Espacial / NOT NULL | Latitude WGS 84 (-16.05 a -15.45 no quadrilátero do DF), referente ao centroide do pixel do sensor. | BDQueimadas CSV |
+| `longitude` | `double` | Espacial / NOT NULL | Longitude WGS 84 (-48.30 a -47.30 no quadrilátero do DF), referente ao centroide do pixel do sensor. | BDQueimadas CSV |
+| `x_31983` | `double` | Métrica / NOT NULL | Coordenada Leste do centroide do pixel projetada em metros (SIRGAS 2000 UTM 23S). | Reprojeção via `pyproj` |
+| `y_31983` | `double` | Métrica / NOT NULL | Coordenada Norte do centroide do pixel projetada em metros (SIRGAS 2000 UTM 23S). | Reprojeção via `pyproj` |
 | `data_hora_evento` | `timestamp` | Temporal / NOT NULL | Momento de passagem do sensor orbital em UTC. Base da partição física e da apuração de anos. | BDQueimadas CSV |
 | `data_hora_ingestao` | `timestamp` | Auditoria / NOT NULL | Momento de gravação do registro no arquivo Delta. Não é utilizado na partição para evitar regravação de dados históricos. | Carimbo de execução do job |
 | `satelite` | `string` | Atributo / NOT NULL | Identificador do satélite detector. | BDQueimadas CSV |
