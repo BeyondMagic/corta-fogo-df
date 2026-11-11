@@ -4,7 +4,7 @@ icon: material/map-legend
 
 # :material-map-legend: Mapa Interativo do Distrito Federal
 
-Painel geoespacial com linha do tempo de 11 anos (2015 a 2025) para exploração interativa de focos de calor, limites de Unidades de Conservação e imóveis rurais cadastrados no CAR com detecções recorrentes.
+Painel geoespacial com linha do tempo de 11 anos (2015 a 2025) para exploração interativa de focos de calor, limites territoriais das 84 Unidades de Conservação e imóveis rurais cadastrados no CAR com detecções recorrentes.
 
 ---
 
@@ -65,7 +65,7 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
     </div>
     <div class="cf-stat-card">
       <span class="cf-stat-label">Imóveis Reincidentes Monitorados</span>
-      <span class="cf-stat-val" id="cf-stats-imoveis">8 cadastros críticos</span>
+      <span class="cf-stat-val" id="cf-stats-imoveis">10 de 10 cadastros críticos</span>
     </div>
   </div>
 
@@ -106,11 +106,15 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
     </label>
     <label class="cf-toggle-label">
       <input type="checkbox" id="cf-check-ucs" checked />
-      UCs e faixa de 1 km
+      Polígonos de UCs (84 áreas)
+    </label>
+    <label class="cf-toggle-label">
+      <input type="checkbox" id="cf-check-buffer-1km" checked />
+      Faixa de 1 km (Amortecimento)
     </label>
     <label class="cf-toggle-label">
       <input type="checkbox" id="cf-check-imoveis" checked />
-      Imóveis rurais reincidentes (CAR)
+      Top 10 Imóveis CAR reincidentes
     </label>
     <label class="cf-toggle-label" style="margin-left: auto;">
       Mapa base:
@@ -136,13 +140,16 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
       <span class="cf-legend-dot" style="background: #f59e0b;"></span> Foco no período chuvoso
     </div>
     <div class="cf-legend-item">
-      <span class="cf-legend-dot" style="background: #166534;"></span> Unidade de Conservação (UC)
+      <span class="cf-legend-dot" style="background: #22c55e; border: 2px solid #15803d;"></span> UC Proteção Integral
     </div>
     <div class="cf-legend-item">
-      <span class="cf-legend-dot" style="background: #86efac; border: 1px dashed #15803d;"></span> Faixa de 1 km (Amortecimento)
+      <span class="cf-legend-dot" style="background: #a3e635; border: 1.5px solid #65a30d;"></span> UC Uso Sustentável
     </div>
     <div class="cf-legend-item">
-      <span class="cf-legend-dot" style="background: #a855f7; border: 1px solid #7c3aed;"></span> Imóvel CAR reincidente
+      <span class="cf-legend-dot" style="background: #86efac; border: 1.5px dashed #15803d;"></span> Faixa de 1 km (Amortecimento)
+    </div>
+    <div class="cf-legend-item">
+      <span class="cf-legend-dot" style="background: #a855f7; border: 2px solid #6b21a8;"></span> Imóvel CAR crítico (Polígono sob demanda)
     </div>
   </div>
 </div>
@@ -154,7 +161,8 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
 1. **Linha do tempo interativa:** utilize a barra deslizante para selecionar qualquer ano entre 2015 e 2025. A última posição ("Todos") plota os 38.945 focos acumulados de toda a série histórica.
 2. **Reprodução automática:** o botão "Reproduzir" avança os anos em sequência contínua a cada 1,2 segundo, permitindo visualizar a dinâmica espacial da seca no Distrito Federal.
 3. **Filtro de satélite de referência:** o INPE utiliza o sensor orbital `AQUA_M-T` como referência para comparações temporais homogêneas. Ao marcar "Apenas satélite de referência", o mapa remove os sensores secundários, isolando o subconjunto de 2.350 registros calibrados.
-4. **Detalhes das feições:** clique em qualquer ponto de foco, círculo de Unidade de Conservação ou marcador roxo de imóvel rural para abrir a caixa com atributos de área, bacia hidrográfica, histórico de anos com fogo e sobreposições com Reserva Legal ou APP.
+4. **Delimitação real de UCs e amortecimento:** as 84 Unidades de Conservação do DF são exibidas com seus perímetros poligonais exatos (diferenciando Proteção Integral e Uso Sustentável). A camada da faixa de amortecimento de 1 km pode ser alternada de forma independente.
+5. **Polígonos cadastrais sob demanda:** clique sobre qualquer um dos 10 marcadores roxos de imóveis rurais críticos para projetar o polígono oficial cadastrado no SICAR, além de consultar o total de focos, anos com reincidência e sobreposições com APP e Reserva Legal.
 
 ---
 
@@ -163,6 +171,6 @@ Utilize os controles abaixo para inspecionar os focos de calor em cada ano, apli
 | Camada | Fonte Pública Oficial | Período / Versão | Papel na Plataforma |
 | :--- | :--- | :--- | :--- |
 | **Focos de calor** | BDQueimadas (INPE) | 2015 a 2025 | Ingestão em lote diária/anual em Parquet particionado no Delta Lake |
-| **Imóveis rurais** | SICAR / Ministério da Agricultura | Cadastros do DF | Dimensão temporal com histórico preservado em SCD Tipo 2 |
-| **Unidades de Conservação** | IBRAM / SISDIA e ICMBio | Shapefiles oficiais | Polígonos de proteção integral e uso sustentável com buffer de 1.000 m |
-| **Áreas de Proteção (RL e APP)** | SICAR e Geoportal DF | Mapeamento territorial | Cruzamento espacial métrico (EPSG:31983) para apuração de reincidência |
+| **Imóveis rurais** | SICAR / Ministério da Agricultura | Cadastros do DF | Dimensão temporal com histórico preservado em SCD Tipo 2 e polígonos cadastrais |
+| **Unidades de Conservação** | IBRAM / SISDIA | 84 áreas oficiais | Polígonos reais de proteção integral, uso sustentável e faixa de amortecimento métrica de 1.000 m (EPSG:31983) |
+| **Áreas de Proteção (RL e APP)** | SICAR e Geoportal DF | Mapeamento territorial | Cruzamento espacial métrico para apuração de reincidência e priorização de fiscalização |

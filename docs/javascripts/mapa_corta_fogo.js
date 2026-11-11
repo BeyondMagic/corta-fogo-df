@@ -6,11 +6,13 @@
 (function () {
   let mapInstance = null;
   let focosLayer = null;
+  let bufferLayer = null;
   let ucsLayer = null;
   let imoveisLayer = null;
+  let activeImovelPolygon = null;
   let isPlaying = false;
   let playTimer = null;
-  let currentYear = 2024; // Padrão no ano de maior ocorrência
+  let currentYear = 2024; // Padrao no ano de maior ocorrencia
   let canvasRenderer = null;
   let osmLayer = null;
   let esriLayer = null;
@@ -23,6 +25,12 @@
         clearInterval(playTimer);
         playTimer = null;
         isPlaying = false;
+      }
+      if (activeImovelPolygon && mapInstance) {
+        try {
+          mapInstance.removeLayer(activeImovelPolygon);
+        } catch (e) {}
+        activeImovelPolygon = null;
       }
       if (mapInstance) {
         try {
@@ -49,6 +57,12 @@
       playTimer = null;
       isPlaying = false;
     }
+    if (activeImovelPolygon && mapInstance) {
+      try {
+        mapInstance.removeLayer(activeImovelPolygon);
+      } catch (e) {}
+      activeImovelPolygon = null;
+    }
     if (mapInstance) {
       try {
         mapInstance.remove();
@@ -64,7 +78,7 @@
       center: cfg.centro,
       zoom: cfg.zoom,
       minZoom: 9,
-      maxZoom: 15,
+      maxZoom: 16,
       zoomControl: true
     });
 
@@ -76,7 +90,7 @@
 
     canvasRenderer = L.canvas({ padding: 0.5 });
 
-    // Tiles base 100% abertos e sem exigencia de API Key
+    // Tiles base abertos sem exigencia de chave de API
     osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19
@@ -97,16 +111,21 @@
 
     L.control.layers(baseMaps, null, { position: 'topright' }).addTo(mapInstance);
 
-    // Camadas de grupos
+    // Ordem de camadas no mapa (do fundo para o topo):
+    // 1. Faixa de amortecimento (1.000 m)
+    // 2. Polígonos de UCs (84 áreas oficiais)
+    // 3. Marcadores de imóveis CAR
+    // 4. Focos de calor (canvas)
+    bufferLayer = L.layerGroup().addTo(mapInstance);
     ucsLayer = L.layerGroup().addTo(mapInstance);
     imoveisLayer = L.layerGroup().addTo(mapInstance);
     focosLayer = L.layerGroup().addTo(mapInstance);
 
-    // Desenha as UCs e os imóveis uma vez
+    // Renderiza camadas espaciais
     desenharUcs();
     desenharImoveis();
 
-    // Configura eventos da interface (slider, play, checkboxes)
+    // Configura eventos da interface (slider, reproducao, filtros)
     setupControls();
 
     // Renderiza o ano inicial
@@ -114,48 +133,95 @@
   }
 
   function desenharUcs() {
+    bufferLayer.clearLayers();
     ucsLayer.clearLayers();
-    const ucs = window.DADOS_MAPA_DF.ucs || [];
 
-    ucs.forEach(uc => {
-      // Zona de amortecimento (1.000 m além do raio da UC)
-      const buffer = L.circle([uc.lat, uc.lon], {
-        radius: uc.raio_m + 1000,
-        color: '#15803d',
-        dashArray: '4, 4',
-        weight: 1.5,
-        fillColor: '#86efac',
-        fillOpacity: 0.12,
-        renderer: canvasRenderer
+    const buffersGeo = window.DADOS_MAPA_DF.buffers_geojson;
+    const ucsGeo = window.DADOS_MAPA_DF.ucs_geojson;
+
+    // 1. Faixas de amortecimento de 1.000 m
+    if (buffersGeo) {
+      const bufLayer = L.geoJSON(buffersGeo, {
+        style: {
+          color: '#15803d',
+          dashArray: '4, 4',
+          weight: 1.2,
+          fillColor: '#86efac',
+          fillOpacity: 0.10
+        },
+        onEachFeature: function (feature, layer) {
+          const nome = feature.properties ? feature.properties.nome : 'UC';
+          layer.bindTooltip('Faixa de amortecimento (1 km): ' + nome, { sticky: true });
+        }
       });
+      bufferLayer.addLayer(bufLayer);
+    }
 
-      // Limite estimado da Unidade de Conservação
-      const core = L.circle([uc.lat, uc.lon], {
-        radius: uc.raio_m,
-        color: '#166534',
-        weight: 2,
-        fillColor: '#22c55e',
-        fillOpacity: 0.25,
-        renderer: canvasRenderer
+    // 2. Polígonos reais das 84 UCs oficiais do DF
+    if (ucsGeo) {
+      const ucLayer = L.geoJSON(ucsGeo, {
+        style: function (feature) {
+          const cat = (feature.properties && feature.properties.uc_conserv) || '';
+          if (cat.indexOf('Proteção Integral') !== -1) {
+            return {
+              color: '#15803d',
+              weight: 2,
+              fillColor: '#22c55e',
+              fillOpacity: 0.30
+            };
+          }
+          if (cat.indexOf('Uso Sustentável') !== -1) {
+            return {
+              color: '#65a30d',
+              weight: 1.5,
+              fillColor: '#a3e635',
+              fillOpacity: 0.20
+            };
+          }
+          return {
+            color: '#0d9488',
+            weight: 1.5,
+            fillColor: '#2dd4bf',
+            fillOpacity: 0.20
+          };
+        },
+        onEachFeature: function (feature, layer) {
+          const p = feature.properties || {};
+          const cat = p.uc_conserv || 'Espaço Protegido';
+
+          let badgeStyle = 'background: #ccfbf1; color: #115e59;';
+          let badgeLabel = 'Espaço Protegido';
+          if (cat.indexOf('Proteção Integral') !== -1) {
+            badgeStyle = 'background: #dcfce7; color: #166534;';
+            badgeLabel = 'Proteção Integral';
+          } else if (cat.indexOf('Uso Sustentável') !== -1) {
+            badgeStyle = 'background: #fef9c3; color: #854d0e;';
+            badgeLabel = 'Uso Sustentável';
+          }
+
+          const badgeHtml = '<span style="' + badgeStyle + ' padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">' + badgeLabel + '</span>';
+          const areaFormatada = Number(p.area_ha || 0).toLocaleString('pt-BR');
+
+          const popupContent = `
+            <div style="font-family: inherit; font-size: 13px; line-height: 1.45; min-width: 220px;">
+              <strong style="color: #166534; font-size: 14px;">${p.nome || 'Unidade de Conservação'}</strong><br/>
+              <div style="margin: 4px 0 6px;">${badgeHtml}</div>
+              <hr style="margin: 6px 0; border: none; border-top: 1px solid #e2e8f0;"/>
+              <b>Categoria:</b> ${p.uc_conserv || 'N/D'}<br/>
+              <b>Gestão:</b> ${p.gestao || 'Distrital (IBRAM)'}<br/>
+              <b>Área oficial:</b> ${areaFormatada} ha<br/>
+              <b>Ano de criação:</b> ${p.ano_criaca || 'N/D'}<br/>
+              <b>Faixa de amortecimento:</b> 1.000 m (critério E1/E2/E3)
+            </div>
+          `;
+
+          layer.bindPopup(popupContent);
+          const tooltipTexto = p.sigla ? `${p.sigla} (${p.nome})` : p.nome;
+          layer.bindTooltip(tooltipTexto, { sticky: true });
+        }
       });
-
-      const popupContent = `
-        <div style="font-family: inherit; font-size: 13px; line-height: 1.4;">
-          <strong style="color: #166534; font-size: 14px;">${uc.nome}</strong><br/>
-          <span style="font-size: 11px; color: #64748b;">${uc.tipo}</span>
-          <hr style="margin: 6px 0; border: none; border-top: 1px solid #e2e8f0;"/>
-          <b>Área aproximada:</b> ${uc.area_ha.toLocaleString('pt-BR')} ha<br/>
-          <b>Faixa de amortecimento:</b> 1.000 m (critério E1/E2/E3)<br/>
-          <p style="margin: 6px 0 0; color: #334155;">${uc.descricao}</p>
-        </div>
-      `;
-
-      core.bindPopup(popupContent);
-      buffer.bindTooltip(`Faixa de 1 km: ${uc.nome}`, { sticky: true });
-
-      ucsLayer.addLayer(buffer);
-      ucsLayer.addLayer(core);
-    });
+      ucsLayer.addLayer(ucLayer);
+    }
   }
 
   function desenharImoveis() {
@@ -163,31 +229,41 @@
     const imoveis = window.DADOS_MAPA_DF.imoveis_reincidentes || [];
 
     imoveis.forEach(imovel => {
-      // Marcador com ícone de polígono/propriedade
+      // Marcador pontual com ícone destacado de cadastro fundiário
       const marker = L.circleMarker([imovel.lat, imovel.lon], {
         radius: 8,
-        color: '#7c3aed',
+        color: '#6b21a8',
         weight: 2,
         fillColor: '#a855f7',
-        fillOpacity: 0.85,
+        fillOpacity: 0.90,
         renderer: canvasRenderer
       });
 
       const anosStr = imovel.anos.join(', ');
-      const rlBadge = imovel.atinge_rl ? '<span style="background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Reserva Legal</span>' : '';
-      const appBadge = imovel.atinge_app ? '<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">APP</span>' : '';
-      const ucBadge = imovel.atinge_uc1km ? '<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Até 1 km de UC</span>' : '';
+      const rlBadge = imovel.atinge_rl
+        ? '<span style="background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Reserva Legal</span>'
+        : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Sem RL</span>';
+
+      const appBadge = imovel.atinge_app
+        ? '<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">APP</span>'
+        : '';
+
+      const ucBadge = imovel.atinge_uc1km
+        ? '<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Até 1 km de UC</span>'
+        : '';
+
+      const sitBadge = '<span style="background: #ede9fe; color: #5b21b6; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px;">Situação: ' + imovel.situacao + '</span>';
 
       const popupContent = `
-        <div style="font-family: inherit; font-size: 13px; line-height: 1.4;">
-          <strong style="color: #6b21a8; font-size: 14px;">Imóvel Rural Reincidente (CAR)</strong><br/>
-          <code style="font-size: 11px; background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">${imovel.cod_imovel}</code>
+        <div style="font-family: inherit; font-size: 13px; line-height: 1.45; min-width: 250px;">
+          <strong style="color: #6b21a8; font-size: 14px;">Imóvel CAR Reincidente Crítico</strong><br/>
+          <code style="font-size: 10.5px; background: #f1f5f9; padding: 2px 4px; border-radius: 3px; word-break: break-all;">${imovel.cod_imovel}</code>
+          <div style="margin: 6px 0 4px;">${sitBadge}</div>
           <hr style="margin: 6px 0; border: none; border-top: 1px solid #e2e8f0;"/>
-          <b>Região:</b> ${imovel.ra}<br/>
+          <b>Total de focos no imóvel:</b> <span style="color: #b91c1c; font-weight: bold;">${imovel.focos_total.toLocaleString('pt-BR')}</span><br/>
           <b>Área cadastrada:</b> ${imovel.area_ha.toLocaleString('pt-BR')} ha<br/>
-          <b>Total de focos no imóvel:</b> ${imovel.focos_total}<br/>
           <b>Anos com reincidência (${imovel.anos.length}):</b> ${anosStr}<br/>
-          <b>Sobreposições críticas:</b><br/>
+          <b>Sobreposições críticas:</b>
           <div style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
             ${rlBadge} ${appBadge} ${ucBadge}
           </div>
@@ -196,7 +272,34 @@
       `;
 
       marker.bindPopup(popupContent);
-      marker.bindTooltip(`CAR: ${imovel.cod_imovel.substring(0, 16)}... (${imovel.ra})`, { sticky: true });
+      marker.bindTooltip(`CAR: ${imovel.cod_imovel.substring(0, 18)}... (${imovel.focos_total} focos)`, { sticky: true });
+
+      // Ao abrir o popup, desenha o polígono real cadastral do imóvel no mapa
+      marker.on('popupopen', function () {
+        if (activeImovelPolygon) {
+          mapInstance.removeLayer(activeImovelPolygon);
+          activeImovelPolygon = null;
+        }
+        if (imovel.geometry) {
+          activeImovelPolygon = L.geoJSON(imovel.geometry, {
+            style: {
+              color: '#7c3aed',
+              weight: 2.5,
+              fillColor: '#c084fc',
+              fillOpacity: 0.28
+            }
+          }).addTo(mapInstance);
+        }
+      });
+
+      // Ao fechar o popup, remove o polígono cadastral para manter o mapa leve
+      marker.on('popupclose', function () {
+        if (activeImovelPolygon) {
+          mapInstance.removeLayer(activeImovelPolygon);
+          activeImovelPolygon = null;
+        }
+      });
+
       imoveisLayer.addLayer(marker);
     });
   }
@@ -212,7 +315,7 @@
     const badgeEl = document.getElementById('cf-ano-badge');
 
     const isAll = (selectedYear === 2026);
-    const labelTexto = isAll ? '2015–2025 (Todos)' : String(selectedYear);
+    const labelTexto = isAll ? '2015 a 2025 (Todos)' : String(selectedYear);
     if (badgeEl) badgeEl.textContent = labelTexto;
 
     const onlyRefCheckbox = document.getElementById('cf-check-only-ref');
@@ -270,7 +373,6 @@
       refEl.textContent = `${pctRef}% (${totalRef.toLocaleString('pt-BR')})`;
     }
     if (imoveisEl) {
-      // Conta quantos imóveis da amostra tiveram focos neste ano
       const imoveis = window.DADOS_MAPA_DF.imoveis_reincidentes || [];
       const ativos = isAll
         ? imoveis.length
@@ -284,6 +386,7 @@
     const playBtn = document.getElementById('cf-play-btn');
     const onlyRefCheckbox = document.getElementById('cf-check-only-ref');
     const checkUcs = document.getElementById('cf-check-ucs');
+    const checkBuffer = document.getElementById('cf-check-buffer-1km');
     const checkImoveis = document.getElementById('cf-check-imoveis');
     const checkFocos = document.getElementById('cf-check-focos');
 
@@ -312,9 +415,19 @@
       });
     }
 
+    if (checkBuffer) {
+      checkBuffer.addEventListener('change', function () {
+        this.checked ? mapInstance.addLayer(bufferLayer) : mapInstance.removeLayer(bufferLayer);
+      });
+    }
+
     if (checkImoveis) {
       checkImoveis.addEventListener('change', function () {
         this.checked ? mapInstance.addLayer(imoveisLayer) : mapInstance.removeLayer(imoveisLayer);
+        if (!this.checked && activeImovelPolygon) {
+          mapInstance.removeLayer(activeImovelPolygon);
+          activeImovelPolygon = null;
+        }
       });
     }
 

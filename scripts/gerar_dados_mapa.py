@@ -1,19 +1,38 @@
 #!/usr/bin/env python3
 """
 Gera docs/assets/dados_mapa_df.js com a serie historica completa
-dos focos de calor do DF (2015-2025), estatisticas anuais e camadas de UCs e CAR
+dos focos de calor do DF (2015-2025), estatisticas anuais, poligonos reais
+das 84 Unidades de Conservacao (SISDIA/IBRAM), faixas de amortecimento de 1.000 m
+e geometrias dos 10 imoveis rurais reincidentes com mais focos (CAR)
 para o componente Leaflet da Entrega 3.
 """
 
 import csv
 import json
 import os
+import zipfile
 from collections import defaultdict
 
-def main():
-    csv_path = "data/processed/focos_df_2015_2025.csv"
-    output_js = "docs/assets/dados_mapa_df.js"
+import numpy as np
+import pyproj
+import shapefile
+import shapely
+from shapely.geometry import mapping, shape
+from shapely.validation import make_valid
 
+
+def round_coords(obj, decimals=4):
+    """Arredonda coordenadas geograficas para reduzir tamanho do JSON."""
+    if isinstance(obj, float):
+        return round(obj, decimals)
+    if isinstance(obj, (list, tuple)):
+        return [round_coords(x, decimals) for x in obj]
+    if isinstance(obj, dict):
+        return {k: round_coords(v, decimals) for k, v in obj.items()}
+    return obj
+
+
+def carregar_focos_e_estatisticas(csv_path):
     focos_ano = defaultdict(list)
     stats_ano = {}
 
@@ -24,7 +43,6 @@ def main():
             "referencia": 0,
             "pct_seca": 0.0,
             "pct_referencia": 0.0,
-            "imoveis_atingidos_est": 0
         }
 
     with open(csv_path, "r", encoding="utf-8") as f:
@@ -50,217 +68,260 @@ def main():
             s["pct_seca"] = round((s["seca"] / s["total"]) * 100, 1)
             s["pct_referencia"] = round((s["referencia"] / s["total"]) * 100, 1)
 
-    # Unidades de Conservacao e areas protegidas do DF com centróide, tipo e raio aproximado de amortecimento (1 km)
-    ucs = [
-        {
-            "id": "uc_pnb",
-            "nome": "Parque Nacional de Brasília (Água Mineral)",
-            "lat": -15.685,
-            "lon": -47.980,
-            "raio_m": 6000,
-            "tipo": "Proteção Integral (Federal / ICMBio)",
-            "area_ha": 42389,
-            "descricao": "Principal reserva de Cerrado contígua da capital federal, abrangendo mananciais de abastecimento e fauna ameaçada."
-        },
-        {
-            "id": "uc_esec_ae",
-            "nome": "Estação Ecológica de Águas Emendadas",
-            "lat": -15.545,
-            "lon": -47.605,
-            "raio_m": 4800,
-            "tipo": "Proteção Integral (Distrital / IBRAM)",
-            "area_ha": 10500,
-            "descricao": "Fenômeno hidrográfico singular de dispersão de águas para as bacias Platina e Tocantins/Araguaia em Planaltina."
-        },
-        {
-            "id": "uc_jbb",
-            "nome": "Estação Ecológica do Jardim Botânico de Brasília",
-            "lat": -15.882,
-            "lon": -47.835,
-            "raio_m": 3000,
-            "tipo": "Proteção Integral (Distrital / IBRAM)",
-            "area_ha": 4500,
-            "descricao": "Área de preservação estrita do bioma Cerrado sensu stricto na zona sul do Distrito Federal."
-        },
-        {
-            "id": "uc_fal",
-            "nome": "Fazenda Água Limpa (FAL / UnB)",
-            "lat": -15.948,
-            "lon": -47.932,
-            "raio_m": 2800,
-            "tipo": "Área Experimental e Protegida (Universidade de Brasília)",
-            "area_ha": 4300,
-            "descricao": "Estação experimental de ensino e pesquisa florestal e agronômica da UnB exposta à pressão de fogo no Gama."
-        },
-        {
-            "id": "uc_apa_descoberto",
-            "nome": "APA da Bacia do Rio Descoberto",
-            "lat": -15.750,
-            "lon": -48.180,
-            "raio_m": 5500,
-            "tipo": "Uso Sustentável (Distrital e Federal)",
-            "area_ha": 39000,
-            "descricao": "Bacia produtora responsável por parcela expressiva do abastecimento de água potável da população do DF."
-        },
-        {
-            "id": "uc_apa_sao_bartolomeu",
-            "nome": "APA do Rio São Bartolomeu",
-            "lat": -15.780,
-            "lon": -47.650,
-            "raio_m": 6000,
-            "tipo": "Uso Sustentável (Distrital)",
-            "area_ha": 82000,
-            "descricao": "Corredor ecológico leste do DF cobrindo expressivas áreas de lavoura e pastagem em Planaltina e Paranoá."
-        },
-        {
-            "id": "uc_apa_gama_cabeca",
-            "nome": "APA Gama e Cabeça de Veado",
-            "lat": -15.920,
-            "lon": -47.880,
-            "raio_m": 4200,
-            "tipo": "Uso Sustentável (Distrital)",
-            "area_ha": 25000,
-            "descricao": "Protege as bacias do ribeirão Gama e córrego Cabeça de Veado, na transição entre chácaras e conservação."
-        },
-        {
-            "id": "uc_rebio_guara",
-            "nome": "Reserva Biológica do Guará",
-            "lat": -15.820,
-            "lon": -47.965,
-            "raio_m": 1200,
-            "tipo": "Proteção Integral (Distrital / IBRAM)",
-            "area_ha": 400,
-            "descricao": "Fragmento ecológico intraurbano de campo úmido e mata de galeria no Guará."
-        }
-    ]
+    return focos_ano, stats_ano
 
-    # Amostra de imoveis rurais reincidentes georreferenciados (respondendo a pergunta de gestao)
-    # cruzando focos em RL, APP e faixa de 1 km de UC ao longo da serie historica
-    imoveis = [
-        {
-            "cod_imovel": "DF-5300108-8C37BA4908EC4F878B3F2799FA87F305",
-            "ra": "Planaltina (Leste)",
-            "lat": -15.562,
-            "lon": -47.625,
-            "area_ha": 345.2,
-            "anos": [2016, 2017, 2019, 2021, 2022, 2024],
-            "focos_total": 48,
-            "atinge_rl": True,
-            "atinge_app": True,
-            "atinge_uc1km": True,
-            "situacao": "Ativo / Retificado",
-            "detalhe": "Imóvel rural de grande porte na bacia do Pipiripau com reincidência de fogo em 6 anos distintos em área de Reserva Legal."
+
+def processar_unidades_conservacao(geojson_path):
+    """
+    Processa as 84 UCs oficiais do SISDIA/IBRAM:
+    - Projeta para EPSG:31983 (metrico)
+    - Simplifica geometria poligonal da UC (tolerancia 15 m)
+    - Gera poligono exato de amortecimento de 1.000 m (buffer metrico simplificado a 25 m)
+    - Reprojeta ambos para EPSG:4326 com coordenadas arredondadas
+    """
+    trans_to_m = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:31983", always_xy=True)
+    trans_to_geo = pyproj.Transformer.from_crs("EPSG:31983", "EPSG:4326", always_xy=True)
+
+    with open(geojson_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    ucs_features = []
+    buffers_features = []
+
+    for feat in data["features"]:
+        props = feat["properties"]
+        geom_geo = shape(feat["geometry"])
+        if not geom_geo.is_valid:
+            geom_geo = make_valid(geom_geo)
+
+        # Projecao metrica para calculo espacial acurado
+        geom_m = shapely.transform(geom_geo, lambda c: np.column_stack(trans_to_m.transform(c[:, 0], c[:, 1])))
+        geom_m_sim = geom_m.simplify(15.0, preserve_topology=True)
+
+        # Faixa de amortecimento oficial de 1.000 m
+        buf_m = geom_m_sim.buffer(1000.0)
+        buf_m_sim = buf_m.simplify(25.0, preserve_topology=True)
+
+        # Reprojecao de volta para WGS84
+        geom_simp_geo = shapely.transform(geom_m_sim, lambda c: np.column_stack(trans_to_geo.transform(c[:, 0], c[:, 1])))
+        buf_simp_geo = shapely.transform(buf_m_sim, lambda c: np.column_stack(trans_to_geo.transform(c[:, 0], c[:, 1])))
+
+        uc_id = props.get("id") or props.get("objectid")
+        nome = props.get("nome", "Unidade de Conservacao")
+        sigla = props.get("sigla", "")
+        uc_conserv = props.get("uc_conserv", "Espaco Protegido")
+        area_ha = round(float(props.get("area_ha", 0)), 1)
+        ano_criaca = props.get("ano_criaca", "")
+        gestao = props.get("gestao", "Distrital (IBRAM)")
+
+        ucs_features.append({
+            "type": "Feature",
+            "properties": {
+                "id": uc_id,
+                "nome": nome,
+                "sigla": sigla,
+                "uc_conserv": uc_conserv,
+                "area_ha": area_ha,
+                "ano_criaca": ano_criaca,
+                "gestao": gestao,
+            },
+            "geometry": round_coords(mapping(geom_simp_geo), 4)
+        })
+
+        buffers_features.append({
+            "type": "Feature",
+            "properties": {
+                "id": uc_id,
+                "nome": nome,
+            },
+            "geometry": round_coords(mapping(buf_simp_geo), 4)
+        })
+
+    ucs_geojson = {"type": "FeatureCollection", "features": ucs_features}
+    buffers_geojson = {"type": "FeatureCollection", "features": buffers_features}
+
+    return ucs_geojson, buffers_geojson
+
+
+def processar_imoveis_reincidentes(zip_path):
+    """
+    Processa os 10 imoveis com maior volume de focos reincidentes
+    documentados na secao 12 da Entrega 3, extraindo seus poligonos reais do CAR.
+    """
+    target_info = {
+        "DF-5300108-AB840D7B499B43E69C3D999165FF2475": {
+            "situacao": "Cancelado (CA)",
+            "area_ha": 94379.0,
+            "anos": list(range(2015, 2026)),
+            "focos": 3597,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Imóvel cancelado de grande extensão territorial com 3.597 focos registrados em 11 anos contínuos, com sobreposição a APP e faixa de UC."
         },
-        {
-            "cod_imovel": "DF-5300108-1B903E5C77A14488A01A093D89CE813A",
-            "ra": "Brazlândia (Gradio)",
-            "lat": -15.712,
-            "lon": -48.165,
-            "area_ha": 182.7,
-            "anos": [2015, 2018, 2020, 2021, 2024],
-            "focos_total": 31,
-            "atinge_rl": True,
-            "atinge_app": True,
-            "atinge_uc1km": True,
-            "situacao": "Ativo",
-            "detalhe": "Propriedade limítrofe à APA do Descoberto com registros repetidos no raio de amortecimento de 1 km."
+        "DF-5300108-1274A9532343473DB7413440C0ABF8AD": {
+            "situacao": "Cancelado (CA)",
+            "area_ha": 103414.5,
+            "anos": list(range(2015, 2026)),
+            "focos": 3077,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Cadastro cancelado com 3.077 focos de calor distribuídos ao longo de toda a série histórica em áreas de preservação permanente."
         },
-        {
-            "cod_imovel": "DF-5300108-D4F3821098BA417CA911D058A83BC47F",
-            "ra": "Paranoá (PAD-DF)",
-            "lat": -15.820,
-            "lon": -47.580,
-            "area_ha": 520.4,
-            "anos": [2017, 2019, 2021, 2022, 2024, 2025],
-            "focos_total": 54,
-            "atinge_rl": True,
-            "atinge_app": False,
-            "atinge_uc1km": True,
-            "situacao": "Ativo",
-            "detalhe": "Grande área agrícola no PAD-DF com focos reincidentes em Reserva Legal durante a queima pós-colheita."
+        "DF-5300108-B46B13EE13B14D348E3124DD0F77D8B1": {
+            "situacao": "Suspenso (SU)",
+            "area_ha": 63232.2,
+            "anos": list(range(2015, 2026)),
+            "focos": 2623,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Cadastro suspenso com 2.623 focos detectados em 11 anos, incidindo sobre APP e amortecimento de Unidade de Conservação."
         },
-        {
-            "cod_imovel": "DF-5300108-9901CBA74112458FA3008E125DCA8901",
-            "ra": "São Sebastião (Bela Vista)",
-            "lat": -15.910,
-            "lon": -47.740,
-            "area_ha": 210.0,
-            "anos": [2016, 2018, 2021, 2022, 2024],
-            "focos_total": 27,
-            "atinge_rl": True,
-            "atinge_app": True,
-            "atinge_uc1km": False,
-            "situacao": "Ativo",
-            "detalhe": "Localizado na bacia do rio São Bartolomeu, com focos recorrentes atingindo vegetação de APP de nascente."
+        "DF-5300108-0AA80F34AD524112AF32834A78277A32": {
+            "situacao": "Pendente (PE)",
+            "area_ha": 16398.0,
+            "anos": list(range(2015, 2026)),
+            "focos": 1370,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Imóvel com análise pendente contendo 1.370 focos em 11 anos consecutivos, com presença de APP e proximidade com UC."
         },
-        {
-            "cod_imovel": "DF-5300108-44AC89104A1237BC90184DA76C321890",
-            "ra": "Gama (Borda FAL/UnB)",
-            "lat": -15.965,
-            "lon": -47.915,
-            "area_ha": 145.8,
-            "anos": [2017, 2019, 2020, 2021, 2023, 2024],
-            "focos_total": 39,
-            "atinge_rl": True,
-            "atinge_app": True,
-            "atinge_uc1km": True,
-            "situacao": "Ativo",
-            "detalhe": "Chácaras no limite da Fazenda Água Limpa (UnB) com histórico de queimadas que saltam aceiros em direção à reserva."
+        "DF-5300108-BB7A677A0ACB4496B63D413536F8DE0E": {
+            "situacao": "Cancelado (CA)",
+            "area_ha": 38793.5,
+            "anos": list(range(2015, 2026)),
+            "focos": 1332,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Propriedade cancelada com 1.332 registros de queimadas entre 2015 e 2025 incidindo em faixas de proteção."
         },
-        {
-            "cod_imovel": "DF-5300108-E501BC8841A041289C338A9B2301A87D",
-            "ra": "Sobradinho (Fercal)",
-            "lat": -15.630,
-            "lon": -47.810,
-            "area_ha": 88.5,
-            "anos": [2016, 2017, 2021, 2024],
-            "focos_total": 19,
-            "atinge_rl": False,
-            "atinge_app": True,
-            "atinge_uc1km": True,
-            "situacao": "Ativo / Retificado",
-            "detalhe": "Área de relevo movimentado com sobreposição a APP de encosta e proximidade com a APA de Cafuringa."
+        "DF-5300108-981FD2BCDD10433693BFCD3A6D69DD2E": {
+            "situacao": "Pendente (PE)",
+            "area_ha": 8441.2,
+            "anos": list(range(2015, 2026)),
+            "focos": 1010,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Cadastro pendente com 1.010 focos em 11 anos contínuos, com sobreposição a APP e faixa de 1 km de amortecimento."
         },
-        {
-            "cod_imovel": "DF-5300108-5431809ABCDE4189A765012389BC7612",
-            "ra": "Planaltina (Extremo Norte)",
-            "lat": -15.510,
-            "lon": -47.530,
-            "area_ha": 412.0,
-            "anos": [2015, 2017, 2019, 2021, 2022, 2024, 2025],
-            "focos_total": 62,
-            "atinge_rl": True,
-            "atinge_app": True,
-            "atinge_uc1km": False,
-            "situacao": "Ativo",
-            "detalhe": "Extremo norte do DF na divisa com Formosa-GO; focos recorrentes em áreas de Cerrado preservado em 7 anos."
+        "DF-5300108-1A34898F66584106B176A816F4FDCD5E": {
+            "situacao": "Pendente (PE)",
+            "area_ha": 11582.8,
+            "anos": list(range(2015, 2026)),
+            "focos": 755,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Imóvel rural pendente com 755 focos de calor confirmados ao longo de 11 anos na zona leste do DF."
         },
-        {
-            "cod_imovel": "DF-5300108-7712398401BA4987A1230985BCDE4123",
-            "ra": "Brazlândia (Oeste)",
-            "lat": -15.660,
-            "lon": -48.210,
-            "area_ha": 275.4,
-            "anos": [2018, 2020, 2021, 2022, 2024],
-            "focos_total": 35,
-            "atinge_rl": True,
-            "atinge_app": False,
-            "atinge_uc1km": True,
-            "situacao": "Ativo",
-            "detalhe": "Borda da Bacia do Descoberto com detecções em 5 anos distintos afetando zona de amortecimento de UC."
+        "DF-5300108-DCFF71953F5F40FF84B8A1D477E3E733": {
+            "situacao": "Suspenso (SU)",
+            "area_ha": 35219.0,
+            "anos": list(range(2015, 2026)),
+            "focos": 545,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Área cadastral suspensa com 545 detecções em 11 anos em área limítrofe a Unidade de Conservação distrital."
+        },
+        "DF-5300108-6B90D19CDB024E799BD7D49DA7B4AFE8": {
+            "situacao": "Ativo (AT)",
+            "area_ha": 2893.7,
+            "anos": [2016, 2017, 2020, 2024],
+            "focos": 502,
+            "rl": False,
+            "app": True,
+            "uc": True,
+            "detalhe": "Único imóvel com cadastro Ativo entre os 10 mais incidentes do DF, somando 502 focos em 4 anos distintos em APP e faixa de UC."
+        },
+        "DF-5300108-CCB5F18038C349AE9EEA9AD26EE5E5A6": {
+            "situacao": "Pendente (PE)",
+            "area_ha": 5718.2,
+            "anos": list(range(2015, 2026)),
+            "focos": 470,
+            "rl": True,
+            "app": True,
+            "uc": True,
+            "detalhe": "Propriedade pendente com 470 focos em 11 anos com sobreposição crítica tríplice: Reserva Legal, APP e faixa de 1 km de UC."
         }
-    ]
+    }
+
+    imoveis_out = []
+    with zipfile.ZipFile(zip_path) as z:
+        with shapefile.Reader(
+            shp=z.open("AREA_IMOVEL_1.shp"),
+            shx=z.open("AREA_IMOVEL_1.shx"),
+            dbf=z.open("AREA_IMOVEL_1.dbf"),
+            encoding="latin1"
+        ) as sf:
+            fields = [f[0] for f in sf.fields[1:]]
+            idx_cod = fields.index("cod_imovel")
+            idx_cond = fields.index("des_condic")
+            idx_mun = fields.index("municipio")
+
+            for sr in sf.iterShapeRecords():
+                cod = sr.record[idx_cod]
+                if cod in target_info:
+                    info = target_info[cod]
+                    geom = shape(sr.shape.__geo_interface__)
+                    if not geom.is_valid:
+                        geom = make_valid(geom)
+                    cent = geom.centroid
+                    sim = geom.simplify(0.0008, preserve_topology=True)
+
+                    imoveis_out.append({
+                        "cod_imovel": cod,
+                        "municipio": sr.record[idx_mun],
+                        "condicao": sr.record[idx_cond],
+                        "situacao": info["situacao"],
+                        "lat": round(cent.y, 4),
+                        "lon": round(cent.x, 4),
+                        "area_ha": info["area_ha"],
+                        "anos": info["anos"],
+                        "focos_total": info["focos"],
+                        "atinge_rl": info["rl"],
+                        "atinge_app": info["app"],
+                        "atinge_uc1km": info["uc"],
+                        "detalhe": info["detalhe"],
+                        "geometry": round_coords(mapping(sim), 4)
+                    })
+
+    # Ordena por total de focos decrescente
+    imoveis_out.sort(key=lambda x: x["focos_total"], reverse=True)
+    return imoveis_out
+
+
+def main():
+    csv_path = "data/processed/focos_df_2015_2025.csv"
+    uc_geojson_path = "data/raw/unidades_conservacao.geojson"
+    car_zip_path = "data/raw/AREA_IMOVEL.zip"
+    output_js = "docs/assets/dados_mapa_df.js"
+
+    print("Processando serie temporal de focos de calor...")
+    focos_ano, stats_ano = carregar_focos_e_estatisticas(csv_path)
+
+    print("Processando 84 Unidades de Conservacao e buffers de 1 km...")
+    ucs_geojson, buffers_geojson = processar_unidades_conservacao(uc_geojson_path)
+
+    print("Processando 10 imoveis CAR reincidentes criticos...")
+    imoveis = processar_imoveis_reincidentes(car_zip_path)
 
     bundle = {
         "stats_ano": stats_ano,
         "focos_ano": focos_ano,
-        "ucs": ucs,
+        "ucs_geojson": ucs_geojson,
+        "buffers_geojson": buffers_geojson,
         "imoveis_reincidentes": imoveis,
         "limites_df": {
             "centro": [-15.78, -47.88],
             "zoom": 10,
-            "bounds": [[-16.05, -48.30], [-15.45, -47.30]]
-        }
+            "bounds": [[-16.05, -48.30], [-15.45, -47.30]],
+        },
     }
 
     os.makedirs(os.path.dirname(output_js), exist_ok=True)
@@ -269,7 +330,9 @@ def main():
         json.dump(bundle, out, ensure_ascii=False, separators=(",", ":"))
         out.write(";\n")
 
-    print(f"[OK] Dados do mapa gravados em {output_js} ({os.path.getsize(output_js) / 1024:.1f} KB).")
+    tamanho_kb = os.path.getsize(output_js) / 1024
+    print(f"[OK] Dados do mapa gravados em {output_js} ({tamanho_kb:.1f} KB).")
+
 
 if __name__ == "__main__":
     main()
