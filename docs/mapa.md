@@ -8,7 +8,46 @@ Painel geoespacial com linha do tempo de 11 anos (2015 a 2025) para exploração
 
 ---
 
-<!-- Widget do Mapa Interativo Leaflet -->
+## 1. Métricas Consolidadas da Camada Analítica
+
+Visão quantitativa apurada pela camada Gold do Lakehouse (modelagem dimensional dbt e tabelas Delta Lake), respondendo aos critérios da pergunta de gestão:
+
+--8<-- "docs/snippets/mapa/metricas_gerais.md"
+
+---
+
+## 2. Série Histórica e Dinâmica Temporal das Queimadas
+
+A série de 11 anos evidencia a severidade dos períodos de estiagem no bioma Cerrado e os picos associados a fenômenos de seca extrema no Distrito Federal:
+
+### Evolução Anual de Focos (Total vs Estiagem)
+
+--8<-- "docs/snippets/mapa/grafico_serie_anual.md"
+
+### Distribuição Mensal Acumulada (Sazonalidade)
+
+--8<-- "docs/snippets/mapa/grafico_sazonalidade_mensal.md"
+
+---
+
+## 3. Caracterização Fundiária e Áreas Protegidas Atingidas
+
+Dos 21.047 imóveis cadastrados no CAR-DF, 1.593 apresentaram focos de calor recorrentes em pelo menos 2 anos distintos dentro ou no entorno imediato de áreas sob proteção ambiental:
+
+### Sobreposição por Categoria Protegida
+
+--8<-- "docs/snippets/mapa/grafico_reincidencia_territorial.md"
+
+### Grau de Reincidência Temporal
+
+--8<-- "docs/snippets/mapa/grafico_anos_reincidencia.md"
+
+---
+
+## 4. Exploração Espacial Interativa (Leaflet)
+
+Utilize os controles abaixo para inspecionar os focos de calor em cada ano, aplicar filtros por satélite e explorar a localização geográfica das Unidades de Conservação e dos imóveis rurais reincidentes no Distrito Federal:
+
 <div class="cf-map-card">
   <!-- Estatisticas Dinamicas do Ano -->
   <div class="cf-stats-grid">
@@ -110,7 +149,7 @@ Painel geoespacial com linha do tempo de 11 anos (2015 a 2025) para exploração
 
 ---
 
-## Como Utilizar o Painel
+## 5. Como Utilizar o Painel
 
 1. **Linha do tempo interativa:** utilize a barra deslizante para selecionar qualquer ano entre 2015 e 2025. A última posição ("Todos") plota os 38.945 focos acumulados de toda a série histórica.
 2. **Reprodução automática:** o botão "Reproduzir" avança os anos em sequência contínua a cada 1,2 segundo, permitindo visualizar a dinâmica espacial da seca no Distrito Federal.
@@ -119,18 +158,7 @@ Painel geoespacial com linha do tempo de 11 anos (2015 a 2025) para exploração
 
 ---
 
-## Dinâmica Espacial e Sazonalidade no DF
-
-Os dados renderizados no mapa refletem o processamento analítico da camada Gold da plataforma Corta-Fogo DF:
-
-- **Concentração extrema na estiagem:** entre 2015 e 2025, 84,3% de todos os focos no Distrito Federal ocorreram na estação seca (meses 5 a 9). O mês de setembro sozinho concentra 17.348 ocorrências (44,5% do total acumulado).
-- **Variação interanual severa:** o mapa permite comparar anos com condições climáticas amenas (como 2018, com 948 focos) e anos de seca extrema associados a bloqueios atmosféricos prolongados (como 2024, que registrou 6.190 focos e pico de fumaça na capital).
-- **Pressão sobre áreas públicas protegidas:** os círculos verdes indicam as maiores Unidades de Conservação do DF, como o Parque Nacional de Brasília, a Estação Ecológica de Águas Emendadas, a APA da Bacia do Descoberto e a Fazenda Água Limpa da UnB. A linha tracejada externa representa o raio regulamentar de 1.000 metros de amortecimento, área crítica onde o fogo periurbano ou agrícola comumente se propaga para o interior da vegetação nativa.
-- **Reincidência em imóveis rurais (CAR):** os marcadores roxos destacam propriedades cadastradas no SICAR que registraram ocorrências de fogo dentro de suas Reservas Legais, Áreas de Preservação Permanente ou na zona de amortecimento de UCs em pelo menos dois anos civis distintos.
-
----
-
-## Fontes e Rastreabilidade dos Dados
+## 6. Fontes e Rastreabilidade dos Dados
 
 | Camada | Fonte Pública Oficial | Período / Versão | Papel na Plataforma |
 | :--- | :--- | :--- | :--- |
