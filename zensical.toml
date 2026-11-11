@@ -10,12 +10,12 @@ repo_url = "https://github.com/BeyondMagic/corta-fogo-df"
 repo_name = "BeyondMagic/corta-fogo-df"
 edit_uri = "edit/main/docs/"
 extra_css = [
+  "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.css",
   "stylesheets/extra.css",
-  "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.css"
 ]
 extra_javascript = [
-  "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
   "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.mjs",
+  "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "assets/dados_mapa_df.js",
   "javascripts/mapa_corta_fogo.js",
