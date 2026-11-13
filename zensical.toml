@@ -19,7 +19,6 @@ extra_javascript = [
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "assets/dados_mapa_df.js",
   "javascripts/mapa_corta_fogo.js",
-  "javascripts/extra.js"
 ]
 
 nav = [
