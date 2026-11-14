@@ -230,6 +230,16 @@ models:
               arguments:
                 to: ref('dim_satelite')
                 field: sk_satelite
+      - name: sk_regiao_administrativa
+        description: >
+          Chave para dim_regiao_administrativa: RA que contem o ponto do foco ou, para
+          ponto na borda do DF, a RA mais proxima ate var('tolerancia_ra_m').
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regiao_administrativa')
+                field: sk_regiao_administrativa
       - name: satelite
         description: Nome do satelite detector.
         data_tests:
@@ -331,10 +341,11 @@ models:
     description: >
       Granularidade: uma linha por imovel rural por ano civil UTC (2015 a 2025) em que
       houve foco dentro do imovel e em Reserva Legal do mesmo imovel, APP ou faixa de
-      1 km de UC. Materializa metricas da pergunta de gestao. Atributos cadastrais
-      (sk_imovel, situacao, area_ha) vem da versao SCD2 vigente no foco mais recente
-      daquele ano. imovel_reincidente e verdadeiro quando o imovel tem pelo menos dois
-      anos distintos nessa condicao.
+      1 km de UC. Visao de tendencia da pergunta de gestao; o total por imovel fica em
+      fct_reincidencia_imovel. Atributos cadastrais (sk_imovel, situacao, area_ha) vem
+      da versao SCD2 vigente no foco mais recente daquele ano. is_excluido informa se a
+      versao corrente do imovel e uma exclusao logica. imovel_reincidente e verdadeiro
+      quando o imovel tem pelo menos dois anos distintos nessa condicao.
     data_tests:
       - unique_combination_of_columns:
           arguments:
@@ -395,6 +406,315 @@ models:
         data_tests:
           - not_null
 
+  - name: dim_regiao_administrativa
+    description: >
+      Granularidade: uma linha por Regiao Administrativa do Distrito Federal (37),
+      carregada da IDE-DF / SEDUH. Dimensao territorial de fato_foco_calor (RA do ponto
+      do foco) e de fct_reincidencia_imovel (RA de um ponto interno do imovel).
+    data_tests:
+      - volume_entre:
+          arguments: {minimo: 30, maximo: 45}
+    columns:
+      - name: sk_regiao_administrativa
+        description: Chave substituta, md5 do codigo. Estavel entre recargas do PostGIS.
+        data_tests:
+          - unique
+          - not_null
+      - name: codigo
+        description: Codigo oficial no padrao RA-<algarismos romanos> (ex. RA-VI para Planaltina).
+        data_tests:
+          - unique
+          - not_null
+      - name: nome
+        description: Nome da Regiao Administrativa.
+        data_tests:
+          - not_null
+      - name: area_km2
+        description: Area da RA em km2, calculada da geometria em EPSG:31983.
+      - name: data_download
+        description: Data de obtencao do arquivo na IDE-DF.
+      - name: geom
+        description: Poligono MultiPolygon em EPSG:31983.
+        data_tests:
+          - not_null
+
+  - name: fct_reincidencia_imovel
+    description: >
+      Granularidade: uma linha por imovel rural (cod_imovel) com ao menos um foco de
+      calor dentro do imovel e em Reserva Legal propria, em APP ou a ate 1 km de UC
+      entre 2015 e 2025. Fato da pergunta de gestao no grao do sujeito da decisao.
+      Contagens sao aditivas entre imoveis (um foco sobre imoveis sobrepostos conta em
+      cada um); densidade, componentes e indice nao sao. O Indice de Prioridade de
+      Vistoria (ADR 0004) so e calculado para imoveis reincidentes. Reconciliado com a
+      Materialized View da E1 em tests/reconcilia_fato_imovel_com_mv_postgis.sql.
+    data_tests:
+      - volume_entre:
+          arguments: {minimo: 2500, maximo: 6500}
+    columns:
+      - name: sk_imovel
+        description: Versao SCD2 do imovel vigente no foco mais recente. Chave para dim_imovel_car.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_imovel_car')
+                field: sk_imovel
+      - name: cod_imovel
+        description: Codigo do imovel no SICAR. Chave do grao.
+        data_tests:
+          - unique
+          - not_null
+      - name: sk_regiao_administrativa
+        description: RA de um ponto interno do imovel. Chave para dim_regiao_administrativa.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_regiao_administrativa')
+                field: sk_regiao_administrativa
+      - name: area_ha
+        description: Area declarada do imovel na versao de sk_imovel, em hectares.
+      - name: anos_com_foco
+        description: Anos civis UTC distintos (2015 a 2025) com foco em area protegida no imovel.
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 1, maximo: 11}
+      - name: primeiro_ano_com_foco
+        description: Primeiro ano com foco em area protegida.
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 2015, maximo: 2025}
+      - name: ultimo_ano_com_foco
+        description: Ano mais recente com foco em area protegida.
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 2015, maximo: 2025}
+      - name: lista_anos
+        description: Lista ordenada dos anos com foco em area protegida.
+        data_tests:
+          - not_null
+      - name: total_focos
+        description: Deteccoes distintas no imovel e em area protegida, todos os satelites.
+        data_tests:
+          - not_null
+      - name: dias_com_foco
+        description: >
+          Datas locais distintas com foco em area protegida. Um fogo captado por varios
+          satelites no mesmo dia conta uma vez.
+        data_tests:
+          - not_null
+      - name: focos_satelite_referencia
+        description: Deteccoes do satelite de referencia do INPE (AQUA_M-T).
+        data_tests:
+          - not_null
+      - name: focos_estacao_seca
+        description: Deteccoes entre maio e setembro (data local).
+        data_tests:
+          - not_null
+      - name: focos_reserva_legal
+        description: Deteccoes na Reserva Legal do proprio imovel.
+        data_tests:
+          - not_null
+      - name: focos_app
+        description: Deteccoes em Area de Preservacao Permanente.
+        data_tests:
+          - not_null
+      - name: focos_uc_1km
+        description: Deteccoes a ate 1.000 m de Unidade de Conservacao.
+        data_tests:
+          - not_null
+      - name: atinge_reserva_legal
+        description: Houve foco na Reserva Legal do imovel.
+        data_tests:
+          - not_null
+      - name: atinge_app
+        description: Houve foco em APP.
+        data_tests:
+          - not_null
+      - name: atinge_uc_1km
+        description: Houve foco a ate 1 km de UC.
+        data_tests:
+          - not_null
+      - name: imovel_reincidente
+        description: Verdadeiro quando anos_com_foco >= var('anos_minimos_reincidencia') (2).
+        data_tests:
+          - not_null
+      - name: dias_com_foco_por_100ha
+        description: >
+          dias_com_foco / max(area_ha, var('area_minima_ha')) x 100. Nulo para imovel nao
+          reincidente.
+      - name: componente_recorrencia
+        description: Componente do indice entre 0 (2 anos com foco) e 1 (11 anos).
+        data_tests:
+          - entre:
+              arguments: {minimo: 0, maximo: 1}
+      - name: componente_recencia
+        description: Componente do indice entre 0 (ultimo foco em 2015) e 1 (em 2025).
+        data_tests:
+          - entre:
+              arguments: {minimo: 0, maximo: 1}
+      - name: componente_intensidade
+        description: >
+          Componente do indice entre 0 e 1: dias_com_foco_por_100ha saturado nos percentis
+          5 e 95 dos reincidentes e normalizado min-max.
+        data_tests:
+          - entre:
+              arguments: {minimo: 0, maximo: 1}
+      - name: indice_prioridade
+        description: >
+          Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0004). Nulo para imovel nao
+          reincidente.
+        data_tests:
+          - entre:
+              arguments: {minimo: 0, maximo: 100}
+      - name: classificacao_prioridade
+        description: Quartil do indice entre os reincidentes, ou NAO REINCIDENTE.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['PRIORIDADE CRITICA', 'PRIORIDADE ALTA', 'PRIORIDADE MEDIA', 'PRIORIDADE BAIXA', 'NAO REINCIDENTE']
+
+  - name: painel_imoveis_prioritarios
+    description: >
+      Tabela de consumo do painel e resposta a pergunta de gestao da E1: imoveis rurais
+      reincidentes na ordem do Indice de Prioridade de Vistoria. Granularidade: uma linha
+      por imovel reincidente ainda presente no cadastro. Tabela larga (atributos do
+      imovel e da RA desnormalizados) com contrato de esquema. gerado_em sustenta a
+      metrica de frescor e o SLA (docs/frescor_sla.md).
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - volume_entre:
+          arguments: {minimo: 1000, maximo: 2500}
+    columns:
+      - name: posicao
+        data_type: integer
+        description: 1 e o imovel de maior prioridade. Sem empate (desempate por anos, dias e codigo).
+        data_tests:
+          - unique
+          - not_null
+      - name: cod_imovel
+        data_type: varchar
+        description: Codigo do imovel no SICAR.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_reincidencia_imovel')
+                field: cod_imovel
+      - name: codigo_regiao_administrativa
+        data_type: varchar
+        description: Codigo da RA do imovel (RA-<romano>).
+      - name: regiao_administrativa
+        data_type: varchar
+        description: Nome da RA do imovel.
+        data_tests:
+          - not_null
+      - name: situacao
+        data_type: varchar
+        description: Situacao cadastral no SICAR (AT, PE, SU ou CA).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['AT', 'PE', 'SU', 'CA']
+      - name: cadastro_ativo
+        data_type: boolean
+        description: Verdadeiro quando situacao = AT.
+        data_tests:
+          - not_null
+      - name: condicao
+        data_type: varchar
+        description: Condicao de analise do cadastro no SICAR.
+      - name: area_ha
+        data_type: double
+        description: Area declarada do imovel em hectares.
+      - name: classificacao_prioridade
+        data_type: varchar
+        description: Quartil do indice entre os reincidentes.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['PRIORIDADE CRITICA', 'PRIORIDADE ALTA', 'PRIORIDADE MEDIA', 'PRIORIDADE BAIXA']
+      - name: indice_prioridade
+        data_type: double
+        description: Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0004).
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 0, maximo: 100}
+      - name: componente_recorrencia
+        data_type: double
+        description: Parcela de recorrencia do indice (0 a 1).
+      - name: componente_recencia
+        data_type: double
+        description: Parcela de recencia do indice (0 a 1).
+      - name: componente_intensidade
+        data_type: double
+        description: Parcela de intensidade do indice (0 a 1).
+      - name: anos_com_foco
+        data_type: integer
+        description: Anos distintos com foco em area protegida.
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 2, maximo: 11}
+      - name: primeiro_ano_com_foco
+        data_type: integer
+        description: Primeiro ano com foco em area protegida.
+      - name: ultimo_ano_com_foco
+        data_type: integer
+        description: Ano mais recente com foco em area protegida.
+      - name: lista_anos
+        data_type: integer[]
+        description: Lista ordenada dos anos com foco em area protegida.
+      - name: total_focos
+        data_type: integer
+        description: Deteccoes distintas em area protegida, todos os satelites.
+      - name: dias_com_foco
+        data_type: integer
+        description: Datas locais distintas com foco em area protegida.
+      - name: dias_com_foco_por_100ha
+        data_type: double
+        description: Dias com foco por 100 ha, com piso de area em var('area_minima_ha').
+      - name: focos_satelite_referencia
+        data_type: integer
+        description: Deteccoes do satelite de referencia (AQUA_M-T).
+      - name: focos_estacao_seca
+        data_type: integer
+        description: Deteccoes entre maio e setembro.
+      - name: focos_reserva_legal
+        data_type: integer
+        description: Deteccoes na Reserva Legal do proprio imovel.
+      - name: focos_app
+        data_type: integer
+        description: Deteccoes em APP.
+      - name: focos_uc_1km
+        data_type: integer
+        description: Deteccoes a ate 1 km de UC.
+      - name: atinge_reserva_legal
+        data_type: boolean
+        description: Houve foco na Reserva Legal do imovel.
+      - name: atinge_app
+        data_type: boolean
+        description: Houve foco em APP.
+      - name: atinge_uc_1km
+        data_type: boolean
+        description: Houve foco a ate 1 km de UC.
+      - name: gerado_em
+        data_type: timestamp with time zone
+        description: Instante da execucao do dbt que gerou a tabela (UTC). Base do frescor.
+        data_tests:
+          - not_null
+
+# A logica de versoes vive em int_imoveis_versoes (dim_imovel_car so a apresenta); o teste
+# unitario fica aqui, junto da documentacao da dimensao que ele protege.
 unit_tests:
   - name: dim_imovel_car_preserva_versao_anterior_para_focos_antigos
     description: >
@@ -402,7 +722,7 @@ unit_tests:
       perimetro) e depois cancelado; uma reentrega do CDC repete a retificacao. A
       dimensao deve manter tres versoes, descartar a duplicata e abrir a primeira
       versao para focos anteriores a carga inicial.
-    model: dim_imovel_car
+    model: int_imoveis_versoes
     given:
       - input: ref('snp_imovel_car')
         rows:

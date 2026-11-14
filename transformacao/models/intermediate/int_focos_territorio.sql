@@ -51,9 +51,12 @@ select
         coalesce(ap.em_reserva_legal, false)
         or coalesce(ap.em_app, false)
         or coalesce(ap.ate_1km_uc, false)
-    )                                                               as em_area_protegida
+    )                                                               as em_area_protegida,
+    ra.sk_regiao_administrativa                                     as sk_regiao_administrativa
 from focos f
 left join imoveis_por_foco im
     on f.id_foco = im.id_foco
 left join areas_por_foco ap
     on f.id_foco = ap.id_foco
+left join {{ ref('int_focos_regiao_administrativa') }} ra
+    on f.id_foco = ra.id_foco

@@ -180,6 +180,40 @@ models:
         data_tests:
           - not_null
 
+  - name: stg_regioes_administrativas
+    description: >
+      Granularidade: uma linha por Regiao Administrativa do Distrito Federal (id_ra)
+      carregada no PostGIS a partir da IDE-DF / SEDUH.
+    columns:
+      - name: id_ra
+        description: >
+          Chave sequencial gerada pelo PostgreSQL (IDENTITY). Reinicia a cada recarga
+          completa do banco; a chave estavel e o codigo.
+        data_tests:
+          - unique
+          - not_null
+      - name: codigo
+        description: Codigo oficial no padrao RA-<algarismos romanos>.
+        data_tests:
+          - unique
+          - not_null
+      - name: nome
+        description: Nome da Regiao Administrativa.
+        data_tests:
+          - not_null
+      - name: area_km2
+        description: Area em km2, calculada da geometria em EPSG:31983.
+      - name: fonte
+        description: Orgao ou sistema fornecedor da camada.
+      - name: data_download
+        description: Data de obtencao do arquivo GeoJSON na fonte.
+      - name: data_hora_ingestao
+        description: Momento da carga da linha no PostgreSQL (TIMESTAMPTZ em UTC).
+      - name: geom
+        description: Geometria MultiPolygon da Regiao Administrativa em EPSG:31983.
+        data_tests:
+          - not_null
+
   - name: stg_areas_preservacao_permanente
     description: >
       Granularidade: uma linha por poligono de Area de Preservacao Permanente (id_app)

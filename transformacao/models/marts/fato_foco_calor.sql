@@ -7,6 +7,7 @@ select
         + month(t.data_evento_local) * 100
         + day(t.data_evento_local))::integer                            as sk_tempo,
     md5(t.satelite)                                                     as sk_satelite,
+    t.sk_regiao_administrativa,
     t.satelite,
     t.is_satelite_referencia,
     t.data_hora_evento,

@@ -1,4 +1,5 @@
--- Dimensao SCD Tipo 2 de imoveis rurais: uma linha por versao cadastral (Issue #19).
+-- Versoes cadastrais dos imoveis rurais (SCD Tipo 2, Issue #19): uma linha por versao.
+-- Base de dim_imovel_car e do cruzamento espacial historico em int_focos_imoveis.
 --
 -- 1. Reentregas do CDC (at-least-once) regravam o mesmo lsn_origem com novo
 --    data_hora_ingestao e geram no snapshot uma versao identica a anterior; essas

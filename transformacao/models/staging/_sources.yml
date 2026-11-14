@@ -32,3 +32,15 @@ sources:
         description: Poligonos de Areas de Preservacao Permanente no Distrito Federal (nascentes, bordas de chapada e reservatorios).
       - name: reserva_legal
         description: Poligonos de Reserva Legal vinculados aos imoveis rurais do SICAR no Distrito Federal.
+      - name: regiao_administrativa
+        description: Poligonos das 37 Regioes Administrativas do Distrito Federal (IDE-DF / SEDUH).
+
+  - name: oltp_gold
+    description: >
+      Camada Gold da Entrega 1 no PostgreSQL (schema gold, migracao V7). Lida so pelo
+      teste de reconciliacao entre a Materialized View e o fato do dbt.
+    database: oltp
+    schema: gold
+    tables:
+      - name: mv_imoveis_reincidentes_areas_protegidas
+        description: Imoveis reincidentes calculados por juncao espacial direta no PostGIS.

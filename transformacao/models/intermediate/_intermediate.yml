@@ -3,14 +3,12 @@ version: 2
 models:
   - name: int_focos_imoveis
     description: >
-      Granularidade: uma linha por par (id_foco, cod_imovel) de imovel rural ativo
-      (not is_excluido) cujo poligono atual intersecta o ponto do foco de calor.
+      Granularidade: uma linha por par (id_foco, cod_imovel) em que o ponto do foco
+      esta dentro do perimetro da versao cadastral do imovel vigente na data do evento
+      (SCD Tipo 2, int_imoveis_versoes), desde que essa versao nao seja uma exclusao
+      logica. Geometria e atributos do par vem da mesma versao (sk_imovel).
       Focos fora da malha cadastral nao aparecem neste modelo; focos em zonas de
       sobreposicao de declaracoes do SICAR geram uma linha para cada imovel atingido.
-      O cruzamento espacial utiliza a geometria corrente do imovel na tabela Delta;
-      a vinculacao com a versao historica vigente na data do evento fica a cargo da
-      camada Gold (Issue #18) em conjunto com o snapshot SCD Tipo 2 (Issue #19) por
-      meio de cod_imovel e data_hora_evento.
     data_tests:
       - unique_combination_of_columns:
           arguments:
@@ -34,6 +32,14 @@ models:
               arguments:
                 to: ref('dim_imovel_car')
                 field: cod_imovel
+      - name: sk_imovel
+        description: Versao cadastral do imovel vigente na data do foco.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_imovel_car')
+                field: sk_imovel
       - name: data_hora_evento
         description: Carimbo de tempo da passagem do satelite em UTC (TIMESTAMPTZ).
         data_tests:
@@ -59,11 +65,131 @@ models:
         data_tests:
           - not_null
       - name: situacao_imovel
-        description: Situacao cadastral corrente do imovel no SICAR.
+        description: Situacao cadastral do imovel na versao vigente na data do foco.
       - name: condicao_imovel
-        description: Condicao de analise corrente do cadastro no SICAR.
+        description: Condicao de analise do cadastro na versao vigente na data do foco.
       - name: area_ha_imovel
-        description: Area declarada corrente do imovel em hectares.
+        description: Area declarada do imovel, em hectares, na versao vigente na data do foco.
+
+  - name: int_imoveis_versoes
+    description: >
+      Granularidade: uma linha por versao cadastral de imovel rural (sk_imovel), derivada
+      do snapshot SCD Tipo 2 snp_imovel_car. Concentra a logica de versoes (descarte de
+      reentregas do CDC, abertura da primeira vigencia e fechamento da corrente). E a
+      base de dim_imovel_car, que documenta e testa cada coluna, e do cruzamento
+      espacial historico em int_focos_imoveis.
+    columns:
+      - name: sk_imovel
+        description: Chave substituta da versao (md5 de cod_imovel e lsn_origem).
+        data_tests:
+          - unique
+          - not_null
+
+  - name: int_focos_regiao_administrativa
+    description: >
+      Granularidade: uma linha por foco de calor (id_foco) com a Regiao Administrativa
+      do ponto. Foco fora de todas as RAs recebe a mais proxima ate var('tolerancia_ra_m').
+    columns:
+      - name: id_foco
+        description: Identificador SHA-256 do foco de calor.
+        data_tests:
+          - unique
+          - not_null
+      - name: sk_regiao_administrativa
+        description: md5 do codigo da RA. Nulo so para ponto alem da tolerancia.
+      - name: distancia_ra_m
+        description: Zero quando o ponto esta dentro da RA; distancia em metros quando a RA veio por proximidade.
+
+  - name: int_imoveis_regiao_administrativa
+    description: >
+      Granularidade: uma linha por versao de imovel (sk_imovel) com a Regiao
+      Administrativa de um ponto interno do perimetro (st_pointonsurface).
+    columns:
+      - name: sk_imovel
+        description: Versao cadastral do imovel.
+        data_tests:
+          - unique
+          - not_null
+      - name: sk_regiao_administrativa
+        description: md5 do codigo da RA. Nulo so para ponto alem da tolerancia.
+      - name: distancia_ra_m
+        description: Zero quando o ponto esta dentro da RA; distancia em metros quando a RA veio por proximidade.
+
+  - name: int_focos_protegidos_imovel
+    description: >
+      Granularidade: uma linha por par (id_foco, cod_imovel) que atende a regra da
+      pergunta de gestao: foco dentro do imovel e em Reserva Legal do mesmo imovel, em
+      APP ou a ate 1 km de UC, entre 2015 e 2025. Fonte unica de
+      mart_reincidencia_imovel_ano e de int_metricas_imovel.
+    data_tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - id_foco
+              - cod_imovel
+    columns:
+      - name: id_foco
+        description: Identificador SHA-256 do foco de calor.
+        data_tests:
+          - not_null
+      - name: cod_imovel
+        description: Codigo do imovel rural no SICAR.
+        data_tests:
+          - not_null
+      - name: sk_imovel
+        description: Versao cadastral do imovel vigente na data do foco.
+        data_tests:
+          - not_null
+      - name: is_estacao_seca
+        description: Foco entre maio e setembro, pela data local.
+        data_tests:
+          - not_null
+      - name: em_reserva_legal_do_imovel
+        description: Foco dentro de Reserva Legal declarada pelo mesmo imovel.
+        data_tests:
+          - not_null
+      - name: em_app
+        description: Foco dentro de Area de Preservacao Permanente.
+        data_tests:
+          - not_null
+      - name: ate_1km_uc
+        description: Foco a ate 1.000 m de Unidade de Conservacao.
+        data_tests:
+          - not_null
+
+  - name: int_metricas_imovel
+    description: >
+      Granularidade: uma linha por imovel rural (cod_imovel) com ao menos um foco em
+      area protegida entre 2015 e 2025. Contagens que alimentam o indice e o fato
+      fct_reincidencia_imovel, onde cada coluna esta documentada.
+    columns:
+      - name: cod_imovel
+        description: Codigo do imovel rural no SICAR.
+        data_tests:
+          - unique
+          - not_null
+
+  - name: int_indice_prioridade_imovel
+    description: >
+      Granularidade: uma linha por imovel reincidente (cod_imovel). Calcula o Indice de
+      Prioridade de Vistoria (ADR 0004) a partir de recorrencia, recencia e intensidade,
+      e a classificacao pelos quartis do indice.
+    columns:
+      - name: cod_imovel
+        description: Codigo do imovel rural no SICAR.
+        data_tests:
+          - unique
+          - not_null
+      - name: indice_prioridade
+        description: Indice de 0 a 100.
+        data_tests:
+          - not_null
+          - entre:
+              arguments: {minimo: 0, maximo: 100}
+      - name: classificacao_prioridade
+        description: Quartil do indice entre os reincidentes.
+        data_tests:
+          - not_null
 
   - name: int_focos_areas_protegidas
     description: >
