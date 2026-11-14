@@ -267,7 +267,7 @@ docker compose up
 Fluxo automatizado da execução:
 
 1. Inicia o contêiner PostgreSQL 16 com extensão PostGIS 3.4.
-2. O Flyway aplica as migrações SQL em ordem (`V1__...` a `V6__...`).
+2. O Flyway aplica as migrações SQL em ordem (`V1__...` a `V6__...` na E1; o repositório hoje vai até `V9__...`).
 3. Os serviços de ingestão disparam em paralelo a carga de focos do INPE e das camadas territoriais.
 4. As rotinas garantem idempotência e saneamento topológico de polígonos inválidos.
 
@@ -351,54 +351,39 @@ Testes em máquina limpa (a partir de um volume vazio):
 | Samuel Ribeiro | 28/09/2026 | Windows 11, Docker 29.7.2, Compose v5.5.1 | Carga em 2 min 30 s com build; mesmas contagens; 0 geometrias inválidas, SRID único 31983; trigger bloqueou `UPDATE`; recarga sem duplicar |
 | João V. Farias | 28/09/2026 | Linux (Artix x86_64, Ryzen 5 5600, 32 GB RAM), Docker 29.8.1, Compose v5.5.1 | Carga e migrações validadas na porta 5434; identificado requisito do módulo de kernel `overlay` para o containerd; geometrias íntegras e trigger testado |
 
-## 11. Análise Complementar: Focos de Calor e Perfil Socioeconômico das Regiões Administrativas
+## 11. Análise Complementar: Focos de Calor por Região Administrativa
 
 <p class="apresentador"><em>Apresentação: Elias F. (Caracterização e Métricas)</em></p>
 
-Após responder à pergunta central de gestão pela camada Gold, realizou-se uma análise para compreender as causas territoriais e socioeconômicas da distribuição espacial dos focos de calor no Distrito Federal.
+As 37 Regiões Administrativas (RAs) do DF entram no banco pela migração `V8` (`regiao_administrativa`, camada da IDE-DF / SEDUH) e na camada Gold como `dim_regiao_administrativa`. Cada foco recebe a RA do ponto; cada imóvel, a RA de um ponto interno do perímetro.
 
-Para essa análise, os dados consolidados de queimadas (INPE/BDQueimadas) foram cruzados com as informações econômicas e demográficas das Regiões Administrativas (RAs) publicadas pelo Instituto de Pesquisa e Estatística do Distrito Federal (IPEDF, antiga Codeplan) e pelo IBGE (Pesquisa Distrital por Amostra de Domicílios - PDAD e Contas Regionais).
+| Região Administrativa | Focos (2015 a 2025) | % dos focos | Imóveis reincidentes | Em prioridade crítica |
+| :--- | ---: | ---: | ---: | ---: |
+| Brazlândia (RA-IV) | 6.217 | 16,0% | 182 | 40 |
+| Planaltina (RA-VI) | 4.797 | 12,3% | 224 | 39 |
+| Fercal (RA-XXXI) | 4.312 | 11,1% | 42 | 17 |
+| Plano Piloto (RA-I) | 2.931 | 7,5% | 15 | 6 |
+| Paranoá (RA-VII) | 2.886 | 7,4% | 195 | 45 |
+| Sobradinho II (RA-XXVI) | 2.178 | 5,6% | 72 | 21 |
+| São Sebastião (RA-XIV) | 1.509 | 3,9% | 122 | 33 |
+| Gama (RA-II) | 1.490 | 3,8% | 77 | 23 |
 
-### Distribuição Espacial e Contraste Socioeconômico
+Fonte: `fato_foco_calor` e `painel_imoveis_prioritarios`, carga de 14/11/2026.
 
-A distribuição dos focos de calor e dos imóveis reincidentes revela forte concentração geográfica e assimetria de renda no território do DF:
+- Brazlândia, Planaltina e Fercal somam 39,4% dos focos. Planaltina, Paranoá e Brazlândia somam 37,7% dos imóveis reincidentes.
+- Volume de focos e número de reincidentes não andam juntos. O Plano Piloto tem 7,5% dos focos, todos dentro de algum imóvel do CAR, mas só 566 deles estão a até 1 km de UC, e a RA tem 15 imóveis reincidentes. Planaltina tem menos focos que Brazlândia e mais reincidentes.
 
-| Região Administrativa (RA) | Perfil Territorial | Renda Domiciliar Média (PDAD/IPEDF) | Proporção de Focos no CAR |
-| :--- | :--- | :--- | :--- |
-| **Planaltina (RA II)** | Predominantemente rural e agrícola | R$ 2.450 | Alta (mais de 28% do total distrital) |
-| **Brazlândia (RA IV)** | Cinturão verde e hortifrutigranjeiro | R$ 3.100 | Alta (cerca de 22% do total distrital) |
-| **Paranoá / Itapoã (RA VII/XXVIII)** | Rural, assentamentos e transição | R$ 2.200 | Média-alta (cerca de 14% do total) |
-| **São Sebastião (RA XIV)** | Misto (rural e expansão urbana) | R$ 2.680 | Média-alta (cerca de 11% do total) |
-| **Gama (RA II) / Santa Maria (RA XIII)** | Borda rural sul e chácaras | R$ 3.250 | Média (cerca de 8% do total) |
-| **Plano Piloto (RA I) / Lago Sul (RA XVI)** | Urbana consolidada institucional | Acima de R$ 16.000 | Residual (< 0,5%, apenas vias e parques) |
+A versão anterior desta seção cruzava os focos com a renda domiciliar da PDAD (IPEDF) e atribuía causas socioeconômicas à distribuição. Esse cruzamento não estava no banco nem no repositório, e os percentuais por RA não conferiam com os focos carregados. A seção foi refeita só com o que o pipeline calcula. Integrar a PDAD por RA fica como trabalho futuro; com ela, as hipóteses de causa (custo do manejo mecanizado, infraestrutura preventiva, pressão fundiária nas bordas urbanas) poderiam ser testadas.
 
-As quatro RAs com maior concentração de focos em imóveis rurais (Planaltina, Brazlândia, Paranoá e São Sebastião) somam mais de 75% de todas as ocorrências registradas em áreas protegidas no DF entre 2015 e 2025. Essas mesmas regiões situam-se nos estratos de menor renda domiciliar média per capita do Distrito Federal.
-
-### Fatores Determinantes da Ocorrência
-
-O cruzamento entre o modelo espacial e os indicadores econômicos aponta três fatores causais centrais:
-
-1. **Custo de manejo agrícola mecanizado:** em regiões de menor poder aquisitivo e agricultura familiar, o uso do fogo ainda funciona como ferramenta de baixo custo para limpeza de pastagens e destoca de restos culturais. O alto custo de maquinário agrícola de trituração induz à queima controlada, que frequentemente escapa ao controle no auge da seca.
-2. **Infraestrutura preventiva deficiente:** propriedades de maior vulnerabilidade econômica dispõem de menor infraestrutura preventiva de contenção, como reservatórios dedicados de água, caminhões-pipa e manutenção mecanizada periódica de aceiros contra o fogo.
-3. **Pressão fundiária e parcelamento clandestino:** nas bordas rurais de RAs periféricas com rápida expansão urbana, o fogo é utilizado como expediente clandestino de desmatamento rápido e descaracterização ambiental prévia para loteamento irregular do solo.
-
-### Consulta Analítica de Apoio
-
-A correlação pode ser auditada no banco relacionando os dados consolidados da camada Gold com os polígonos das Regiões Administrativas ou zonas rurais:
+### Consulta de apoio
 
 ```sql
-SELECT 
-    i.cod_imovel,
-    i.anos_com_foco,
-    i.total_focos,
-    i.area_ha,
-    CASE 
-        WHEN i.area_ha <= 20 THEN 'Minifúndio / Familiar'
-        WHEN i.area_ha <= 100 THEN 'Média Propriedade'
-        ELSE 'Grande Propriedade'
-    END AS porte_fundiario
-FROM gold.mv_imoveis_reincidentes_areas_protegidas i
-ORDER BY i.total_focos DESC;
+select r.codigo, r.nome, count(*) as focos,
+       round(100.0 * count(*) / sum(count(*)) over (), 1) as pct_focos
+from gold.fato_foco_calor f
+join gold.dim_regiao_administrativa r using (sk_regiao_administrativa)
+group by r.codigo, r.nome
+order by focos desc;
 ```
 
 ## 12. Artefatos e Entregáveis
@@ -410,7 +395,7 @@ Documentos complementares e código-fonte versionados no repositório:
 - **[Decisão de Arquitetura (ADR 0001)](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md):** justificativa da escolha do PostgreSQL com PostGIS, análise de três alternativas e benchmarks com dados do DF.
 - **[Benchmarks de Desempenho Espacial](https://github.com/BeyondMagic/corta-fogo-df/tree/main/scripts/benchmark):** scripts e medições no PostgreSQL (com e sem índice GiST) e no MongoDB (índice 2dsphere).
 - **[Glossário Técnico](../../glossario.md):** definições formais e referências bibliográficas de conceitos espaciais, temporais e de engenharia de dados.
-- **[Scripts de Migração](https://github.com/BeyondMagic/corta-fogo-df/tree/main/migrations):** scripts SQL versionados gerenciados pelo Flyway (`V1` a `V7`).
+- **[Scripts de Migração](https://github.com/BeyondMagic/corta-fogo-df/tree/main/migrations):** scripts SQL versionados gerenciados pelo Flyway (`V1` a `V9`).
 - **[Pipelines de Ingestão](https://github.com/BeyondMagic/corta-fogo-df/tree/main/src/pipeline):** extração do INPE e saneamento topológico com GeoPandas e GDAL.
 
 
@@ -423,7 +408,7 @@ Fontes de dados, especificações e normas técnicas utilizadas na elaboração 
 1. **INPE (Instituto Nacional de Pesquisas Espaciais):** Programa Queimadas. Banco de Dados de Queimadas (BDQueimadas). Detecções de focos de calor por sensores orbitais (2015 a 2025). Disponível em: <https://queimadas.dgi.inpe.br/queimadas/bdqueimadas>.
 2. **SICAR (Sistema Nacional de Cadastro Ambiental Rural):** Ministério da Agricultura e Pecuária / Serviço Florestal Brasileiro. Base geográfica de imóveis rurais e reservas legais do Distrito Federal. Disponível em: <https://www.car.gov.br/>.
 3. **SISDIA (Sistema Distrital de Informações Ambientais):** Instituto Brasília Ambiental (IBRAM). Mapeamento oficial de Unidades de Conservação e Áreas de Preservação Permanente (APP) do Distrito Federal. Disponível em: <https://sisdia.df.gov.br/>.
-4. **IPEDF (Instituto de Pesquisa e Estatística do Distrito Federal):** Pesquisa Distrital por Amostra de Domicílios (PDAD) e Contas Regionais do DF. Disponível em: <https://www.ipe.df.gov.br/>.
+4. **IDE-DF / SEDUH (Infraestrutura de Dados Espaciais do Distrito Federal):** limites das Regiões Administrativas. Disponível em: <https://www.geoservicos.ide.df.gov.br/>.
 
 ### Normas e Padrões Espaciais
 

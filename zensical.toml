@@ -34,9 +34,11 @@ nav = [
       { "Visão Geral" = "adr/README.md" },
       { "1ª: Banco de Dados" = "adr/01-adotar-postgresql-com-postgis-camada-gold.md" },
       { "2ª: Ingestão e Formato" = "adr/02-mecanismo-de-ingestao-e-formato-aberto.md" },
-      { "3ª: Modelagem e Transformação" = "adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md" }
+      { "3ª: Modelagem e Transformação" = "adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md" },
+      { "6ª: Índice de Prioridade" = "adr/06-indice-de-prioridade-de-vistoria.md" }
   ]},
   { "Dicionário de Dados" = "dicionario_dados.md" },
+  { "Frescor e SLA" = "frescor_sla.md" },
   { "Diário de Bordo" = "diario_de_bordo.md" },
   { "Glossário" = "glossario.md" }
   # { "Diretrizes Técnicas" = [

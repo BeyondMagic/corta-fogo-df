@@ -1,6 +1,6 @@
 # Instruções para Agentes de IA
 
-Você está trabalhando no repositório UnB-QueimadaFlora (Foco no Incêndio DF), da disciplina Sistemas de Bancos de Dados 2 (FCTE / UnB, 2026.2).
+Você está trabalhando no repositório Corta-Fogo DF (`corta-fogo-df`), da disciplina Sistemas de Bancos de Dados 2 (FCTE / UnB, 2026.2).
 
 ## 1. Diretriz de escrita e comunicação (Obrigatório)
 

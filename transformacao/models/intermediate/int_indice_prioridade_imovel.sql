@@ -1,4 +1,4 @@
--- Indice de Prioridade de Vistoria (IPV, ADR 0004): uma linha por imovel reincidente.
+-- Indice de Prioridade de Vistoria (IPV, ADR 0006): uma linha por imovel reincidente.
 --
 -- IPV = 100 x (peso_recorrencia x recorrencia + peso_recencia x recencia
 --              + peso_intensidade x intensidade), cada componente entre 0 e 1:

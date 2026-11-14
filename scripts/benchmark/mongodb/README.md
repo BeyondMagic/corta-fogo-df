@@ -1,6 +1,6 @@
 # Benchmark Mínimo: MongoDB com Índices 2dsphere
 
-Implementação isolada para medir a viabilidade e o desempenho do MongoDB na consulta da pergunta de gestão do [ADR 0001](../../docs/adr/01-adotar-postgresql-com-postgis-camada-gold.md), usando o mesmo conjunto de dados reais do Distrito Federal.
+Implementação isolada para medir a viabilidade e o desempenho do MongoDB na consulta da pergunta de gestão do [ADR 0001](../../../docs/adr/01-adotar-postgresql-com-postgis-camada-gold.md), usando o mesmo conjunto de dados reais do Distrito Federal.
 
 ## 1. Por que este benchmark existe
 

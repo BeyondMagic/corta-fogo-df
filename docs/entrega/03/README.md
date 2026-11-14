@@ -12,7 +12,7 @@ icon: material/numeric-3-box
 
 > **Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em áreas de reserva legal, de preservação permanente ou a até 1 km de unidades de conservação entre 2015 e 2025?**
 
-Um imóvel é reincidente quando tem foco em uma dessas áreas em pelo menos 2 anos civis (UTC) distintos. Todos os satélites entram na contagem.
+Um imóvel é reincidente quando tem foco em uma dessas áreas em pelo menos 2 anos civis (UTC) distintos. Todos os satélites entram na contagem. A decisão apoiada é a ordem das vistorias: a camada Gold entrega os reincidentes como uma fila, ordenada pelo Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)).
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 70, "curve": "basis", "padding": 14}}}%%
@@ -21,7 +21,7 @@ flowchart LR
         direction TB
         lk_f[("Delta<br/>foco_calor")]
         lk_i[("Delta<br/>imovel_car")]
-        pg[("PostGIS<br/>UC · APP · reserva legal")]
+        pg[("PostGIS<br/>UC · APP · reserva legal · RA")]
         lk_f ~~~ lk_i ~~~ pg
     end
 
@@ -29,16 +29,19 @@ flowchart LR
         direction TB
         stg_f[["stg_focos_calor"]]
         stg_i[["stg_imoveis_car"]]
-        stg_t[["stg_unidades_conservacao<br/>stg_areas_preservacao_permanente<br/>stg_reservas_legais"]]
+        stg_t[["stg_unidades_conservacao<br/>stg_areas_preservacao_permanente<br/>stg_reservas_legais<br/>stg_regioes_administrativas"]]
         stg_f ~~~ stg_i ~~~ stg_t
     end
 
     subgraph inter["Intermediate (tabelas)"]
         direction TB
+        int_v["int_imoveis_versoes"]
         int_fi["int_focos_imoveis"]
         int_ap["int_focos_areas_protegidas"]
+        int_fp["int_focos_protegidos_imovel"]
+        int_ix["int_metricas_imovel<br/>int_indice_prioridade_imovel"]
         int_ft["int_focos_territorio"]
-        int_fi ~~~ int_ap ~~~ int_ft
+        int_v ~~~ int_fi ~~~ int_ap ~~~ int_fp ~~~ int_ix ~~~ int_ft
     end
 
     subgraph gold["Gold (tabelas)"]
@@ -47,10 +50,13 @@ flowchart LR
         dim_t["dim_tempo"]
         dim_s["dim_satelite"]
         dim_terr["dim_territorio"]
+        dim_ra["dim_regiao_administrativa"]
         dim_car["dim_imovel_car"]
         fato["fato_foco_calor"]
-        mart(["mart_reincidencia_imovel_ano"])
-        snp ~~~ dim_t ~~~ dim_s ~~~ dim_terr ~~~ dim_car ~~~ fato ~~~ mart
+        fct_im["fct_reincidencia_imovel"]
+        mart["mart_reincidencia_imovel_ano"]
+        painel(["painel_imoveis_prioritarios"])
+        snp ~~~ dim_t ~~~ dim_s ~~~ dim_terr ~~~ dim_ra ~~~ dim_car ~~~ fato ~~~ fct_im ~~~ mart ~~~ painel
     end
 
     dagster["Dagster<br/>agenda · retry · backfill"]
@@ -59,23 +65,30 @@ flowchart LR
     lk_i --> stg_i
     pg --> stg_t
 
+    stg_i --> snp
+    snp --> int_v
+    int_v --> dim_car
     stg_f --> int_fi
-    stg_i --> int_fi
+    int_v --> int_fi
     stg_f --> int_ap
     stg_t --> int_ap
+    int_fi --> int_fp
+    int_ap --> int_fp
+    int_fp --> int_ix
     stg_f --> int_ft
     int_fi --> int_ft
     int_ap --> int_ft
 
-    stg_i --> snp
-    snp --> dim_car
     stg_f --> dim_s
     stg_t --> dim_terr
+    stg_t --> dim_ra
 
     int_ft --> fato
-    dim_car --> mart
-    int_fi --> mart
-    int_ap --> mart
+    int_ix --> fct_im
+    int_fp --> mart
+    fct_im --> painel
+    dim_car --> painel
+    dim_ra --> painel
 
     dagster -.-> staging
     dagster -.-> inter
@@ -91,10 +104,10 @@ flowchart LR
 
     class lk_f,lk_i,pg fonte;
     class stg_f,stg_i,stg_t staging;
-    class int_fi,int_ap,int_ft inter;
-    class dim_t,dim_s,dim_terr,dim_car,fato gold;
+    class int_v,int_fi,int_ap,int_fp,int_ix,int_ft inter;
+    class dim_t,dim_s,dim_terr,dim_ra,dim_car,fato,fct_im,mart gold;
     class snp snap;
-    class mart mart;
+    class painel mart;
     class dagster orchestration;
 
     style fontes fill:#FFFBF3,stroke:#D9A24A,stroke-width:2px;
@@ -103,7 +116,7 @@ flowchart LR
     style gold fill:#FFFDF0,stroke:#D4B24A,stroke-width:2px;
 ```
 
-<p style="text-align: center; font-size: 0.9em; color: #64748b;">Figura 1: Linhagem dos modelos dbt, das tabelas abertas da E2 ao mart de reincidência</p>
+<p style="text-align: center; font-size: 0.9em; color: #64748b;">Figura 1: Linhagem dos modelos dbt, das tabelas abertas da E2 à tabela de consumo do painel</p>
 
 ## 2. Divisão de Responsabilidades da Equipe
 
@@ -123,7 +136,7 @@ flowchart LR
 
 <p class="apresentador"><em>Apresentação: Manoel Felipe</em></p>
 
-A camada Gold é uma estrela em torno da detecção de foco. Cada modelo declara a granularidade por extenso ([especificação completa](../../modelagem/esquema_dimensional_gold.md)):
+A camada Gold é uma estrela em torno da detecção de foco, com um fato no grão do imóvel (o sujeito da pergunta) e uma tabela larga de consumo para o painel. Cada modelo declara a granularidade por extenso ([especificação completa](../../modelagem/esquema_dimensional_gold.md)):
 
 | Modelo | Granularidade | Linhas |
 | :--- | :--- | ---: |
@@ -131,14 +144,17 @@ A camada Gold é uma estrela em torno da detecção de foco. Cada modelo declara
 | `dim_tempo` | Uma linha por data civil de 01/01/2015 a 31/12/2025, com `is_estacao_seca` (maio a setembro). | 4.018 |
 | `dim_satelite` | Uma linha por satélite detector, com `is_referencia` para o `AQUA_M-T`. | 20 |
 | `dim_territorio` | Uma linha por feição de UC, APP ou reserva legal, com amortecimento de 1 km nas UCs. | 15.814 |
-| `dim_imovel_car` | Uma linha por versão cadastral do imóvel (SCD Tipo 2). | 21.047 |
+| `dim_regiao_administrativa` | Uma linha por Região Administrativa do DF. | 37 |
+| `dim_imovel_car` | Uma linha por versão cadastral do imóvel (SCD Tipo 2). | 21.049 |
+| `fct_reincidencia_imovel` | Uma linha por imóvel com foco em reserva legal, APP ou a até 1 km de UC entre 2015 e 2025, com o índice de prioridade dos reincidentes. | 4.068 |
 | `mart_reincidencia_imovel_ano` | Uma linha por imóvel por ano civil UTC com foco em reserva legal, APP ou a até 1 km de UC. | 8.271 |
+| `painel_imoveis_prioritarios` | Uma linha por imóvel reincidente, na ordem da fila de vistoria (tabela de consumo). | 1.593 |
 
 Três pontos explicam contagens que parecem divergir entre o PostGIS e a Gold:
 
 - **Focos:** o PostGIS tem 38.945. O lote da E2 descarta uma detecção com `id_foco` repetido (mesmas coordenadas, horário e satélite), então a fato tem 38.944.
 - **Feições territoriais:** a dimensão tem 84 UCs, 2.234 APPs e 13.496 reservas legais. O PostGIS tem 13.499 reservas legais: 3 polígonos idênticos no mesmo imóvel entram uma vez.
-- **Foco e imóvel:** a relação é N:N, porque o SICAR tem imóveis sobrepostos. `int_focos_imoveis` tem 76.115 pares para 38.944 focos. Por isso o imóvel entra no mart e não na fato.
+- **Foco e imóvel:** a relação é N:N, porque o SICAR tem imóveis sobrepostos. `int_focos_imoveis` tem 76.115 pares para 35.013 focos dentro de algum imóvel. Por isso o imóvel não entra na fato atômica: tem o próprio fato, no grão do imóvel.
 
 ## 4. Dimensão de Variação Lenta (SCD Tipo 2) para Imóveis Rurais
 
@@ -151,11 +167,12 @@ Imóveis rurais são retificados, mudam de área e de situação cadastral. Sobr
 | Detecção da mudança | Snapshot `snp_imovel_car`, estratégia `timestamp` sobre `data_hora_ingestao`. |
 | Chave | `sk_imovel = md5(cod_imovel, lsn_origem)`, uma por versão. Reentregas do CDC com o mesmo `lsn_origem` não geram versão nova. |
 | Vigência | `dbt_valid_from <= data_hora_evento < dbt_valid_to`. A primeira versão vale desde 1900-01-01 e a versão corrente vai até 9999-12-31 (`is_current`). |
-| Cruzamento com focos | O mart associa cada foco à versão do imóvel vigente na data do evento. |
+| Cruzamento com focos | O foco cruza com a **geometria** da versão do imóvel vigente na data do evento (`int_focos_imoveis`). Geometria e atributos do par vêm da mesma versão. |
+| Versão nova | Só quando o conteúdo do imóvel muda (atributos, geometria ou exclusão). Reentregas do CDC e recargas do OLTP com os mesmos dados não abrem versão. |
 
 Evidências: o teste unitário `dim_imovel_car_preserva_versao_anterior_para_focos_antigos` e os testes singulares de versão corrente única e de vigências contíguas passam no `dbt build`. A demonstração `orquestracao/demo_scd2_imovel.py` retifica e cancela um imóvel em uma cópia descartável do Delta e gera 3 versões (original, retificada e cancelada). Cada foco casa com a versão vigente na data do evento: um foco de 2020 usa a área original e um foco posterior à retificação usa a área nova.
 
-A tabela tem hoje 21.047 versões, uma por imóvel, porque só a carga inicial do CDC foi observada. O histórico tem a granularidade da frequência do `dbt build`: várias mudanças entre duas execuções viram uma versão.
+A tabela tem hoje 21.049 versões para 21.048 imóveis: a carga inicial do CDC, a retificação feita pelo script de mutações e o imóvel sentinela inserido e excluído por ele (só a versão excluída foi observada). O histórico tem a granularidade da frequência do `dbt build`: várias mudanças entre duas execuções viram uma versão.
 
 ## 5. Transformações Declarativas no dbt-duckdb
 
@@ -166,13 +183,18 @@ O dbt-duckdb lê as tabelas Delta com `delta_scan` e anexa o PostGIS em modo som
 | Camada | Modelos | Materialização | Linhas |
 | :--- | :--- | :--- | ---: |
 | Staging | 5 modelos `stg_*` (focos, imóveis, UCs, APPs, reservas legais) | view | - |
-| Intermediate | `int_focos_imoveis` (pares foco e imóvel) | tabela | 76.115 |
+| Staging | `stg_regioes_administrativas` | view | - |
+| Intermediate | `int_imoveis_versoes` (versões do imóvel e vigência) | tabela | 21.049 |
+| Intermediate | `int_focos_imoveis` (pares foco e imóvel, na versão vigente) | tabela | 76.115 |
 | Intermediate | `int_focos_areas_protegidas` (foco em reserva legal, APP ou 1 km de UC) | tabela | 32.778 |
-| Intermediate | `int_focos_territorio` (uma linha por foco, com as flags territoriais) | tabela | 38.944 |
-| Snapshot | `snp_imovel_car` | snapshot | 21.047 |
-| Gold | 5 modelos dimensionais e o mart de reincidência | tabela | ver seção 3 |
+| Intermediate | `int_focos_protegidos_imovel` (regra da pergunta, por par foco e imóvel) | tabela | 40.682 |
+| Intermediate | `int_metricas_imovel` e `int_indice_prioridade_imovel` | tabela | 4.068 e 1.593 |
+| Intermediate | `int_focos_regiao_administrativa` e `int_imoveis_regiao_administrativa` | tabela | 38.944 e 21.049 |
+| Intermediate | `int_focos_territorio` (uma linha por foco, com as marcas territoriais e a RA) | tabela | 38.944 |
+| Snapshot | `snp_imovel_car` | snapshot | ver seção 4 |
+| Gold | 6 dimensões e fatos, o mart por ano e a tabela de consumo | tabela | ver seção 3 |
 
-O `dbt run` materializa as 9 tabelas e as 5 views em 9,9 s. Os cruzamentos usam `ST_Intersects` (reserva legal e APP) e `ST_DWithin` a 1.000 m (UCs). Para reproduzir:
+O `dbt build` materializa as 18 tabelas e as 6 views e roda os testes em 14,3 s. Os cruzamentos usam `ST_Intersects` (imóvel, reserva legal e APP) e `ST_DWithin` a 1.000 m (UCs). Em `int_focos_imoveis`, a junção espacial devolve só as chaves e o filtro de vigência vem depois: com os dois na mesma junção, o DuckDB trocava o operador de junção espacial por laço aninhado (160 s contra 0,1 s). Para reproduzir:
 
 ```bash
 docker compose --profile transformacao run --rm dbt build
@@ -182,15 +204,17 @@ docker compose --profile transformacao run --rm dbt build
 
 <p class="apresentador"><em>Apresentação: Elias F.</em></p>
 
-O `dbt build` executa 173 testes de dados e 1 teste unitário:
+O `dbt build` executa 259 testes de dados e 1 teste unitário:
 
 | Tipo | Qtd | O que garante |
 | :--- | ---: | :--- |
-| `not_null` e `unique` | 126 e 13 | Chaves e atributos obrigatórios. |
-| `unique_combination_of_columns` | 4 | Granularidade das tabelas de chave composta. |
-| `accepted_values` | 16 | Domínios, como `tipo_area` e situação cadastral. |
-| `relationships` | 8 | Fato para `dim_tempo` e `dim_satelite`; `int_focos_areas_protegidas` para `dim_territorio`; `int_focos_imoveis` e o mart para `dim_imovel_car`. |
-| Singulares em SQL | 6 | Volume anual, distribuição sazonal, distribuição espacial, SCD2 (2) e granularidade do mart. |
+| `not_null` e `unique` | 177 e 25 | Chaves e atributos obrigatórios. |
+| `unique_combination_of_columns` | 5 | Granularidade das tabelas de chave composta. |
+| `accepted_values` | 19 | Domínios, como `tipo_area`, situação cadastral e classificação de prioridade. |
+| `relationships` | 13 | Fatos para `dim_tempo`, `dim_satelite`, `dim_regiao_administrativa` e `dim_imovel_car`; `int_focos_areas_protegidas` para `dim_territorio`; tabela de consumo para o fato. |
+| `volume_entre` e `entre` | 3 e 10 | Volume de RAs, do fato por imóvel e da tabela de consumo; faixas de anos, componentes e índice. |
+| Contrato de esquema | 1 modelo | Nomes e tipos das colunas de `painel_imoveis_prioritarios` (`contract: enforced`). |
+| Singulares em SQL | 7 | Volume anual, distribuição sazonal, distribuição espacial, SCD2 (2), granularidade do mart e reconciliação com a MV do PostGIS. |
 
 Os três testes que detectam erro silencioso, com o valor medido na série real:
 
@@ -200,7 +224,7 @@ Os três testes que detectam erro silencioso, com o valor medido na série real:
 | Distribuição sazonal | Pelo menos 70% dos focos em maio a setembro, no total e em cada ano. | 84,4% no total; pior ano: 2020, com 70,1%. |
 | Distribuição espacial | 100% dos focos, imóveis e feições dentro do envelope do DF e com geometria válida. | Sem violações. |
 
-Resultado do `dbt build`: 189 de 189 nós aprovados (1 snapshot, 14 modelos, 173 testes de dados e 1 teste unitário), sem falhas.
+Resultado do `dbt build`: 285 de 285 nós aprovados (1 snapshot, 24 modelos, 259 testes de dados e 1 teste unitário), sem falhas. A reconciliação entre `fct_reincidencia_imovel` e a `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS devolve zero divergências: os dois lados chegam aos mesmos 1.593 imóveis, com os mesmos anos, focos e critérios.
 
 ## 7. Orquestração com Dagster: Retry e Backfill
 
@@ -217,6 +241,7 @@ docker compose --profile orquestracao up -d --build
 | `job_transformacao` | `dbt build` de todos os modelos, agendado todo dia às 03:00 (America/Sao_Paulo). |
 | `job_lote_mensal` | Uma partição mensal de `foco_calor_delta` (132 partições, jan/2015 a dez/2025), sob demanda. |
 | Retry | `RetryPolicy` com até 3 reexecuções e recuo exponencial a partir de 2 s. Falha induzida com `FALHAS_INDUZIDAS=N`. |
+| `job_frescor` | *Asset check* `frescor_sla` sobre `painel_imoveis_prioritarios`, de hora em hora ([frescor e SLA](../../frescor_sla.md)). |
 | Execuções | Uma por vez (`max_concurrent_runs: 1`), porque o DuckDB aceita um escritor por arquivo. |
 
 Retry e backfill foram executados em 10/11/2026:
@@ -248,23 +273,15 @@ Síntese da decisão sobre a modelagem analítica e a ferramenta de transformaç
 
 <p class="apresentador"><em>Apresentação: João V. Farias</em></p>
 
-A consulta lê o mart `mart_reincidencia_imovel_ano` e devolve uma linha por imóvel reincidente. Fica versionada em [`consulta_pergunta_gestao.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/consulta_pergunta_gestao.sql):
+A resposta é a tabela de consumo `painel_imoveis_prioritarios`, materializada pelo dbt: uma linha por imóvel reincidente, na ordem da fila de vistoria. A consulta final só a lê ([`consulta_pergunta_gestao.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/consulta_pergunta_gestao.sql)):
 
 ```sql
-select
-    cod_imovel,
-    arg_max(situacao, ano)          as situacao,
-    arg_max(area_ha, ano)           as area_ha,
-    anos_com_foco_protegido         as anos_com_foco,
-    lista_anos_protegidos           as lista_anos,
-    sum(total_focos)::integer       as total_focos,
-    bool_or(atinge_reserva_legal)   as atinge_reserva_legal,
-    bool_or(atinge_app)             as atinge_app,
-    bool_or(atinge_uc_1km)          as atinge_uc_1km
-from {{ ref('mart_reincidencia_imovel_ano') }}
-where imovel_reincidente
-group by cod_imovel, anos_com_foco_protegido, lista_anos_protegidos
-order by total_focos desc, cod_imovel
+select posicao, cod_imovel, regiao_administrativa, situacao, area_ha,
+       classificacao_prioridade, indice_prioridade,
+       anos_com_foco, ultimo_ano_com_foco, total_focos,
+       atinge_reserva_legal, atinge_app, atinge_uc_1km
+from {{ ref('painel_imoveis_prioritarios') }}
+order by posicao
 ```
 
 ```bash
@@ -272,13 +289,28 @@ docker compose --profile transformacao run --rm dbt show --select consulta_pergu
 docker compose --profile transformacao run --rm dbt show --select resumo_pergunta_gestao --limit 40
 ```
 
-A consulta lê o mart pronto e responde em 5,0 ms (mediana de 20 execuções no DuckDB). O resultado coincide com o da `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS (E1): 1.593 imóveis, com os mesmos focos, anos e flags em cada um (37.693 focos no total). A diferença é que o mart associa cada foco à versão cadastral do imóvel vigente na data do evento.
+O resultado coincide com o da `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS: 1.593 imóveis, com os mesmos focos, anos e critérios (37.693 focos no total). O teste `reconcilia_fato_imovel_com_mv_postgis` confere isso a cada `dbt build`.
+
+### Consulta otimizada com `EXPLAIN (ANALYZE, BUFFERS)`
+
+A consulta da MV do PostGIS (migração `V7`) levava 4,7 s. O plano mostrou três custos: a ordenação do `GROUP BY` carregava a geometria do imóvel e ia para disco (~68 MB), o teste de APP e de UC se repetia para cada par foco e imóvel, e cada teste abria polígonos de até 20 mil vértices. A migração `V9` reescreve a consulta com o mesmo resultado:
+
+1. APP e UC subdivididas (`ST_Subdivide`, até 64 vértices) em duas MVs de apoio com índice GiST;
+2. marcas de APP e de UC calculadas uma vez por foco;
+3. geometria do imóvel fora da agregação.
+
+| Plano (cache quente) | Tempo | Buffers lidos | Ordenação em disco |
+| :--- | ---: | ---: | ---: |
+| Antes (`V7`) | 4.656 ms | 2.477.999 | 68,5 MB |
+| Depois (`V9`) | 2.482 ms | 1.731.961 | 2,9 MB |
+
+Consultas e planos completos em [`docs/explain/`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/docs/explain). O `REFRESH` das três MVs leva 3,8 s.
 
 ## 10. Resultados da Pergunta de Gestão
 
 <p class="apresentador"><em>Apresentação: Gabriel Fernando</em></p>
 
-Números do [`resumo_pergunta_gestao.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/resumo_pergunta_gestao.sql), sobre os 21.047 imóveis do cadastro:
+Números do [`resumo_pergunta_gestao.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/resumo_pergunta_gestao.sql), sobre a camada Gold e os 21.047 imóveis do cadastro:
 
 | Métrica | Imóveis |
 | :--- | ---: |
@@ -296,32 +328,41 @@ Os critérios se sobrepõem: um imóvel pode atingir mais de um. Os 1.593 imóve
 
 A pergunta não filtra a situação cadastral. Dos 1.593, 1.413 estão ativos (AT), 107 pendentes (PE), 41 suspensos (SU) e 32 cancelados (CA).
 
-## 11. Imóveis com Mais Focos Reincidentes
+| Classificação (quartil do índice) | Imóveis | Índice | Com cadastro ativo | Área mediana |
+| :--- | ---: | :---: | ---: | ---: |
+| Prioridade crítica | 402 | 54,0 a 90,3 | 324 | 72,1 ha |
+| Prioridade alta | 402 | 43,4 a 53,8 | 373 | 20,2 ha |
+| Prioridade média | 392 | 33,3 a 43,3 | 356 | 43,7 ha |
+| Prioridade baixa | 397 | 6,0 a 33,2 | 360 | 89,0 ha |
+
+As RAs com mais imóveis reincidentes são Planaltina (224), Paranoá (195), Brazlândia (182), Sobradinho (124) e São Sebastião (122).
+
+## 11. Fila de Vistoria: os 10 Primeiros
 
 <p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
-Os 10 imóveis com mais focos entre 2015 e 2025:
+Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério tinham área mediana de 25.808 ha, 7 passavam de 10.000 ha e só 1 estava ativo: perímetros que cobrem áreas inteiras de UC somam mais focos por estarem expostos a mais pixels de satélite. O Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)) combina recorrência (40%), recência (30%) e dias com foco por 100 ha (30%):
 
-| Código CAR | Situação | Área (ha) | Anos | Focos | RL | APP | UC |
-| :--- | :---: | ---: | ---: | ---: | :---: | :---: | :---: |
-| `DF-5300108-AB840D7B499B43E69C3D999165FF2475` | CA | 94.379 | 11 | 3.597 | não | sim | sim |
-| `DF-5300108-1274A9532343473DB7413440C0ABF8AD` | CA | 103.415 | 11 | 3.077 | não | sim | sim |
-| `DF-5300108-B46B13EE13B14D348E3124DD0F77D8B1` | SU | 63.232 | 11 | 2.623 | não | sim | sim |
-| `DF-5300108-0AA80F34AD524112AF32834A78277A32` | PE | 16.398 | 11 | 1.370 | não | sim | sim |
-| `DF-5300108-BB7A677A0ACB4496B63D413536F8DE0E` | CA | 38.793 | 11 | 1.332 | não | sim | sim |
-| `DF-5300108-981FD2BCDD10433693BFCD3A6D69DD2E` | PE | 8.441 | 11 | 1.010 | não | sim | sim |
-| `DF-5300108-1A34898F66584106B176A816F4FDCD5E` | PE | 11.583 | 11 | 755 | não | sim | sim |
-| `DF-5300108-DCFF71953F5F40FF84B8A1D477E3E733` | SU | 35.219 | 11 | 545 | não | sim | sim |
-| `DF-5300108-6B90D19CDB024E799BD7D49DA7B4AFE8` | AT | 2.894 | 4 | 502 | não | sim | sim |
-| `DF-5300108-CCB5F18038C349AE9EEA9AD26EE5E5A6` | PE | 5.718 | 11 | 470 | sim | sim | sim |
+| # | Código CAR | RA | Situação | Área (ha) | Índice | Anos | Último ano | Dias com foco | RL | APP | UC |
+| ---: | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |
+| 1 | `DF-5300108-6425859183ED4939AFA6503E0F58A893` | Fercal | AT | 1.186,9 | 90,3 | 11 | 2025 | 173 | sim | não | sim |
+| 2 | `DF-5300108-1C027457A10442749F884EECDDCEEB19` | Lago Norte | AT | 97,3 | 86,7 | 8 | 2025 | 28 | sim | não | sim |
+| 3 | `DF-5300108-81B6CC3A9DA94507A76B776FEA97E4D8` | Gama | AT | 39,1 | 86,7 | 8 | 2025 | 12 | sim | sim | sim |
+| 4 | `DF-5300108-C8896BCB5B784F46A7EE915D3AF4596B` | Samambaia | AT | 140,8 | 84,3 | 10 | 2025 | 19 | sim | não | sim |
+| 5 | `DF-5300108-3EAB8ECE57E14848B833FD8246E2A770` | Jardim Botânico | AT | 131,1 | 83,5 | 9 | 2025 | 21 | não | sim | sim |
+| 6 | `DF-5300108-09B92D598F6247F0A7248962C905C481` | Samambaia | AT | 42,0 | 82,2 | 7 | 2025 | 10 | sim | não | sim |
+| 7 | `DF-5300108-3FF374CE468342E986F8BC355183B8BF` | Itapoã | AT | 32,0 | 82,2 | 7 | 2025 | 8 | sim | não | sim |
+| 8 | `DF-5300108-FC44A4FE087941828EB0F1A791A31C8C` | Sol Nascente e Pôr do Sol | AT | 245,5 | 81,6 | 11 | 2025 | 21 | sim | sim | sim |
+| 9 | `DF-5300108-88395A2F730346E8837BE8D70EAA58D7` | Paranoá | PE | 1.562,9 | 80,6 | 11 | 2025 | 123 | não | sim | sim |
+| 10 | `DF-5300108-0A2225C98AEE48DC8FEBB40FC4A3434B` | Paranoá | AT | 96,0 | 79,9 | 9 | 2025 | 13 | sim | não | sim |
 
-Só 1 dos 10 está com cadastro ativo, e 7 passam de 10.000 ha. Entre todos os reincidentes a mediana é de 50,9 ha e apenas 9 passam de 10.000 ha. Para vistorias, vale cruzar este ranking com a situação cadastral antes de priorizar.
+Nove dos 10 estão ativos, e todos tiveram foco em 2025. Os 9 imóveis acima de 10.000 ha continuam na lista (o primeiro na posição 61). Os pesos do índice são uma escolha do grupo e estão marcados como proposta no ADR.
 
-## 13. Auditoria do Checklist da E3
+## 12. Auditoria do Checklist da E3
 
 <p class="apresentador"><em>Apresentação: Manoel Felipe</em></p>
 
-Os oito itens da [página da E3](https://unb-bd2.github.io/PlanoEnsino/projeto/e3/), conferidos contra o repositório e contra uma execução completa do pipeline em 10/11/2026:
+Os oito itens da [página da E3](https://unb-bd2.github.io/PlanoEnsino/projeto/e3/), conferidos contra o repositório e contra uma execução completa do pipeline em 14/11/2026:
 
 | # | Requisito | Status | Evidência |
 | :---: | :--- | :---: | :--- |
@@ -329,18 +370,20 @@ Os oito itens da [página da E3](https://unb-bd2.github.io/PlanoEnsino/projeto/e
 | 2 | Transformações versionadas em dbt, organizadas em camadas | Atendido | Seção 5; `transformacao/` com staging, intermediate, snapshot e gold. |
 | 3 | Testes de esquema, volume, unicidade, integridade referencial e distribuição | Atendido | Seção 6; 189 de 189 nós aprovados no `dbt build`. |
 | 4 | Orquestração agendada, com grafo, retry e backfill demonstrado | Atendido | Seção 7; Dagster com agenda diária, `RetryPolicy` e backfill por partição executado. |
-| 5 | Consulta otimizada com `EXPLAIN (ANALYZE, BUFFERS)` antes e depois | Parcial | Só na E1: `scripts/benchmark/benchmark_pergunta_gestao.sql` e ADR 0001, com e sem índice GiST. Falta o plano antes e depois na camada analítica. |
-| 6 | Freshness e SLA declarado para ao menos uma tabela de consumo | Pendente | Não há métrica de freshness nem SLA no repositório. |
+| 5 | Consulta otimizada com `EXPLAIN (ANALYZE, BUFFERS)` antes e depois | Atendido | Seção 9; migração `V9`, de 4.656 ms para 2.482 ms e de 68,5 MB para 2,9 MB de ordenação em disco, planos em `docs/explain/`. |
+| 6 | Freshness e SLA declarado para ao menos uma tabela de consumo | Atendido | [Frescor e SLA](../../frescor_sla.md): 30 horas para `painel_imoveis_prioritarios`, verificado por `src/pipeline/frescor.py` e pelo *asset check* `frescor_sla` do Dagster, de hora em hora. |
 | 7 | ADR sobre modelagem analítica ou ferramenta de transformação | Atendido | Seção 8; ADR 0003, aceito em 09/11/2026. |
-| 8 | Painel que responda à pergunta de gestão | Atendido | O [Dashboard](../../dashboard.md) reúne os `38.945` focos com linha do tempo, `37` RAs, `84` UCs (+ faixa de 1 km), `1.537` imóveis CAR reincidentes locais (RL + UC 1 km) e comparação com a camada Gold (`1.593`, com APP) das seções 9 a 11. |
+| 8 | Painel que responda à pergunta de gestão | Atendido | O [Dashboard](../../dashboard.md) abre com a pergunta, a resposta (1.593 reincidentes, 402 em prioridade crítica) e a fila de vistoria, lidas de `painel_imoveis_prioritarios` pelo export `gold.json`, com a data de geração da Gold. |
 
-## 14. Artefatos e Entregáveis
+## 13. Artefatos e Entregáveis
 
 <p class="apresentador"><em>Apresentação: Gabriel Souza</em></p>
 
 Código, testes e documentos da Entrega 3, versionados no repositório:
 
 - **[Decisão de Arquitetura 0003](../../adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md):** modelagem dimensional e ferramenta de transformação, com alternativas e medições.
+- **[Decisão de Arquitetura 0006](../../adr/06-indice-de-prioridade-de-vistoria.md):** Índice de Prioridade de Vistoria, com cinco critérios de ordenação medidos.
+- **[Frescor e SLA](../../frescor_sla.md)** e **[planos `EXPLAIN`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/docs/explain)** da consulta otimizada.
 - **[Esquema dimensional Gold](../../modelagem/esquema_dimensional_gold.md):** granularidades e decisões de modelagem.
 - **[Projeto dbt (`transformacao/`)](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao):** staging, intermediate, snapshot, gold, testes e consultas em `analyses/`.
 - **[Consulta final](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/consulta_pergunta_gestao.sql) e [resumo da pergunta de gestão](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/analyses/resumo_pergunta_gestao.sql):** consultas que geram os números das seções 9 a 11.

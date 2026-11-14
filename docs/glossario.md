@@ -42,7 +42,7 @@ Sistema geodésico global de referência (World Geodetic System 1984) expresso e
 
 Padrão de arquitetura de dados (medallion architecture) que organiza a ingestão em estágios sucessivos de qualidade: Bronze guarda o dado bruto exatamente como a fonte entregou, sem transformação; Gold guarda o dado já validado, tipado e pronto para consulta[^21].
 
-- **Uso no projeto:** a camada Bronze é o arquivo bruto em `data/raw` e `data/processed` (CSV do INPE, GeoJSON do IBRAM/SISDIA, shapefile zipado do SICAR), fora do banco. A camada Gold é o schema `public` do PostgreSQL: as tabelas finais com SRID fixo, chaves, restrições `ST_IsValid` e índices GiST, onde a consulta da pergunta de gestão roda direto. Só os focos passam por um estágio intermediário dentro do banco (`staging.foco_calor_raw`), porque chegam como coordenadas soltas em vez de geometria pronta. Diagrama completo na seção "Pipeline: da fonte pública à camada Gold" da [Entrega 1](../entrega/01/README.md#pipeline-da-fonte-publica-a-camada-gold).
+- **Uso no projeto:** a camada Bronze é o arquivo bruto em `data/raw` e `data/processed` (CSV do INPE, GeoJSON do IBRAM/SISDIA, shapefile zipado do SICAR), fora do banco. A camada Gold é o schema `public` do PostgreSQL: as tabelas finais com SRID fixo, chaves, restrições `ST_IsValid` e índices GiST, onde a consulta da pergunta de gestão roda direto. Só os focos passam por um estágio intermediário dentro do banco (`staging.foco_calor_raw`), porque chegam como coordenadas soltas em vez de geometria pronta. Diagrama completo na seção "Pipeline: da fonte pública à camada Gold" da [Entrega 1](entrega/01/README.md#pipeline-da-fonte-publica-a-camada-gold).
 
 ### PostGIS
 

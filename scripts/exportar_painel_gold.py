@@ -262,7 +262,7 @@ def exportar(con, projeto_dbt: Path, sla_horas: float) -> dict:
         "sla_frescor_horas": sla_horas,
         "indice": {
             "nome": "Indice de Prioridade de Vistoria (IPV)",
-            "adr": "docs/adr/04-indice-de-prioridade-de-vistoria.md",
+            "adr": "docs/adr/06-indice-de-prioridade-de-vistoria.md",
             "parametros": ler_vars_do_indice(projeto_dbt),
         },
         "gold_referencia": referencia,

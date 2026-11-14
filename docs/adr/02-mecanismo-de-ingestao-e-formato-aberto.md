@@ -79,7 +79,7 @@ Todas as medições desta seção foram obtidas com os scripts de benchmark do r
 ### 1. Benchmark de Latência: CDC vs Lote vs Opção Nula
 
 - Script: [`scripts/benchmark/benchmark_ingestao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_ingestao.py)
-- Relatório detalhado: [`scripts/benchmark/resultados_latencia.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_latencia.md)
+- Relatório detalhado: gerado em `scripts/benchmark/resultados_latencia.md` por [`benchmark_ingestao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_ingestao.py) (não versionado)
 
 | Mecanismo | Latência medida | Frequência típica | Granularidade | Impacto no OLTP |
 | :--- | :--- | :--- | :--- | :--- |
@@ -96,7 +96,7 @@ O CDC entrega uma latência de 31,97 ms lendo o WAL de forma assíncrona, sem tr
 ### 2. Benchmark de Compressão: Snappy vs ZSTD
 
 - Script: [`scripts/benchmark/benchmark_compressao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_compressao.py)
-- Relatório detalhado: [`scripts/benchmark/resultados_compressao.md`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/resultados_compressao.md)
+- Relatório detalhado: gerado em `scripts/benchmark/resultados_compressao.md` por [`benchmark_compressao.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/benchmark/benchmark_compressao.py) (não versionado)
 - Amostra: partição real de focos do DF (`ano=2024/mes=08`, com 1.183 registros).
 
 | Algoritmo | Tamanho em disco | Redução vs bruto em memória | Tempo de escrita | Consulta no DuckDB |

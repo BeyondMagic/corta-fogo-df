@@ -1,6 +1,6 @@
 # Transformações dbt-duckdb
 
-Pipeline declarativo em `dbt-core` com adapter `dbt-duckdb`. Consome as tabelas abertas Delta Lake (`foco_calor` e `imovel_car`) do volume `lakehouse` via `delta_scan` e anexa em modo somente leitura as camadas territoriais curadas no PostGIS (`unidade_conservacao`, `area_preservacao_permanente`, `reserva_legal`) via extensão `postgres` do DuckDB. O banco analítico resultante é persistido em `/app/data/warehouse/corta_fogo.duckdb` (volume nomeado `warehouse`).
+Pipeline declarativo em `dbt-core` com adapter `dbt-duckdb`. Consome as tabelas abertas Delta Lake (`foco_calor` e `imovel_car`) do volume `lakehouse` via `delta_scan` e anexa em modo somente leitura as camadas territoriais curadas no PostGIS (`unidade_conservacao`, `area_preservacao_permanente`, `reserva_legal`, `regiao_administrativa`) via extensão `postgres` do DuckDB. O banco analítico resultante é persistido em `/app/data/warehouse/corta_fogo.duckdb` (volume nomeado `warehouse`).
 
 ## Como executar
 
@@ -29,26 +29,37 @@ Descrições de colunas e contratos de cada modelo estão em [`models/staging/_s
 | `staging` | `stg_unidades_conservacao` | `view` | Uma linha por polígono de Unidade de Conservação (`id_uc`). |
 | `staging` | `stg_areas_preservacao_permanente` | `view` | Uma linha por polígono de Área de Preservação Permanente (`id_app`). |
 | `staging` | `stg_reservas_legais` | `view` | Uma linha por feição de Reserva Legal (`id_reserva`). |
-| `intermediate` | `int_focos_imoveis` | `table` | Uma linha por par (`id_foco`, `cod_imovel`) de imóvel ativo cujo polígono intersecta o foco. |
+| `staging` | `stg_regioes_administrativas` | `view` | Uma linha por Região Administrativa do DF (`id_ra`). |
+| `intermediate` | `int_imoveis_versoes` | `table` | Uma linha por versão cadastral do imóvel (`sk_imovel`), com a vigência. Base da `dim_imovel_car` e do cruzamento espacial. |
+| `intermediate` | `int_focos_imoveis` | `table` | Uma linha por par (`id_foco`, `cod_imovel`) em que o foco está dentro da versão do imóvel vigente na data do evento. |
 | `intermediate` | `int_focos_areas_protegidas` | `table` | Uma linha por par (`id_foco`, `tipo_area`, `id_feicao`) em Reserva Legal, APP ou faixa de 1 km de UC. |
-| `intermediate` | `int_focos_territorio` | `table` | Uma linha por detecção de foco (`id_foco`), consolidando flags territoriais e contagem de imóveis atingidos. |
-| `snapshots` | `snp_imovel_car` | `snapshot` | Uma linha por versão observada de cada imóvel (`cod_imovel`, `dbt_valid_from`), estratégia `timestamp` sobre `data_hora_ingestao`. |
+| `intermediate` | `int_focos_protegidos_imovel` | `table` | Uma linha por par (`id_foco`, `cod_imovel`) que atende a regra da pergunta de gestão. |
+| `intermediate` | `int_metricas_imovel` | `table` | Uma linha por imóvel com foco em área protegida: anos, dias e focos por critério. |
+| `intermediate` | `int_indice_prioridade_imovel` | `table` | Uma linha por imóvel reincidente: componentes, Índice de Prioridade de Vistoria e quartil. |
+| `intermediate` | `int_focos_regiao_administrativa` | `table` | Uma linha por foco, com a RA do ponto. |
+| `intermediate` | `int_imoveis_regiao_administrativa` | `table` | Uma linha por versão de imóvel, com a RA de um ponto interno do perímetro. |
+| `intermediate` | `int_focos_territorio` | `table` | Uma linha por detecção de foco (`id_foco`), consolidando marcas territoriais, RA e contagem de imóveis. |
+| `snapshots` | `snp_imovel_car` | `snapshot` | Uma linha por observação de cada imóvel (`cod_imovel`, `dbt_valid_from`), estratégia `timestamp` sobre `data_hora_ingestao`. |
 | `gold` | `dim_imovel_car` | `table` | Uma linha por versão cadastral de imóvel (`sk_imovel`), com `dbt_valid_from`, `dbt_valid_to` (sempre preenchidos) e `is_current`. |
 | `gold` | `dim_tempo` | `table` | Uma linha por data civil 2015–2025, com `is_estacao_seca` (maio–setembro). |
 | `gold` | `dim_satelite` | `table` | Uma linha por satélite detector, com `is_referencia`. |
 | `gold` | `dim_territorio` | `table` | Uma linha por feição UC/APP/RL; `sk_territorio` estável (hash tipo+WKT); amortecimento 1 km nas UCs. |
-| `gold` | `fato_foco_calor` | `table` | Uma linha por detecção de foco (`id_foco`); chaves para tempo e satélite; flags territoriais. |
-| `gold` | `mart_reincidencia_imovel_ano` | `table` | Uma linha por imóvel×ano com foco em área protegida; flag `imovel_reincidente` (≥ 2 anos). |
+| `gold` | `dim_regiao_administrativa` | `table` | Uma linha por Região Administrativa (37). |
+| `gold` | `fato_foco_calor` | `table` | Uma linha por detecção de foco (`id_foco`); chaves para tempo, satélite e RA; marcas territoriais. |
+| `gold` | `fct_reincidencia_imovel` | `table` | Uma linha por imóvel com foco em área protegida; contagens, `imovel_reincidente` e o índice de prioridade. |
+| `gold` | `mart_reincidencia_imovel_ano` | `table` | Uma linha por imóvel×ano com foco em área protegida; marca `imovel_reincidente` (≥ 2 anos). |
+| `gold` | `painel_imoveis_prioritarios` | `table` | Tabela de consumo: uma linha por imóvel reincidente, na ordem da fila de vistoria, com contrato de esquema. |
 
 Especificação conceitual: [`docs/modelagem/esquema_dimensional_gold.md`](../docs/modelagem/esquema_dimensional_gold.md).
 
-A consulta [`analyses/conferencia_mv_gold.sql`](analyses/conferencia_mv_gold.sql) reproduz a regra da `gold.mv_imoveis_reincidentes_areas_protegidas` (migração `V7`) sobre os modelos `int_focos_imoveis` e `int_focos_areas_protegidas` para conferência de contagem.
+O teste [`tests/reconcilia_fato_imovel_com_mv_postgis.sql`](tests/reconcilia_fato_imovel_com_mv_postgis.sql) compara `fct_reincidencia_imovel` com a `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS (migração `V9`), imóvel a imóvel, em anos, focos e critérios atingidos. A ordem da fila segue o [ADR 0006](../docs/adr/06-indice-de-prioridade-de-vistoria.md); pesos e parâmetros do índice são `vars` em [`dbt_project.yml`](dbt_project.yml).
 
 ## Histórico de imóveis (SCD Tipo 2)
 
 O snapshot [`snp_imovel_car`](snapshots/snp_imovel_car.yml) preserva retificações de área, alterações de perímetro e mudanças de situação cadastral (inclusive cancelamentos, via `is_excluido`) sem sobrescrever versões anteriores. A dimensão [`dim_imovel_car`](models/marts/dim_imovel_car.sql) é a interface de consumo:
 
-- descarta versões idênticas geradas por reentrega do CDC (mesmo `lsn_origem`);
+- uma versão só existe quando o conteúdo do imóvel muda: reentregas do CDC e recargas do OLTP com os mesmos dados não abrem versão;
+- a lógica fica em [`int_imoveis_versoes`](models/intermediate/int_imoveis_versoes.sql), que também alimenta o cruzamento espacial (o foco cruza com a geometria da versão vigente na data do evento);
 - `sk_imovel` é a chave substituta por versão (`md5(cod_imovel, lsn_origem)`);
 - `dbt_valid_from` da primeira versão de cada imóvel é aberto em `var('inicio_vigencia_aberta')` (1900-01-01) e `dbt_valid_to` da versão corrente é fechado em `var('fim_vigencia_aberta')` (9999-12-31), para que o cruzamento com focos use sempre `dbt_valid_from <= data_hora_evento < dbt_valid_to`; o instante real em que cada versão foi gravada fica em `data_hora_ingestao`.
 
@@ -75,9 +86,17 @@ Comando para execução dos testes:
 docker compose --profile transformacao run --rm dbt test
 ```
 
+## Frescor
+
+`painel_imoveis_prioritarios.gerado_em` é o instante do `dbt build`. O SLA de 30 horas e a verificação estão em [`docs/frescor_sla.md`](../docs/frescor_sla.md):
+
+```bash
+docker compose --profile transformacao run --rm frescor
+```
+
 ## Limitações
 
-- Chaves `IDENTITY` das feições territoriais (`id_uc`, `id_app`, `id_reserva`) mudam a cada recarga completa do banco (`down -v`): ver descrição de `id_feicao` em [`models/intermediate/_intermediate.yml`](models/intermediate/_intermediate.yml).
-- O cruzamento foco por imóvel em `int_focos_imoveis` utiliza o perímetro atual da tabela Delta `imovel_car`; a vinculação com a versão histórica fica para a camada Gold (Issue #18), com `dim_imovel_car` e a validade descrita acima.
+- Chaves `IDENTITY` das feições territoriais (`id_uc`, `id_app`, `id_reserva`, `id_ra`) mudam a cada recarga completa do banco (`down -v`): ver descrição de `id_feicao` em [`models/intermediate/_intermediate.yml`](models/intermediate/_intermediate.yml).
 - A tabela Delta `imovel_car` guarda só o estado mais recente de cada imóvel. Várias mudanças do mesmo imóvel entre duas execuções do snapshot viram uma única versão nova (a última); a granularidade do histórico é a frequência de execução do `dbt build`.
 - A primeira versão de cada imóvel é a observada na carga inicial do CDC e é assumida como vigente para todo o período anterior (focos desde 2015), pois não há histórico cadastral anterior à carga.
+- O ano usado na reincidência é o ano civil UTC do evento; a `dim_tempo` usa a data local. Um foco entre 21:00 e 23:59 de 31/12 (horário de Brasília) conta no ano seguinte. Na série atual nenhum foco cai nessa janela.

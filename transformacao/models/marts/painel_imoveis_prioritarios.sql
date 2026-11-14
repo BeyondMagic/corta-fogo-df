@@ -2,7 +2,7 @@
 -- rurais do DF tiveram focos de calor reincidentes em reserva legal, APP ou a ate 1 km
 -- de UC entre 2015 e 2025", na ordem em que devem ser vistoriados.
 -- Uma linha por imovel reincidente que ainda existe no cadastro; posicao 1 e o de maior
--- Indice de Prioridade de Vistoria (ADR 0004). Imovel com cadastro cancelado, suspenso
+-- Indice de Prioridade de Vistoria (ADR 0006). Imovel com cadastro cancelado, suspenso
 -- ou pendente entra na fila e fica marcado em situacao e cadastro_ativo.
 -- gerado_em e o instante da execucao do dbt: base da metrica de frescor (docs/frescor_sla.md).
 

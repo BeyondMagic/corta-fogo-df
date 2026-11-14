@@ -1,25 +1,12 @@
--- Numeros consolidados da pergunta de gestao (Entrega 3), calculados sobre
--- mart_reincidencia_imovel_ano. Complementa consulta_pergunta_gestao.sql.
+-- Numeros consolidados da pergunta de gestao, sobre fct_reincidencia_imovel e a tabela
+-- de consumo painel_imoveis_prioritarios. Complementa consulta_pergunta_gestao.sql.
 -- Cada linha e uma metrica: contagens de imoveis (distintos por cod_imovel) e de focos.
 -- Os criterios (reserva legal, APP, UC a 1 km) se sobrepoem: um imovel pode atingir mais de um.
 --
 -- Execucao: docker compose --profile transformacao run --rm dbt show --select resumo_pergunta_gestao --limit 40
 
-with por_imovel as (
-    select
-        cod_imovel,
-        max(anos_com_foco_protegido)    as anos_com_foco,
-        bool_or(imovel_reincidente)     as reincidente,
-        sum(total_focos)::bigint        as total_focos,
-        bool_or(atinge_reserva_legal)   as atinge_reserva_legal,
-        bool_or(atinge_app)             as atinge_app,
-        bool_or(atinge_uc_1km)          as atinge_uc_1km
-    from {{ ref('mart_reincidencia_imovel_ano') }}
-    group by cod_imovel
-),
-
-reincidentes as (
-    select * from por_imovel where reincidente
+with reincidentes as (
+    select * from {{ ref('painel_imoveis_prioritarios') }}
 ),
 
 metricas as (
@@ -28,7 +15,7 @@ metricas as (
     where is_current and not is_excluido
 
     union all
-    select 2, 'imoveis_com_foco_em_area_protegida', count(*) from por_imovel
+    select 2, 'imoveis_com_foco_em_area_protegida', count(*) from {{ ref('fct_reincidencia_imovel') }}
 
     union all
     select 3, 'imoveis_reincidentes', count(*) from reincidentes
@@ -44,6 +31,9 @@ metricas as (
 
     union all
     select 7, 'focos_em_imoveis_reincidentes', coalesce(sum(total_focos), 0) from reincidentes
+
+    union all
+    select 8, 'reincidentes_em_prioridade_critica', count(*) filter (where classificacao_prioridade = 'PRIORIDADE CRITICA') from reincidentes
 
     union all
     select 10 + anos_com_foco, 'reincidentes_com_' || anos_com_foco || '_anos_de_foco', count(*)

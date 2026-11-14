@@ -15,3 +15,9 @@ O plano de ensino prevê cinco decisões estruturais ao longo do semestre, uma p
 | **0003** | [Modelagem dimensional da camada analítica e ferramenta declarativa de transformação](03-modelagem-dimensional-e-ferramenta-de-transformacao.md) | [E3](https://unb-bd2.github.io/PlanoEnsino/adr/03/) | **Aceito** | 2026-11-09 |
 | **0004** | Mecanismo de disponibilização de dados: camada semântica e consumo                                    | [E4](https://unb-bd2.github.io/PlanoEnsino/adr/04/) | Planejado  | Semana 16  |
 | **0005** | Decisão arquitetural de maior impacto da equipe                                                       |                        Livre                        | Planejado  | A definir  |
+
+Decisões adicionais, fora das cinco do plano de ensino:
+
+| ID       | Decisão | Complementa | Status | Data |
+| :------- | :------ | :---------: | :----: | :--: |
+| **0006** | [Índice de Prioridade de Vistoria para ordenar os imóveis reincidentes](06-indice-de-prioridade-de-vistoria.md) | ADR 0003 | **Proposto** | 2026-11-14 |

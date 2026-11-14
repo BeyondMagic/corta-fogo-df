@@ -17,7 +17,9 @@ A documentação detalhada do projeto está disponível na pasta `docs/` e publi
 - [Site da documentação](https://beyondmagic.github.io/corta-fogo-df/)
 - [Entrega 1: Fonte Transacional e Sistema de Origem](docs/entrega/01/README.md): escopo da primeira etapa, modelo relacional e espacial, histórico e procedimentos de carga.
 - [Esquema da tabela aberta (E2)](docs/modelagem/esquema_tabela_aberta.md): contrato Delta Lake, partição temporal e evolução de esquema.
-- [Esquema dimensional Gold (E3)](docs/modelagem/esquema_dimensional_gold.md): fato atômica, dimensões e mart de reincidência (dbt-duckdb).
+- [Esquema dimensional Gold (E3)](docs/modelagem/esquema_dimensional_gold.md): fato atômica, fato por imóvel, dimensões e a tabela de consumo do painel (dbt-duckdb).
+- [Índice de Prioridade de Vistoria (ADR 0006)](docs/adr/06-indice-de-prioridade-de-vistoria.md): como a fila de imóveis reincidentes é ordenada.
+- [Frescor e SLA](docs/frescor_sla.md): SLA de 30 horas da tabela de consumo e como é verificado.
 - [Registros de Decisões de Arquitetura (ADRs)](docs/adr/README.md): justificativas técnicas para escolhas de banco de dados, extensões espaciais e projeção cartográfica.
 - [Glossário Técnico](docs/glossario.md): conceitos espaciais, cadastrais e referências bibliográficas.
 
@@ -40,11 +42,13 @@ O comando inicia o PostgreSQL 16 com PostGIS na porta 5434 (com `wal_level=logic
 
 | Serviço | O que faz |
 | :--- | :--- |
-| `load`, `load_camadas` | Carga no PostgreSQL dos focos de calor e das camadas territoriais (UC, APP, imóveis do CAR, reserva legal). |
+| `load`, `load_camadas` | Carga no PostgreSQL dos focos de calor e das camadas territoriais (UC, APP, Regiões Administrativas, imóveis do CAR, reserva legal). |
 | `refresh_gold` | Atualiza a camada Gold materializada, depois das duas cargas. |
 | `batch_ingest` | Ingestão em lote idempotente dos focos de calor na tabela Delta `foco_calor`, particionada por `ano/mes`. |
 | `cdc_consumer` | Depois do `load_camadas`: cria o slot `cdc_imovel`, faz o snapshot de `imovel_car` na tabela Delta e passa a consumir as mudanças do PostgreSQL. |
-| `dbt` (profile `transformacao`) | Executa os modelos `staging` e `intermediate` no DuckDB (`docker compose --profile transformacao run --rm dbt run`), gravando em `warehouse`. Ver [`transformacao/README.md`](transformacao/README.md). |
+| `dbt` (profile `transformacao`) | Executa os modelos e os testes no DuckDB (`docker compose --profile transformacao run --rm dbt build`), gravando em `warehouse`. Ver [`transformacao/README.md`](transformacao/README.md). |
+| `frescor` (profile `transformacao`) | Verifica o SLA de 30 horas da tabela de consumo `painel_imoveis_prioritarios`. Sai com código 1 fora do SLA. |
+| `exportar_painel` (profile `transformacao`) | Exporta a camada Gold para `docs/assets/dados_dashboard/gold.json`, o arquivo que o dashboard lê. |
 
 As tabelas Delta ficam no volume nomeado `lakehouse`. O volume é removido junto com o banco pelo `down -v`, para o Delta nunca sobreviver a um banco recriado (o `MERGE` do `cdc_consumer` ignora eventos com LSN menor que o já gravado).
 
@@ -69,6 +73,18 @@ docker compose run --rm verificar_lakehouse
 ```
 
 A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor`, se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL ou se alguma geometria do Delta tiver sido gravada com o marcador `unchanged-toast-datum`. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
+
+### Camada Gold, frescor e dashboard
+
+Depois do `docker compose up`:
+
+```bash
+docker compose --profile transformacao run --rm dbt build          # modelos, snapshot e testes
+docker compose --profile transformacao run --rm frescor            # SLA da tabela de consumo
+docker compose --profile transformacao run --rm exportar_painel    # atualiza o gold.json do dashboard
+```
+
+A resposta à pergunta de gestão é a tabela `gold.painel_imoveis_prioritarios`: os 1.593 imóveis reincidentes, na ordem da fila de vistoria.
 
 ### Orquestração (Dagster)
 

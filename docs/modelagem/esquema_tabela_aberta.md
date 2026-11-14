@@ -5,7 +5,7 @@ icon: material/table
 # :material-table: Esquema da tabela aberta (E2)
 
 Entrega da Issue #02 (Modelagem). Contrato máquina: [`contrato_tabela_aberta.yaml`](contrato_tabela_aberta.yaml).
-Arquitetura: `arquitetura-E2/arquitetura.md`.
+Arquitetura: `arquitetura.md`, na raiz do repositório.
 
 ## Escopo
 

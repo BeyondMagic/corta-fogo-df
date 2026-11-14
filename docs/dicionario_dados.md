@@ -192,7 +192,7 @@ Visão materializada relacional na camada Gold do banco PostgreSQL (migração `
 
 ## 2. Camada Silver (Armazenamento Aberto em Formato Delta Lake)
 
-A camada Silver consolida os dados na arquitetura Lakehouse aberta sob formato Delta Lake (`data/delta/`), desacoplando o armazenamento analítico do processamento transacional. Suas estruturas são regidas pelo contrato declarativo versionado [`contrato_tabela_aberta.yaml`](contrato_tabela_aberta.yaml).
+A camada Silver consolida os dados na arquitetura Lakehouse aberta sob formato Delta Lake (`data/delta/`), desacoplando o armazenamento analítico do processamento transacional. Suas estruturas são regidas pelo contrato declarativo versionado [`contrato_tabela_aberta.yaml`](modelagem/contrato_tabela_aberta.yaml).
 
 ### 2.1 `foco_calor_analitico` (Delta Lake)
 
