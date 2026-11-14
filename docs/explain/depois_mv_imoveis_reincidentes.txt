@@ -1,0 +1,80 @@
+                                                                                                                           QUERY PLAN
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Hash Join  (cost=2630350.42..2632015.15 rows=7016 width=640) (actual time=2456.431..2465.637 rows=1593 loops=1)
+   Hash Cond: ((i.cod_imovel)::text = (a.cod_imovel)::text)
+   Buffers: shared hit=1731961, temp read=2662 written=2689
+   CTE marcas_foco
+     ->  Seq Scan on foco_calor f_1  (cost=0.00..1615407.42 rows=38945 width=10) (actual time=0.151..738.969 rows=38945 loops=1)
+           Filter: ((data_hora_evento >= '2015-01-01 00:00:00+00'::timestamp with time zone) AND (data_hora_evento <= '2025-12-31 23:59:59+00'::timestamp with time zone))
+           Buffers: shared hit=185053
+           SubPlan 1
+             ->  Index Scan using ix_mv_app_subdividida_geom on mv_app_subdividida a_1  (cost=0.15..20.66 rows=1 width=0) (actual time=0.011..0.011 rows=0 loops=38945)
+                   Index Cond: (geom && f_1.geom)
+                   Filter: st_intersects(f_1.geom, geom)
+                   Rows Removed by Filter: 0
+                   Buffers: shared hit=84286
+           SubPlan 2
+             ->  Index Scan using ix_mv_uc_subdividida_geom on mv_uc_subdividida u  (cost=0.27..20.78 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=38945)
+                   Index Cond: (geom && st_expand(f_1.geom, '1000'::double precision))
+                   Filter: st_dwithin(f_1.geom, geom, '1000'::double precision)
+                   Rows Removed by Filter: 0
+                   Buffers: shared hit=100214
+   ->  Seq Scan on imovel_car i  (cost=0.00..1609.47 rows=21047 width=597) (actual time=450.771..453.795 rows=21047 loops=1)
+         Buffers: shared hit=1399
+   ->  Hash  (cost=1014855.30..1014855.30 rows=7016 width=85) (actual time=2005.591..2007.510 rows=1593 loops=1)
+         Buckets: 8192  Batches: 1  Memory Usage: 251kB
+         Buffers: shared hit=1725921, temp read=2662 written=2689
+         ->  Subquery Scan on a  (cost=1010802.79..1014855.30 rows=7016 width=85) (actual time=1888.913..2006.325 rows=1593 loops=1)
+               Buffers: shared hit=1724889, temp read=2662 written=2689
+               ->  GroupAggregate  (cost=1010802.79..1014785.14 rows=7016 width=85) (actual time=1888.911..2006.172 rows=1593 loops=1)
+                     Group Key: i_1.cod_imovel
+                     Filter: (count(DISTINCT ((date_part('year'::text, f.data_hora_evento))::integer)) >= 2)
+                     Rows Removed by Filter: 2475
+                     Buffers: shared hit=1724889, temp read=2662 written=2689
+                     ->  Sort  (cost=1010802.79..1011105.42 rows=121052 width=64) (actual time=1888.815..1946.131 rows=40682 loops=1)
+                           Sort Key: i_1.cod_imovel, ((date_part('year'::text, f.data_hora_evento))::integer)
+                           Sort Method: external merge  Disk: 2912kB
+                           Buffers: shared hit=1625496, temp read=2662 written=2689
+                           ->  Hash Join  (cost=992113.49..996029.32 rows=121052 width=64) (actual time=515.308..1298.744 rows=40682 loops=1)
+                                 Hash Cond: (m.id_foco = f.id_foco)
+                                 Join Filter: ((r.id_reserva IS NOT NULL) OR m.em_app OR m.ate_1km_uc)
+                                 Rows Removed by Join Filter: 35434
+                                 Buffers: shared hit=560730, temp read=2298 written=2324
+                                 ->  CTE Scan on marcas_foco m  (cost=0.00..778.90 rows=38945 width=10) (actual time=0.154..752.313 rows=38945 loops=1)
+                                       Buffers: shared hit=185053
+                                 ->  Hash  (cost=989299.34..989299.34 rows=121052 width=62) (actual time=514.714..516.630 rows=76116 loops=1)
+                                       Buckets: 131072  Batches: 2  Memory Usage: 4093kB
+                                       Buffers: shared hit=375677, temp read=1886 written=2237
+                                       ->  Gather  (cost=4147.36..989299.34 rows=121052 width=62) (actual time=353.208..498.845 rows=76116 loops=1)
+                                             Workers Planned: 1
+                                             Workers Launched: 1
+                                             Buffers: shared hit=375677, temp read=1886 written=1912
+                                             ->  Parallel Hash Left Join  (cost=3147.36..976194.14 rows=71207 width=62) (actual time=345.143..478.252 rows=38058 loops=2)
+                                                   Hash Cond: ((i_1.cod_imovel)::text = (r.cod_imovel)::text)
+                                                   Join Filter: st_intersects(f.geom, r.geom)
+                                                   Rows Removed by Join Filter: 15178
+                                                   Buffers: shared hit=375677, temp read=1886 written=1912
+                                                   ->  Nested Loop  (cost=0.69..632655.76 rows=71207 width=90) (actual time=77.930..297.872 rows=38058 loops=2)
+                                                         Buffers: shared hit=138071
+                                                         ->  Parallel Index Scan using imovel_car_pkey on imovel_car i_1  (cost=0.41..6791.03 rows=12381 width=568) (actual time=77.793..85.213 rows=10524 loops=2)
+                                                               Buffers: shared hit=20740
+                                                         ->  Index Scan using ix_foco_calor_geom on foco_calor f  (cost=0.28..50.51 rows=4 width=48) (actual time=0.014..0.020 rows=4 loops=21047)
+                                                               Index Cond: (geom && i_1.geom)
+                                                               Filter: ((data_hora_evento >= '2015-01-01 00:00:00+00'::timestamp with time zone) AND (data_hora_evento <= '2025-12-31 23:59:59+00'::timestamp with time zone) AND st_intersects(geom, i_1.geom))
+                                                               Rows Removed by Filter: 3
+                                                               Buffers: shared hit=116638
+                                                   ->  Parallel Hash  (cost=1371.41..1371.41 rows=7941 width=1698) (actual time=6.562..6.563 rows=6750 loops=2)
+                                                         Buckets: 8192  Batches: 4  Memory Usage: 2752kB
+                                                         Buffers: shared hit=6040, temp written=968
+                                                         ->  Parallel Seq Scan on reserva_legal r  (cost=0.00..1371.41 rows=7941 width=1698) (actual time=0.009..2.886 rows=13499 loops=1)
+                                                               Buffers: shared hit=1292
+ Planning:
+   Buffers: shared hit=683
+ Planning Time: 9.737 ms
+ JIT:
+   Functions: 83
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 3.272 ms, Inlining 108.779 ms, Optimization 289.444 ms, Emission 208.255 ms, Total 609.749 ms
+ Execution Time: 2481.706 ms
+(76 rows)
+

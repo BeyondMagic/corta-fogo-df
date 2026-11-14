@@ -1,0 +1,61 @@
+                                                                                                                 QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=2828150.52..2845626.60 rows=7016 width=640) (actual time=4388.244..4638.475 rows=1593 loops=1)
+   Group Key: i.cod_imovel
+   Filter: (count(DISTINCT (date_part('year'::text, f.data_hora_evento))::integer) >= 2)
+   Rows Removed by Filter: 2475
+   Buffers: shared hit=2477999, temp read=28244 written=28297
+   ->  Gather Merge  (cost=2828150.52..2841946.89 rows=121052 width=625) (actual time=4388.171..4544.144 rows=54557 loops=1)
+         Workers Planned: 1
+         Workers Launched: 1
+         Buffers: shared hit=2356574, temp read=28244 written=28297
+         ->  Sort  (cost=2827150.51..2827328.53 rows=71207 width=625) (actual time=4347.960..4421.034 rows=27278 loops=2)
+               Sort Key: i.cod_imovel, ((date_part('year'::text, f.data_hora_evento))::integer)
+               Sort Method: external merge  Disk: 35792kB
+               Buffers: shared hit=2281073, temp read=28244 written=28297
+               Worker 0:  Sort Method: external merge  Disk: 32696kB
+               ->  Nested Loop Left Join  (cost=3147.77..2801450.82 rows=71207 width=625) (actual time=584.598..3948.671 rows=27278 loops=2)
+                     Filter: ((r.id_reserva IS NOT NULL) OR (a.id_app IS NOT NULL) OR (u.id_uc IS NOT NULL))
+                     Rows Removed by Filter: 17717
+                     Buffers: shared hit=1288331, temp read=15215 written=15236
+                     ->  Nested Loop Left Join  (cost=3147.50..1890552.39 rows=71207 width=653) (actual time=584.558..3032.910 rows=38062 loops=2)
+                           Buffers: shared hit=623139, temp read=15215 written=15236
+                           ->  Parallel Hash Left Join  (cost=3147.36..985790.14 rows=71207 width=649) (actual time=584.509..888.450 rows=38058 loops=2)
+                                 Hash Cond: ((i.cod_imovel)::text = (r.cod_imovel)::text)
+                                 Join Filter: st_intersects(f.geom, r.geom)
+                                 Rows Removed by Join Filter: 15178
+                                 Buffers: shared hit=375726, temp read=15215 written=15236
+                                 ->  Nested Loop  (cost=0.69..632655.76 rows=71207 width=645) (actual time=0.188..214.369 rows=38058 loops=2)
+                                       Buffers: shared hit=138096
+                                       ->  Parallel Index Scan using imovel_car_pkey on imovel_car i  (cost=0.41..6791.03 rows=12381 width=597) (actual time=0.027..7.432 rows=10524 loops=2)
+                                             Buffers: shared hit=20741
+                                       ->  Index Scan using ix_foco_calor_geom on foco_calor f  (cost=0.28..50.51 rows=4 width=48) (actual time=0.013..0.019 rows=4 loops=21047)
+                                             Index Cond: (geom && i.geom)
+                                             Filter: ((data_hora_evento >= '2015-01-01 00:00:00+00'::timestamp with time zone) AND (data_hora_evento <= '2025-12-31 23:59:59+00'::timestamp with time zone) AND st_intersects(geom, i.geom))
+                                             Rows Removed by Filter: 3
+                                             Buffers: shared hit=116662
+                                 ->  Parallel Hash  (cost=1371.41..1371.41 rows=7941 width=1698) (actual time=312.572..312.573 rows=6750 loops=2)
+                                       Buckets: 8192  Batches: 4  Memory Usage: 2752kB
+                                       Buffers: shared hit=6080, temp written=976
+                                       ->  Parallel Seq Scan on reserva_legal r  (cost=0.00..1371.41 rows=7941 width=1698) (actual time=292.202..293.660 rows=6750 loops=2)
+                                             Buffers: shared hit=1292
+                           ->  Index Scan using ix_area_preservacao_permanente_geom on area_preservacao_permanente a  (cost=0.14..12.70 rows=1 width=2003) (actual time=0.056..0.056 rows=0 loops=76116)
+                                 Index Cond: (geom && f.geom)
+                                 Filter: st_intersects(f.geom, geom)
+                                 Rows Removed by Filter: 0
+                                 Buffers: shared hit=247413
+                     ->  Index Scan using ix_unidade_conservacao_geom on unidade_conservacao u  (cost=0.26..12.78 rows=1 width=5829) (actual time=0.021..0.023 rows=1 loops=76123)
+                           Index Cond: (geom && st_expand(f.geom, '1000'::double precision))
+                           Filter: st_dwithin(f.geom, geom, '1000'::double precision)
+                           Rows Removed by Filter: 0
+                           Buffers: shared hit=665192
+ Planning:
+   Buffers: shared hit=718
+ Planning Time: 10.321 ms
+ JIT:
+   Functions: 77
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 3.980 ms, Inlining 103.204 ms, Optimization 264.478 ms, Emission 216.864 ms, Total 588.525 ms
+ Execution Time: 4656.445 ms
+(57 rows)
+
