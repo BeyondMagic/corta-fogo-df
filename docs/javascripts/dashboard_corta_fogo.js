@@ -64,8 +64,9 @@
       focos: true
     },
     carSearch: '',
-    sortCol: 'focos_total',
-    sortDir: 'desc'
+    // A tabela abre na ordem da fila de vistoria (posicao 1 = maior prioridade).
+    sortCol: 'rank',
+    sortDir: 'asc'
   };
 
   function prefersReducedMotion() {
@@ -184,8 +185,26 @@
       fetch(base + 'focos.json').then((r) => {
         if (!r.ok) throw new Error('Falha ao carregar focos.json (' + r.status + ')');
         return r.json();
+      }),
+      fetch(base + 'gold.json').then((r) => {
+        if (!r.ok) throw new Error('Falha ao carregar gold.json (' + r.status + ')');
+        return r.json();
       })
-    ]).then(([resumo, geometrias, focosRaw]) => {
+    ]).then(([resumo, geometrias, focosRaw, gold]) => {
+      // Tudo sobre imoveis reincidentes vem da camada Gold (gold.json, exportado de
+      // gold.painel_imoveis_prioritarios). O painel nao recalcula o cruzamento.
+      resumo.gold_referencia = gold.gold_referencia;
+      resumo.car_cruzamento = gold.car_cruzamento;
+      resumo.car_top50 = gold.car_top50;
+      resumo.gold_meta = {
+        fonte: gold.fonte,
+        gerado_em: gold.gerado_em,
+        exportado_em: gold.exportado_em,
+        sla_frescor_horas: gold.sla_frescor_horas,
+        indice: gold.indice
+      };
+      geometrias.car_top50_geoms = gold.car_top50_geoms;
+
       const extraMap = new Map();
       const extraObj = focosRaw.uc_extra || {};
       Object.keys(extraObj).forEach((k) => {
@@ -472,8 +491,81 @@
       if (anoFiltro && (!im.anos || !im.anos.includes(anoFiltro))) return false;
       return true;
     }).length;
-    if (kpiCar) kpiCar.textContent = `${ativosTop} / ${imoveisTop.length}`;
-    if (kpiCarSub) kpiCarSub.textContent = `Top 50 CAR ativos · ${formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes)} reincidentes Gold`;
+    const cruz = loadedData.resumo.car_cruzamento || {};
+    const criticos = (cruz.por_classificacao && cruz.por_classificacao['PRIORIDADE CRITICA']) || { imoveis: 0 };
+    if (kpiCar) kpiCar.textContent = formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes);
+    if (kpiCarSub) {
+      kpiCarSub.textContent = `${formatInt(criticos.imoveis)} em prioridade crítica · fila exibe ${ativosTop} de ${imoveisTop.length}`;
+    }
+  }
+
+  const CLASSIFICACAO_LABELS = {
+    'PRIORIDADE CRITICA': 'Crítica',
+    'PRIORIDADE ALTA': 'Alta',
+    'PRIORIDADE MEDIA': 'Média',
+    'PRIORIDADE BAIXA': 'Baixa'
+  };
+
+  function formatDataHoraUtc(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '-';
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} UTC`;
+  }
+
+  // Bloco de abertura: a pergunta de gestao, a resposta e os primeiros da fila de
+  // vistoria, lidos de gold.json. Independe dos filtros do painel.
+  function renderResposta() {
+    const box = document.getElementById('cf-resposta-corpo');
+    if (!box || !loadedData) return;
+
+    const ref = loadedData.resumo.gold_referencia;
+    const cruz = loadedData.resumo.car_cruzamento || {};
+    const meta = loadedData.resumo.gold_meta || {};
+    const fila = loadedData.resumo.car_top50 || [];
+    const porClasse = cruz.por_classificacao || {};
+    const criticos = porClasse['PRIORIDADE CRITICA'] || { imoveis: 0, cadastro_ativo: 0 };
+    const primeiros = fila.slice(0, 5);
+
+    const itens = primeiros.map((im) => `
+      <li>
+        <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}">
+          <code>${escapeHtml(im.cod_imovel)}</code>
+        </button>
+        <span class="cf-resposta-detalhe">
+          ${escapeHtml(im.ra || '-')} · ${escapeHtml(im.situacao || '-')} · ${formatDec(im.area_ha, 1)} ha ·
+          índice <b>${formatDec(im.indice, 1)}</b> · ${im.anos_qtd} anos com foco, último em ${im.ultimo_ano}
+        </span>
+      </li>`).join('');
+
+    let frescor = '';
+    if (meta.gerado_em) {
+      const horas = (Date.now() - new Date(meta.gerado_em).getTime()) / 3600000;
+      const sla = Number(meta.sla_frescor_horas) || 30;
+      const idade = horas < 48 ? `${formatDec(horas, 1)} h` : `${formatInt(Math.floor(horas / 24))} dias`;
+      frescor = horas <= sla
+        ? `Gold gerada em ${formatDataHoraUtc(meta.gerado_em)}, dentro do SLA de frescor de ${formatInt(sla)} h.`
+        : `Retrato da Gold gerado em ${formatDataHoraUtc(meta.gerado_em)} (há ${idade}). O SLA de ${formatInt(sla)} h vale para a tabela no ambiente do pipeline; esta página estática mostra o último retrato exportado.`;
+    }
+
+    box.innerHTML = `
+      <p class="cf-resposta-frase">
+        <b>${formatInt(ref.imoveis_reincidentes)}</b> dos ${formatInt(ref.imoveis_total_car)} imóveis rurais do cadastro
+        tiveram foco em área protegida em 2 anos ou mais. <b>${formatInt(criticos.imoveis)}</b> estão em
+        <b>prioridade crítica</b> de vistoria (quartil mais alto do Índice de Prioridade de Vistoria),
+        ${formatInt(criticos.cadastro_ativo)} deles com cadastro ativo.
+      </p>
+      <p class="cf-resposta-sub">Primeiros da fila de vistoria:</p>
+      <ol class="cf-resposta-fila">${itens}</ol>
+      <p class="cf-resposta-fonte">
+        Fonte: <code>${escapeHtml(meta.fonte || 'gold.painel_imoveis_prioritarios')}</code>. ${escapeHtml(frescor)}
+      </p>`;
+
+    box.querySelectorAll('.cf-car-select-btn').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        selectCAR(this.getAttribute('data-select-car'), true);
+      });
+    });
   }
 
   function renderFilterChips() {
@@ -510,7 +602,7 @@
     }
 
     if (chips.length === 0) {
-      wrap.innerHTML = '<span class="cf-chip-empty">Série completa ativa: 2015–2025, 37 RAs, 84 UCs e Top 50 CAR reincidentes.</span>';
+      wrap.innerHTML = '<span class="cf-chip-empty">Série completa ativa: 2015–2025, 37 RAs, 84 UCs e os 50 primeiros da fila de vistoria.</span>';
       return;
     }
 
@@ -674,8 +766,10 @@
         </div>
         <p class="cf-code-line"><code>${escapeHtml(im.cod_imovel)}</code></p>
         <dl class="cf-kv-list">
-          <div><dt>Total de focos</dt><dd>${formatInt(im.focos_total)}</dd></div>
-          <div><dt>Em RL / UC 1 km</dt><dd>${formatInt(im.focos_prot)}</dd></div>
+          <div><dt>Índice de prioridade</dt><dd>${formatDec(im.indice, 1)} (${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')})</dd></div>
+          <div><dt>Região Administrativa</dt><dd>${escapeHtml(im.ra || '-')}</dd></div>
+          <div><dt>Focos no imóvel</dt><dd>${formatInt(im.focos_total)}</dd></div>
+          <div><dt>Em área protegida</dt><dd>${formatInt(im.focos_prot)} em ${formatInt(im.dias_com_foco)} dias</dd></div>
           <div><dt>Área cadastrada</dt><dd>${formatDec(im.area_ha, 1)} ha</dd></div>
           <div><dt>Reincidência</dt><dd>${im.anos_qtd} anos (${(im.anos || []).join(', ')})</dd></div>
         </dl>
@@ -962,7 +1056,7 @@
       }
     }
 
-    // 6. Pinos dos Top 50 Imoveis CAR
+    // 6. Pinos dos 50 primeiros imoveis da fila de vistoria
     const visibleCars = getVisibleCars();
 
     zoomGroup.select('g.cf-layer-car-pins')
@@ -1179,7 +1273,7 @@
           <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.seca}"></span><span>Estiagem (Mai–Set)</span></div>
           <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.otherSensor}"></span><span>Período chuvoso</span></div>
           <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.uc}"></span><span>Unidade de Conservação</span></div>
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.car}"></span><span>Top 50 CAR reincidente</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.car}"></span><span>Fila de vistoria (50 primeiros)</span></div>
         </div>
       `;
       return;
@@ -1985,8 +2079,7 @@
         return {
           anos: `${k}a`,
           anosNum: i + 2,
-          gold: (gold.distribuicao_anos && gold.distribuicao_anos[k]) || 0,
-          local: (cc.distribuicao_anos && cc.distribuicao_anos[k]) || 0
+          gold: (gold.distribuicao_anos && gold.distribuicao_anos[k]) || 0
         };
       });
 
@@ -2015,8 +2108,7 @@
         .on('mousemove', function (event, d) {
           showTooltip(
             `<strong>${d.anosNum} anos distintos com foco</strong><br/>` +
-            `Camada Gold (E3 + APP): <b>${formatInt(d.gold)}</b> imóveis<br/>` +
-            `Cruzamento local (RL + UC 1 km): <b>${formatInt(d.local)}</b> imóveis`,
+            `<b>${formatInt(d.gold)}</b> imóveis reincidentes (camada Gold)`,
             event.clientX,
             event.clientY
           );
@@ -2025,21 +2117,21 @@
       return;
     }
 
-    // Sub-tab: Sobreposicoes Protegidas (Gold vs Local)
-    svg.attr('aria-label', 'Sobreposição de reincidência com Reserva Legal, APP e faixa de 1 km de UC');
-    const margin = { top: 22, right: 20, bottom: 28, left: 155 };
+    // Sub-tab: Sobreposicoes Protegidas (camada Gold)
+    svg.attr('aria-label', 'Imóveis reincidentes por critério: Reserva Legal, APP e faixa de 1 km de UC');
+    const margin = { top: 22, right: 56, bottom: 28, left: 155 };
     const iw = width - margin.left - margin.right;
     const ih = height - margin.top - margin.bottom;
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const protRows = [
-      { label: 'Até 1 km de UC', gold: gold.reincidentes_por_categoria.uc_1km, local: cc.reincidentes_uc1km },
-      { label: 'Reserva Legal', gold: gold.reincidentes_por_categoria.reserva_legal, local: cc.reincidentes_rl },
-      { label: 'APP (somente Gold)', gold: gold.reincidentes_por_categoria.app, local: 0 }
+      { label: 'Até 1 km de UC', gold: gold.reincidentes_por_categoria.uc_1km },
+      { label: 'Reserva Legal', gold: gold.reincidentes_por_categoria.reserva_legal },
+      { label: 'APP', gold: gold.reincidentes_por_categoria.app }
     ];
 
     const y = d3.scaleBand().domain(protRows.map((r) => r.label)).range([0, ih]).padding(0.32);
-    const x = d3.scaleLinear().domain([0, 1400]).range([0, iw]);
+    const x = d3.scaleLinear().domain([0, (d3.max(protRows, (r) => r.gold) || 1) * 1.1]).nice().range([0, iw]);
 
     g.append('g')
       .attr('transform', `translate(0,${ih})`)
@@ -2055,29 +2147,25 @@
       .join('rect')
       .attr('x', 0)
       .attr('y', (d) => y(d.label))
-      .attr('height', y.bandwidth() * 0.46)
+      .attr('height', y.bandwidth())
       .attr('width', (d) => x(d.gold))
       .attr('rx', 2)
       .attr('fill', tokens.uc);
 
-    g.selectAll('rect.cf-prot-local')
-      .data(protRows.filter((d) => d.local > 0))
-      .join('rect')
-      .attr('x', 0)
-      .attr('y', (d) => y(d.label) + y.bandwidth() * 0.52)
-      .attr('height', y.bandwidth() * 0.46)
-      .attr('width', (d) => x(d.local))
-      .attr('rx', 2)
-      .attr('fill', tokens.chuvoso);
+    g.selectAll('text.cf-prot-val')
+      .data(protRows)
+      .join('text')
+      .attr('x', (d) => x(d.gold) + 5)
+      .attr('y', (d) => y(d.label) + y.bandwidth() / 2 + 4)
+      .attr('fill', tokens.muted)
+      .attr('font-size', '11px')
+      .text((d) => formatInt(d.gold));
 
-    const leg = svg.append('g').attr('transform', `translate(${margin.left}, 12)`);
-    leg.append('rect').attr('x', 0).attr('y', -9).attr('width', 10).attr('height', 10).attr('fill', tokens.uc);
-    leg.append('text').attr('x', 14).attr('y', 0).attr('fill', tokens.muted).attr('font-size', '10.5px').text('Gold E3');
-    leg.append('rect').attr('x', 76).attr('y', -9).attr('width', 10).attr('height', 10).attr('fill', tokens.chuvoso);
-    leg.append('text').attr('x', 90).attr('y', 0).attr('fill', tokens.muted).attr('font-size', '10.5px').text('Cruzamento local');
+    svg.append('text').attr('x', margin.left).attr('y', 12).attr('fill', tokens.muted).attr('font-size', '10.5px')
+      .text('Os critérios se sobrepõem: um imóvel pode atender a mais de um.');
   }
 
-  // Tabela Top 50 CAR: inicializa linhas <tr> uma unica vez e reordena via DOM
+  // Tabela da fila de vistoria: inicializa linhas <tr> uma unica vez e reordena via DOM
   function buildCarTableRows() {
     const tbody = document.getElementById('cf-car-tbody');
     if (!tbody || !loadedData) return;
@@ -2086,27 +2174,32 @@
     tbody.innerHTML = list.map((im) => {
       const layersBadges = [];
       if (im.atinge_rl) layersBadges.push('<span class="cf-tbl-tag cf-tag-rl">RL</span>');
+      if (im.atinge_app) layersBadges.push('<span class="cf-tbl-tag cf-tag-app">APP</span>');
       if (im.atinge_uc1km) layersBadges.push('<span class="cf-tbl-tag cf-tag-uc">UC 1 km</span>');
 
       return `
         <tr data-cod="${escapeHtml(im.cod_imovel)}"
             data-rank="${im.rank}"
+            data-ra="${escapeHtml(im.ra || '')}"
             data-situacao="${escapeHtml(im.situacao)}"
+            data-indice="${im.indice}"
             data-anos_qtd="${im.anos_qtd}"
             data-area_ha="${im.area_ha}"
             data-focos_total="${im.focos_total}"
             data-focos_prot="${im.focos_prot}"
-            data-search="${escapeHtml((im.cod_imovel + ' ' + im.situacao + ' ' + im.condicao).toLowerCase())}">
+            data-search="${escapeHtml((im.cod_imovel + ' ' + im.situacao + ' ' + (im.condicao || '') + ' ' + (im.ra || '')).toLowerCase())}">
           <td class="cf-num">${im.rank}</td>
           <td>
             <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}">
               <code>${escapeHtml(im.cod_imovel)}</code>
             </button>
           </td>
+          <td>${escapeHtml(im.ra || '-')}</td>
           <td><span class="cf-sit-pill cf-sit-${escapeHtml(im.situacao)}">${escapeHtml(im.situacao)}</span></td>
+          <td class="cf-num"><b>${formatDec(im.indice, 1)}</b></td>
           <td class="cf-num">${im.anos_qtd}</td>
           <td class="cf-num">${formatDec(im.area_ha, 1)}</td>
-          <td class="cf-num"><b>${formatInt(im.focos_total)}</b></td>
+          <td class="cf-num">${formatInt(im.focos_total)}</td>
           <td class="cf-num">${formatInt(im.focos_prot)}</td>
           <td>${layersBadges.join(' ') || '-'}</td>
         </tr>
@@ -2623,6 +2716,7 @@
         if (!document.getElementById('cf-dashboard-root')) return;
         if (loadingEl) loadingEl.hidden = true;
 
+        renderResposta();
         buildCarTableRows();
         refreshAll(true);
 

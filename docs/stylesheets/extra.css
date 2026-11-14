@@ -417,6 +417,62 @@ body:has(.cf-dashboard-page) .md-main__inner {
   font-size: 0.88rem;
 }
 
+/* Resposta a pergunta de gestao (bloco de abertura, le gold.json) */
+.cf-resposta-card {
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-border);
+  border-left: 4px solid var(--cf-car);
+  border-radius: 10px;
+  padding: 14px 18px;
+  box-shadow: var(--cf-shadow);
+  margin-bottom: 12px;
+}
+
+.cf-resposta-pergunta {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--cf-muted);
+}
+
+.cf-resposta-frase {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--cf-text);
+}
+
+.cf-resposta-sub {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--cf-muted);
+}
+
+.cf-resposta-fila {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.cf-resposta-fila code {
+  font-size: 0.74rem;
+  word-break: break-all;
+}
+
+.cf-resposta-detalhe {
+  color: var(--cf-muted);
+}
+
+.cf-resposta-fonte {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--cf-muted);
+}
+
 /* KPI Strip */
 .cf-kpi-strip {
   display: grid;

@@ -5,11 +5,15 @@ icon: material/view-dashboard
 
 # Dashboard de Queimadas do Distrito Federal (2015–2025)
 
-Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Leaflet** com todos os **38.945 focos de calor** registrados entre **2015 e 2025**, **37 Regiões Administrativas**, **84 Unidades de Conservação** (com faixa de amortecimento de 1 km) e cruzamento local sobre **21.041 imóveis do CAR** e **13.494 Reservas Legais**. Clique em qualquer ano, mês, célula, RA, UC ou imóvel para filtrar todo o painel.
+Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Leaflet**. O bloco de abertura responde à pergunta de gestão com a fila de vistoria da camada Gold. Abaixo dele, a exploração dos **38.945 focos de calor** de **2015 a 2025** por **37 Regiões Administrativas** e **84 Unidades de Conservação** (com faixa de amortecimento de 1 km). Clique em qualquer ano, mês, célula, RA, UC ou imóvel para filtrar a exploração.
 
 <div class="cf-dashboard-page" id="cf-dashboard-root">
   <div id="cf-loading-banner" class="cf-loading-banner" role="status">Carregando séries históricas e malhas vetoriais (resumo, geometrias e 38.945 focos)...</div>
   <div id="cf-live-status" class="cf-sr-only" role="status" aria-live="polite"></div>
+  <section class="cf-resposta-card" aria-labelledby="cf-resposta-titulo">
+    <p class="cf-resposta-pergunta" id="cf-resposta-titulo">Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em reserva legal, APP ou a até 1 km de unidades de conservação entre 2015 e 2025?</p>
+    <div id="cf-resposta-corpo"></div>
+  </section>
   <section class="cf-kpi-strip" aria-label="Indicadores do recorte selecionado">
     <article class="cf-kpi-card">
       <span class="cf-kpi-label">Focos no recorte</span>
@@ -32,9 +36,9 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
       <span class="cf-kpi-sub" id="cf-kpi-ucs-sub">Interior ou faixa de 1 km</span>
     </article>
     <article class="cf-kpi-card">
-      <span class="cf-kpi-label">CAR Reincidentes</span>
+      <span class="cf-kpi-label">Imóveis reincidentes</span>
       <span class="cf-kpi-val" id="cf-kpi-car">-</span>
-      <span class="cf-kpi-sub" id="cf-kpi-car-sub">Top 50 críticos / Gold</span>
+      <span class="cf-kpi-sub" id="cf-kpi-car-sub">Camada Gold</span>
     </article>
   </section>
   <section class="cf-filter-dock" aria-label="Controles temporais e filtros globais">
@@ -129,7 +133,7 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-ras" checked/> 37 Regiões Administrativas</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-ucs" checked/> 84 UCs</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-buffers" checked/> Faixa de 1 km (UC)</label>
-      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-imoveis" checked/> Top 50 CAR reincidentes</label>
+      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-imoveis" checked/> 50 primeiros da fila de vistoria</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-rl" checked/> Reserva Legal selecionada</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-focos" checked/> Focos de calor</label>
     </div>
@@ -215,7 +219,7 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
       <div class="cf-card-head">
         <div>
           <h3>Reincidência Fundiária e Sobreposições</h3>
-          <p class="cf-card-sub">Cruzamento local (RL + UC 1 km) comparado à referência Gold E3 (com APP).</p>
+          <p class="cf-card-sub">Imóveis reincidentes da camada Gold (Reserva Legal, APP e faixa de 1 km de UC).</p>
         </div>
         <div class="cf-seg-group" role="tablist" aria-label="Visão da reincidência CAR">
           <button type="button" class="cf-btn-mini is-active" role="tab" aria-selected="true" data-car-tab="situacao">Situação e Porte</button>
@@ -228,13 +232,13 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
     <article class="cf-card cf-col-12">
       <div class="cf-card-head">
         <div>
-          <h3 id="cf-car-table-title">Top 50 Imóveis CAR com Maior Reincidência</h3>
-          <p class="cf-card-sub">Clique no código do imóvel para desenhar os polígonos do perímetro CAR e das Reservas Legais no mapa.</p>
+          <h3 id="cf-car-table-title">Fila de Vistoria: 50 Primeiros Imóveis</h3>
+          <p class="cf-card-sub">Ordem do Índice de Prioridade de Vistoria (<code>gold.painel_imoveis_prioritarios</code>). Clique no código para desenhar o perímetro e as Reservas Legais no mapa.</p>
         </div>
         <div class="cf-table-toolbar">
           <div class="cf-field" style="min-width:240px;">
-            <label for="cf-car-search">Filtrar código CAR, situação ou condição</label>
-            <input type="search" id="cf-car-search" class="cf-input" placeholder="Ex.: DF-5300108, CA, Pendente..."/>
+            <label for="cf-car-search">Filtrar código CAR, RA, situação ou condição</label>
+            <input type="search" id="cf-car-search" class="cf-input" placeholder="Ex.: DF-5300108, Planaltina, PE..."/>
           </div>
         </div>
       </div>
@@ -243,13 +247,15 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
         <table id="cf-car-table">
           <thead>
             <tr>
-              <th scope="col" class="cf-num" data-sort="rank" data-type="number"><button type="button" class="cf-sort-btn"><span>#</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
+              <th scope="col" class="cf-num" data-sort="rank" data-type="number" aria-sort="ascending"><button type="button" class="cf-sort-btn"><span>#</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" data-sort="cod_imovel" data-type="string"><button type="button" class="cf-sort-btn"><span>Código CAR</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
+              <th scope="col" data-sort="ra" data-type="string"><button type="button" class="cf-sort-btn"><span>RA</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" data-sort="situacao" data-type="string"><button type="button" class="cf-sort-btn"><span>Situação</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
+              <th scope="col" class="cf-num" data-sort="indice" data-type="number"><button type="button" class="cf-sort-btn"><span>Índice</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" class="cf-num" data-sort="anos_qtd" data-type="number"><button type="button" class="cf-sort-btn"><span>Anos</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" class="cf-num" data-sort="area_ha" data-type="number"><button type="button" class="cf-sort-btn"><span>Área (ha)</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
-              <th scope="col" class="cf-num" data-sort="focos_total" data-type="number" aria-sort="descending"><button type="button" class="cf-sort-btn"><span>Focos no CAR</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
-              <th scope="col" class="cf-num" data-sort="focos_prot" data-type="number"><button type="button" class="cf-sort-btn"><span>Em RL / UC 1 km</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
+              <th scope="col" class="cf-num" data-sort="focos_total" data-type="number"><button type="button" class="cf-sort-btn"><span>Focos no imóvel</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
+              <th scope="col" class="cf-num" data-sort="focos_prot" data-type="number"><button type="button" class="cf-sort-btn"><span>Em área protegida</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col">Sobreposições</th>
             </tr>
           </thead>
@@ -280,17 +286,22 @@ O filtro **Satélite de referência (`AQUA_M-T`)** segue o protocolo oficial do 
 
 ---
 
-## Escopo dos Dados Exibidos e Diferença para a Camada Gold
+## De onde vêm os dados do painel
 
-O script [scripts/gerar_dados_dashboard.py](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_dashboard.py) realiza o cruzamento espacial direto via `shapely.STRtree` (em projeção métrica SIRGAS 2000 UTM 23S, EPSG:31983) sobre todos os arquivos locais em `data/`, exportando os três pacotes JSON sob demanda em `docs/assets/dados_dashboard/`.
+Dois arquivos alimentam a página, em `docs/assets/dados_dashboard/`:
 
-A tabela resume os indicadores do cruzamento local em Python frente à camada dimensional Gold ([Entrega 3](entrega/03/README.md)):
+| Arquivo | Gerado por | Conteúdo |
+| :--- | :--- | :--- |
+| `gold.json` | [`scripts/exportar_painel_gold.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/exportar_painel_gold.py), lendo a camada Gold do dbt | Resposta à pergunta de gestão: totais de imóveis reincidentes, distribuições, os 50 primeiros da fila de vistoria e as geometrias deles, a data em que a Gold foi gerada |
+| `resumo.json`, `geometrias.json`, `focos.json` | [`scripts/gerar_dados_dashboard.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_dashboard.py) | Exploração dos focos: série histórica, RAs, UCs, sensores e as malhas do mapa |
 
-| Indicador | Cruzamento local no Dashboard | Camada Gold (`mart_reincidencia_imovel_ano`) | Motivo da diferença |
-| :--- | :--- | :--- | :--- |
-| **Imóveis com foco protegido** | `3.926` | `4.068` | Cruzamento local cobre Reserva Legal + faixa de 1 km de UC (sem polígono completo de APP) |
-| **Imóveis reincidentes (>= 2 anos)** | `1.537` | `1.593` | Mesma diferença de cobertura da APP; nas faixas longas (11 anos), ambas somam `41` imóveis |
-| **Em Reserva Legal / UC 1 km** | `932` RL / `1.226` UC 1 km | `958` RL / `1.231` UC 1 km | Pequenas diferenças de simplificação e deduplicação entre Shapefile local e ingestão PostGIS |
+O painel não recalcula o cruzamento de imóveis: os números de reincidência são os de `gold.painel_imoveis_prioritarios` e `gold.fct_reincidencia_imovel`. Para regenerar `gold.json` depois de um `dbt build`:
+
+```bash
+docker compose --profile transformacao run --rm exportar_painel
+```
+
+A ordem da fila é a do Índice de Prioridade de Vistoria ([ADR 0004](adr/04-indice-de-prioridade-de-vistoria.md)). A data exibida no bloco de resposta é a da execução do dbt que gerou a tabela ([frescor e SLA](frescor_sla.md)).
 
 ---
 
@@ -301,5 +312,5 @@ A tabela resume os indicadores do cruzamento local em Python frente à camada di
 | **Focos de Calor (`2015–2025`)** | [INPE BDQueimadas](https://terrabrasilis.dpi.inpe.br/queimadas/bdqueimadas/) | Todos os `38.945` registros no DF | Dados históricos reais em `focos.json` |
 | **Regiões Administrativas e Limite do DF** | [IDE-DF / SEDUH (`Publico/LIMITES`)](https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Publico/LIMITES/FeatureServer) | `37` Regiões Administrativas oficiais | Malha base vetorial e coroplético por RA |
 | **Unidades de Conservação e Faixa 1 km** | [IDE-DF / IBRAM](https://www.geoservicos.ide.df.gov.br/arcgis/rest/services) | `84` áreas protegidas e buffers de 1.000 m | Ranking dinâmico e filtro por UC |
-| **Malha Fundiária (CAR e Reserva Legal)** | [SICAR Federal](https://consultapublica.car.gov.br/publico/imoveis/index) | `21.041` perímetros e `13.494` RLs analisados | Situação cadastral, porte e polígonos do Top 50 |
+| **Malha Fundiária (CAR e Reserva Legal)** | [SICAR Federal](https://consultapublica.car.gov.br/publico/imoveis/index), pela camada Gold | `21.047` imóveis e `13.499` Reservas Legais no PostGIS | Fila de vistoria, situação cadastral, porte e polígonos dos 50 primeiros |
 | **Visualização Analítica e Cartográfica** | [D3.js v7](https://d3js.org/) (`d3-geo` + Canvas + SVG) & [Leaflet 1.9](https://leafletjs.com/) | Projeção vetorial local + tiles OSM / ESRI | Palco duplo com filtros cruzados em memória |

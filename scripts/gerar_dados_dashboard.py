@@ -2,15 +2,18 @@
 """
 Gera os arquivos JSON estruturados em docs/assets/dados_dashboard/ para o
 Dashboard interativo (D3.js + d3-geo + Leaflet):
-- resumo.json: agregacoes historicas, UCs, RAs, sensores, risco, CAR Top 50 e referencia Gold
-- geometrias.json: contorno do DF, 37 RAs, 84 UCs, faixas de 1 km e geometrias Top 50 CAR + RL
+- resumo.json: agregacoes historicas, UCs, RAs, sensores e risco
+- geometrias.json: contorno do DF, 37 RAs, 84 UCs e faixas de 1 km
 - focos.json: serie completa compacta dos 38.945 focos (2015-2025) para filtragem cruzada em memoria
+
+A resposta a pergunta de gestao (imoveis reincidentes, fila de vistoria e geometrias
+dos imoveis) nao sai daqui: vem da camada Gold, exportada para gold.json por
+scripts/exportar_painel_gold.py.
 """
 
 import csv
 import json
 import os
-import statistics
 import urllib.request
 import zipfile
 from collections import Counter, defaultdict
@@ -84,36 +87,6 @@ SENSOR_METADATA = {
     },
 }
 
-GOLD_REFERENCIA = {
-    "fonte": "mart_reincidencia_imovel_ano (dbt-duckdb / Entrega 3)",
-    "imoveis_total_car": 21047,
-    "imoveis_com_foco_protegido": 4068,
-    "imoveis_reincidentes": 1593,
-    "focos_em_reincidentes": 37693,
-    "reincidentes_por_categoria": {
-        "uc_1km": 1231,
-        "reserva_legal": 958,
-        "app": 382,
-    },
-    "distribuicao_anos": {
-        "2": 717,
-        "3": 331,
-        "4": 159,
-        "5": 120,
-        "6": 74,
-        "7": 47,
-        "8": 50,
-        "9": 31,
-        "10": 23,
-        "11": 41,
-    },
-    "situacao_cadastral": {
-        "AT": 1413,
-        "PE": 107,
-        "SU": 41,
-        "CA": 32,
-    },
-}
 
 
 def round_coords(obj, decimals=4):
@@ -202,19 +175,6 @@ def classificar_grupo_uc(uc_conserv):
     if "sustent" in txt:
         return "Uso Sustentável"
     return "Outros ETEP"
-
-
-def faixa_area_label(area_ha):
-    """Retorna a faixa fundiaria padronizada em hectares."""
-    if area_ha <= 20:
-        return "Até 20 ha"
-    if area_ha <= 100:
-        return "20 a 100 ha"
-    if area_ha <= 500:
-        return "100 a 500 ha"
-    if area_ha <= 5000:
-        return "500 a 5.000 ha"
-    return "Acima de 5.000 ha"
 
 
 def carregar_focos(csv_path):
@@ -642,100 +602,6 @@ def main():
             flags,
         ])
 
-    # Estatisticas CAR + RL + UC 1km por imovel
-    imovel_anos_prot = defaultdict(set)
-    imovel_focos_prot = Counter()
-    imovel_focos_total = Counter()
-    imovel_por_ano = defaultdict(lambda: Counter())
-    imovel_rl_flag = set()
-    imovel_uc_flag = set()
-
-    for fi, ci in zip(q_car[0].tolist(), q_car[1].tolist()):
-        cod = car_cods[ci]
-        ano = focos[fi]["ano"]
-        imovel_focos_total[cod] += 1
-        in_rl = cod in foco_rl_cods.get(fi, ())
-        in_uc1km = bool(foco_ucs_buf.get(fi))
-        if in_rl or in_uc1km:
-            imovel_anos_prot[cod].add(ano)
-            imovel_focos_prot[cod] += 1
-            imovel_por_ano[cod][str(ano)] += 1
-            if in_rl:
-                imovel_rl_flag.add(cod)
-            if in_uc1km:
-                imovel_uc_flag.add(cod)
-
-    reincidentes = [cod for cod, anos in imovel_anos_prot.items() if len(anos) >= 2]
-
-    sit_counts = Counter()
-    sit_focos = Counter()
-    sit_areas = defaultdict(list)
-    faixa_counts = Counter()
-    anos_hist = Counter()
-
-    for cod in reincidentes:
-        meta = car_info[cod]
-        st = meta["situacao"]
-        sit_counts[st] += 1
-        sit_focos[st] += imovel_focos_prot[cod]
-        sit_areas[st].append(meta["area_ha"])
-        faixa_counts[faixa_area_label(meta["area_ha"])] += 1
-        anos_hist[str(len(imovel_anos_prot[cod]))] += 1
-
-    # Top 50 imoveis reincidentes criticos (ordenados por focos protegidos desc)
-    top50_cods = sorted(
-        reincidentes,
-        key=lambda c: (imovel_focos_prot[c], len(imovel_anos_prot[c]), car_info[c]["area_ha"]),
-        reverse=True,
-    )[:50]
-
-    car_top50 = []
-    car_top50_geoms = {}
-    for rank, cod in enumerate(top50_cods, start=1):
-        meta = car_info[cod]
-        geom = meta["geom"]
-        cent = geom.centroid
-        sim = geom.simplify(0.0006, preserve_topology=True)
-        anos_lista = sorted(imovel_anos_prot[cod])
-
-        rl_geoms_simp = []
-        for rg in rl_by_cod.get(cod, []):
-            r_sim = rg.simplify(0.0006, preserve_topology=True)
-            if not r_sim.is_empty:
-                rl_geoms_simp.append(round_coords(mapping(r_sim), 4))
-
-        car_top50.append({
-            "rank": rank,
-            "cod_imovel": cod,
-            "situacao": meta["situacao"],
-            "condicao": meta["condicao"],
-            "municipio": meta["municipio"],
-            "area_ha": meta["area_ha"],
-            "lat": round(cent.y, 4),
-            "lon": round(cent.x, 4),
-            "anos": anos_lista,
-            "anos_qtd": len(anos_lista),
-            "focos_total": imovel_focos_total[cod],
-            "focos_prot": imovel_focos_prot[cod],
-            "atinge_rl": cod in imovel_rl_flag,
-            "atinge_uc1km": cod in imovel_uc_flag,
-            "por_ano": dict(sorted(imovel_por_ano[cod].items())),
-        })
-        car_top50_geoms[cod] = {
-            "imovel": round_coords(mapping(sim), 4),
-            "reserva_legal": rl_geoms_simp,
-        }
-
-    # Resumos gerais
-    por_situacao = {}
-    for st in ["AT", "PE", "SU", "CA"]:
-        areas = sit_areas.get(st, [])
-        por_situacao[st] = {
-            "imoveis": sit_counts.get(st, 0),
-            "focos": sit_focos.get(st, 0),
-            "mediana_ha": round(statistics.median(areas), 1) if areas else 0.0,
-        }
-
     satelites_lista = [
         {"nome": sat, "focos": cnt, "sensor_tipo": obter_tipo_sensor(sat)}
         for sat, cnt in satelites_counter.most_common()
@@ -752,23 +618,8 @@ def main():
         },
         "metadata_sensores": SENSOR_METADATA,
         "satelites": satelites_lista,
-        "gold_referencia": GOLD_REFERENCIA,
-        "car_cruzamento": {
-            "nota": "Cruzamento local em Python (CAR + Reserva Legal + Faixa 1 km de UC). Para APP, consulte gold_referencia.",
-            "imoveis_com_foco_prot": len(imovel_anos_prot),
-            "total_reincidentes": len(reincidentes),
-            "reincidentes_rl": len(imovel_rl_flag & set(reincidentes)),
-            "reincidentes_uc1km": len(imovel_uc_flag & set(reincidentes)),
-            "por_situacao": por_situacao,
-            "por_faixa_area": {
-                k: faixa_counts.get(k, 0)
-                for k in ["Até 20 ha", "20 a 100 ha", "100 a 500 ha", "500 a 5.000 ha", "Acima de 5.000 ha"]
-            },
-            "distribuicao_anos": {str(a): anos_hist.get(str(a), 0) for a in range(2, 12)},
-        },
         "ras_resumo": ras_resumo,
         "ucs_resumo": ucs_resumo,
-        "car_top50": car_top50,
     }
 
     geometrias_json = {
@@ -781,7 +632,6 @@ def main():
         "ras": camadas["ras_geojson"],
         "ucs": camadas["ucs_geojson"],
         "buffers": camadas["buffers_geojson"],
-        "car_top50_geoms": car_top50_geoms,
     }
 
     focos_json = {

@@ -222,18 +222,23 @@
       if (im.atinge_rl) {
         badges.push('<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">Reserva Legal</span>');
       }
+      if (im.atinge_app) {
+        badges.push('<span style="background:#e0f2fe;color:#075985;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">APP</span>');
+      }
       if (im.atinge_uc1km) {
         badges.push('<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-weight:700;font-size:11px;">Até 1 km de UC</span>');
       }
 
       const popupHtml = `
         <div style="font-family: inherit; font-size: 13px; line-height: 1.45; min-width: 245px;">
-          <strong style="color:#6b21a8;font-size:14px;">#${im.rank} Imóvel CAR Reincidente</strong><br/>
+          <strong style="color:#6b21a8;font-size:14px;">#${im.rank} da fila de vistoria</strong><br/>
           <code style="font-size:10.5px;word-break:break-all;">${escapeHtml(im.cod_imovel)}</code>
           <div style="margin:6px 0;display:flex;gap:4px;flex-wrap:wrap;">${badges.join('')}</div>
           <hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0;"/>
+          <b>Índice de prioridade:</b> ${formatPtBr(im.indice, 1)}<br/>
+          <b>Região Administrativa:</b> ${escapeHtml(im.ra || '-')}<br/>
           <b>Focos no imóvel:</b> ${formatPtBr(im.focos_total)}<br/>
-          <b>Focos em área protegida (RL / UC 1 km):</b> ${formatPtBr(im.focos_prot)}<br/>
+          <b>Focos em área protegida:</b> ${formatPtBr(im.focos_prot)}<br/>
           <b>Área cadastrada:</b> ${formatPtBr(im.area_ha, 1)} ha<br/>
           <b>Anos distintos (${im.anos_qtd}):</b> ${(im.anos || []).join(', ')}
         </div>
