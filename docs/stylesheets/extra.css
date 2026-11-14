@@ -729,12 +729,34 @@ body:has(.cf-dashboard-page) .md-main__inner {
   display: block;
 }
 
+#cf-d3-svg {
+  z-index: 1;
+  touch-action: none;
+}
+
 #cf-d3-canvas {
+  z-index: 2;
   pointer-events: none;
 }
 
-#cf-d3-svg {
-  touch-action: none;
+.cf-d3-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cf-d3-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cf-d3-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(15, 23, 42, 0.25);
 }
 
 .cf-d3-legend {

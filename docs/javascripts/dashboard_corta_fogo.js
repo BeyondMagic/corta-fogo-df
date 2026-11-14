@@ -963,14 +963,7 @@
     }
 
     // 6. Pinos dos Top 50 Imoveis CAR
-    const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
-    const anoFilter = state.ano !== 'todos' ? Number(state.ano) : null;
-    const visibleCars = (loadedData.resumo.car_top50 || []).filter((im) => {
-      if (!state.layers.imoveis) return false;
-      if (sitFilter && im.situacao !== sitFilter) return false;
-      if (anoFilter && (!im.anos || !im.anos.includes(anoFilter))) return false;
-      return true;
-    });
+    const visibleCars = getVisibleCars();
 
     zoomGroup.select('g.cf-layer-car-pins')
       .selectAll('circle')
@@ -1004,6 +997,60 @@
     drawD3Canvas();
     renderD3ChoroplethLegend(choroActive, raScale, ucScale, raExtent, raDensMax, ucMax, ucDensMax);
     bindCanvasInteractions();
+  }
+
+  function getVisibleCars() {
+    if (!loadedData || !state.layers.imoveis) return [];
+    const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
+    const anoFilter = state.ano !== 'todos' ? Number(state.ano) : null;
+    return (loadedData.resumo.car_top50 || []).filter((im) => {
+      if (sitFilter && im.situacao !== sitFilter) return false;
+      if (anoFilter && (!im.anos || !im.anos.includes(anoFilter))) return false;
+      return true;
+    });
+  }
+
+  function drawCanvasCarOverlay(ctx, transform, tokens) {
+    if (!loadedData || !d3Projection) return;
+    const scaleInv = Math.pow(transform.k, 0.55);
+
+    if (state.selectedCar && loadedData.geometrias.car_top50_geoms[state.selectedCar]) {
+      const gObj = loadedData.geometrias.car_top50_geoms[state.selectedCar];
+      const canvasPath = d3.geoPath(d3Projection, ctx);
+      if (gObj.imovel) {
+        ctx.beginPath();
+        canvasPath({ type: 'Feature', geometry: gObj.imovel, properties: {} });
+        ctx.strokeStyle = tokens.car;
+        ctx.lineWidth = 2.4 / transform.k;
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+      }
+      if (state.layers.rl && Array.isArray(gObj.reserva_legal)) {
+        gObj.reserva_legal.forEach((rlG) => {
+          ctx.beginPath();
+          canvasPath({ type: 'Feature', geometry: rlG, properties: {} });
+          ctx.strokeStyle = tokens.rl;
+          ctx.lineWidth = 1.8 / transform.k;
+          ctx.stroke();
+        });
+      }
+    }
+
+    const visibleCars = getVisibleCars();
+    for (let i = 0; i < visibleCars.length; i += 1) {
+      const d = visibleCars[i];
+      const pt = d3Projection([d.lon, d.lat]);
+      const isSel = (state.selectedCar === d.cod_imovel);
+      const r = (isSel ? 6.2 : 4.0) / scaleInv;
+      ctx.beginPath();
+      ctx.arc(pt[0], pt[1], r, 0, 2 * Math.PI);
+      ctx.fillStyle = isSel ? tokens.ref : tokens.car;
+      ctx.globalAlpha = 0.94;
+      ctx.fill();
+      ctx.lineWidth = 1.3 / transform.k;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    }
   }
 
   function updateD3StrokeWeights() {
@@ -1072,6 +1119,7 @@
         ctx.globalAlpha = 0.9;
         ctx.stroke();
       }
+      drawCanvasCarOverlay(ctx, t, tokens);
       ctx.restore();
       hoverQuadtree = null;
       return;
@@ -1108,6 +1156,7 @@
       ctx.stroke();
     }
 
+    drawCanvasCarOverlay(ctx, t, tokens);
     ctx.restore();
 
     hoverQuadtree = d3.quadtree()
@@ -1119,6 +1168,23 @@
   function renderD3ChoroplethLegend(visible, raScale, ucScale, raMax, raDensMax, ucMax, ucDensMax) {
     const legEl = document.getElementById('cf-d3-legend');
     if (!legEl) return;
+
+    if (!visible && state.d3Mode === 'points') {
+      const tokens = getTokens();
+      legEl.hidden = false;
+      legEl.innerHTML = `
+        <div class="cf-legend-title">Legenda do mapa</div>
+        <div class="cf-d3-legend-list">
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.ref}"></span><span>Referência (AQUA_M-T)</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.seca}"></span><span>Estiagem (Mai–Set)</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.otherSensor}"></span><span>Período chuvoso</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.uc}"></span><span>Unidade de Conservação</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.car}"></span><span>Top 50 CAR reincidente</span></div>
+        </div>
+      `;
+      return;
+    }
+
     if (!visible && state.d3Mode !== 'hexbin') {
       legEl.hidden = true;
       return;
