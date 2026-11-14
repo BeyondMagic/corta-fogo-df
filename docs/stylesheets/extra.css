@@ -314,8 +314,9 @@ body,
   color-scheme: light dark;
 }
 
-body:has(.cf-dashboard-page) .md-sidebar--secondary {
-  display: none;
+body:has(.cf-dashboard-page) .md-sidebar--secondary,
+body:has(.cf-dashboard-page) #pres-toggle-btn {
+  display: none !important;
 }
 
 body:has(.cf-dashboard-page) .md-grid {
