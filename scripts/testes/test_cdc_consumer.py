@@ -552,6 +552,37 @@ def test_delete_seguido_de_reinsercao_no_mesmo_lote(temp_delta_dir):
     assert len(DeltaTable(temp_delta_dir).to_pandas()) == 1
 
 
+def test_evento_sem_mudanca_de_conteudo_nao_regrava_a_linha(temp_delta_dir):
+    """
+    Recarga do OLTP com os mesmos dados ou reentrega do slot: o LSN avanca, mas o carimbo
+    de ingestao fica, para o snapshot SCD Tipo 2 nao abrir uma versao identica.
+    """
+    antes = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    original = _linha("DF-6", 100, origem="snapshot")
+    original["data_hora_ingestao"] = antes
+    aplicar_merge_delta(pd.DataFrame([original]), temp_delta_dir)
+
+    # Mesmo conteudo, LSN maior, geometria repetida por extenso.
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-6", 500, op="I")]), temp_delta_dir)
+    linha = _ler(temp_delta_dir, "DF-6")
+    assert linha["lsn_origem"] == 500
+    assert linha["data_hora_ingestao"] == antes
+    assert linha["origem_ingestao"] == "snapshot"
+
+    # Mesmo conteudo, geometria como TOAST inalterado.
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-6", 600, op="U", geom="unchanged-toast-datum")]), temp_delta_dir)
+    linha = _ler(temp_delta_dir, "DF-6")
+    assert linha["lsn_origem"] == 600
+    assert linha["data_hora_ingestao"] == antes
+
+    # Conteudo diferente: a linha e regravada com o carimbo novo.
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-6", 700, op="U", area=101.0)]), temp_delta_dir)
+    linha = _ler(temp_delta_dir, "DF-6")
+    assert linha["area_ha"] == 101.0
+    assert linha["data_hora_ingestao"] == AGORA
+    assert linha["operacao_cdc"] == "U"
+
+
 def test_parse_update_que_troca_a_pk():
     """old-key e new-tuple com chaves diferentes: a chave nova vale e a antiga fica registrada."""
     msg = (
@@ -678,6 +709,7 @@ def main():
         test_update_para_null_no_mesmo_lote_nao_herda_valor_anterior,
         test_update_seguido_de_delete_no_mesmo_lote,
         test_delete_seguido_de_reinsercao_no_mesmo_lote,
+        test_evento_sem_mudanca_de_conteudo_nao_regrava_a_linha,
         test_troca_de_pk_exclui_a_chave_antiga_e_cria_a_nova,
         test_ressincronizacao_apos_slot_recriado,
     ):

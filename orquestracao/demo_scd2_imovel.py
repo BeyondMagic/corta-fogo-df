@@ -10,8 +10,9 @@ As mudancas cadastrais passam pelo codigo de producao do CDC
 Passos:
   1. Constroi stg_imoveis_car, snp_imovel_car e dim_imovel_car sobre a copia.
   2. Retifica um imovel (area e condicao) e roda o snapshot de novo.
-  3. Reentrega a mesma retificacao (mesmo LSN, como no at-least-once do CDC).
-  4. Cancela o imovel (exclusao logica) e roda o snapshot de novo.
+  3. Reentrega a mesma retificacao (mesmo LSN, como no at-least-once do CDC): o MERGE
+     nao regrava a linha e o snapshot nao ganha versao.
+  4. Cancela o imovel (exclusao logica, atributos preservados) e roda o snapshot de novo.
   5. Cruza focos ficticios de cada periodo com a dimensao pela validade e confere
      que cada foco recebe a versao do cadastro vigente na data do evento.
 
@@ -38,6 +39,8 @@ sys.path.insert(0, os.getenv("PIPELINE_DIR", "/app/src/pipeline"))
 import cdc_consumer as cdc  # noqa: E402
 
 FOCO_ANTIGO = datetime(2020, 8, 15, 15, 0, tzinfo=timezone.utc)
+# O snapshot, as versoes (int_imoveis_versoes) e a dimensao que as apresenta.
+MODELOS_SCD2 = ("snp_imovel_car", "int_imoveis_versoes", "dim_imovel_car")
 CONDICAO_RETIFICADA = "Retificacao de teste SCD Tipo 2 (demo_scd2_imovel)"
 falhas = []
 
@@ -122,24 +125,30 @@ def main():
             "condicao": CONDICAO_RETIFICADA, "area_ha": str(area_retificada),
             "data_download": str(alvo["data_download"]), "geom": "unchanged-toast-datum",
         })
-        amb.dbt("snp_imovel_car", "dim_imovel_car")
+        amb.dbt(*MODELOS_SCD2)
 
         print("3. Reentrega da retificacao (mesmo LSN)")
         amb.reentregar(cod)
-        amb.dbt("snp_imovel_car", "dim_imovel_car")
+        amb.dbt(*MODELOS_SCD2)
         snap = amb.consultar("select count(*) as n from snapshots.snp_imovel_car where cod_imovel = ?", [cod])
-        checar(int(snap.n[0]) == 3, "snapshot registrou a reentrega como linha propria (3 linhas)")
+        checar(int(snap.n[0]) == 2, "reentrega nao regravou a linha no Delta: snapshot segue com 2 linhas")
 
         print("4. Cancelamento do cadastro (exclusao logica)")
         t_cancelamento = amb.mudar({"cod_imovel": cod, "operacao_cdc": "D"})
-        amb.dbt("snp_imovel_car", "dim_imovel_car")
+        amb.dbt(*MODELOS_SCD2)
 
         versoes = amb.consultar(
             "select numero_versao, area_ha, condicao, is_excluido, is_current, dbt_valid_from, dbt_valid_to "
             "from gold.dim_imovel_car where cod_imovel = ? order by numero_versao", [cod],
         )
         print(versoes.to_string(index=False))
-        checar(len(versoes) == 3, "dimensao com 3 versoes (original, retificada, cancelada): reentrega descartada")
+        checar(len(versoes) == 3, "dimensao com 3 versoes (original, retificada, cancelada)")
+        checar(
+            len(versoes) == 3
+            and float(versoes.area_ha[2]) == area_retificada
+            and versoes.condicao[2] == CONDICAO_RETIFICADA,
+            "versao cancelada preserva os atributos do imovel (exclusao logica)",
+        )
         checar(versoes.is_current.tolist() == [False, False, True], "apenas a ultima versao e corrente")
         checar(versoes.dbt_valid_from[0].year == 1900, "primeira versao vale para focos anteriores a carga inicial")
 

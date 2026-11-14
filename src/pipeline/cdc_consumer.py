@@ -468,6 +468,17 @@ _GEOM_PARA_UPDATE = (
 )
 
 
+# O evento muda a linha do Delta quando algum atributo difere ou quando traz uma
+# geometria real diferente da gravada (o marcador TOAST significa "geometria inalterada").
+_CONTEUDO_MUDOU = " OR ".join(
+    [f"(target.{c} IS DISTINCT FROM source.{c})" for c in ("situacao", "condicao", "area_ha", "data_download")]
+    + [
+        f"(source.geom_ewkb_hex IS NOT NULL AND source.geom_ewkb_hex != '{TOAST_INALTERADO}' "
+        "AND target.geom_ewkb_hex IS DISTINCT FROM source.geom_ewkb_hex)"
+    ]
+)
+
+
 def _merge_estados(tabela_arrow: pa.Table, delta_path: str) -> None:
     colunas = [campo.name for campo in SCHEMA_IMOVEL_DELTA]
     atualizacao = {c: f"source.{c}" for c in colunas if c != "cod_imovel"}
@@ -484,7 +495,19 @@ def _merge_estados(tabela_arrow: pa.Table, delta_path: str) -> None:
             target_alias="target",
             writer_properties=WRITER_PROPERTIES,
         )
-        .when_matched_update(predicate="source.lsn_origem >= target.lsn_origem", updates=atualizacao)
+        # Evento com conteudo diferente do que esta no Delta (ou reinsercao de imovel
+        # excluido): regrava a linha inteira.
+        .when_matched_update(
+            predicate=f"source.lsn_origem >= target.lsn_origem AND ({_CONTEUDO_MUDOU} OR target.operacao_cdc = 'D')",
+            updates=atualizacao,
+        )
+        # Evento que nao muda nada (reentrega do slot, recarga do OLTP com os mesmos
+        # dados, UPDATE sem efeito): so o LSN avanca. data_hora_ingestao fica como esta,
+        # para o snapshot SCD Tipo 2 nao abrir uma versao identica a anterior.
+        .when_matched_update(
+            predicate="source.lsn_origem > target.lsn_origem",
+            updates={"lsn_origem": "source.lsn_origem"},
+        )
         .when_not_matched_insert(updates=insercao)
         .execute()
     )
@@ -521,7 +544,9 @@ def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DEL
     """
     Aplica as mudancas na tabela Delta Lake de forma idempotente:
     - o lote e consolidado por imovel na ordem do LSN (consolidar_micro_lote);
-    - matched com lsn_origem >= target.lsn_origem: atualiza; lsn menor: ignora;
+    - matched com lsn_origem >= target.lsn_origem e conteudo diferente: atualiza;
+    - matched com conteudo igual: so o lsn_origem avanca (nenhuma versao nova no SCD2);
+    - lsn menor que o gravado: ignora;
     - unchanged-toast-datum preserva a geometria que ja esta no Delta;
     - DELETE: grava operacao_cdc='D' e preserva os atributos e a geometria (exclusao logica).
 
