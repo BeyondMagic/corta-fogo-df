@@ -1,9 +1,10 @@
 -- Versoes cadastrais dos imoveis rurais (SCD Tipo 2, Issue #19): uma linha por versao.
 -- Base de dim_imovel_car e do cruzamento espacial historico em int_focos_imoveis.
 --
--- 1. Reentregas do CDC (at-least-once) regravam o mesmo lsn_origem com novo
---    data_hora_ingestao e geram no snapshot uma versao identica a anterior; essas
---    linhas sao descartadas e a validade e recalculada sobre as versoes restantes.
+-- 1. Linha do snapshot com o mesmo conteudo (atributos, geometria e exclusao) da linha
+--    anterior do imovel nao e versao nova: vem de reentrega do CDC (at-least-once) ou de
+--    recarga do OLTP com os mesmos dados. Essas linhas sao descartadas e a validade e
+--    recalculada sobre as versoes restantes.
 -- 2. dbt_valid_from da primeira versao de cada imovel e aberto em
 --    var('inicio_vigencia_aberta'): o snapshot so comeca a observar o cadastro na
 --    carga inicial do CDC, e sem essa abertura nenhum foco anterior a carga
@@ -16,18 +17,31 @@
 with snapshot as (
     select
         * replace (cast(dbt_valid_from as timestamptz) as dbt_valid_from),
-        lag(lsn_origem) over (
-            partition by cod_imovel
-            order by dbt_valid_from
-        ) as lsn_versao_anterior
+        md5(concat_ws('|',
+            situacao, condicao, cast(area_ha as varchar), cast(data_download as varchar),
+            geom_ewkb_hex, cast(is_excluido as varchar)
+        ))                                                              as hash_conteudo
     from {{ ref('snp_imovel_car') }}
 ),
 
-versoes as (
-    select *
+com_anterior as (
+    select
+        *,
+        lag(hash_conteudo) over (
+            partition by cod_imovel
+            order by dbt_valid_from
+        ) as hash_versao_anterior
     from snapshot
-    where lsn_versao_anterior is null
-       or lsn_origem <> lsn_versao_anterior
+),
+
+-- Uma versao so existe quando o conteudo do imovel muda. Reentregas do CDC (mesmo
+-- lsn_origem) e recargas do OLTP com os mesmos dados (lsn_origem novo, conteudo igual)
+-- geram linhas no snapshot, mas nao versoes.
+versoes as (
+    select * exclude (hash_conteudo, hash_versao_anterior)
+    from com_anterior
+    where hash_versao_anterior is null
+       or hash_conteudo <> hash_versao_anterior
 ),
 
 validade as (
