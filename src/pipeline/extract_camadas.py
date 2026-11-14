@@ -35,6 +35,12 @@ SISDIA_SERVICES = {
         "filename": "app_reservatorio.geojson",
         "descricao": "APPs de Reservatorios do DF (IBRAM)",
     },
+    # Fonte diferente das demais (IDE-DF / SEDUH), mesmo protocolo ArcGIS REST.
+    "regioes_administrativas": {
+        "url": "https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Publico/LIMITES/FeatureServer/1/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
+        "filename": "regioes_administrativas.geojson",
+        "descricao": "Regioes Administrativas do DF (IDE-DF / SEDUH)",
+    },
 }
 
 

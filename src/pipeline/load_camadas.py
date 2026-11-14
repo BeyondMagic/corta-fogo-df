@@ -208,6 +208,77 @@ def carregar_apps_ibram(conn, raw_dir: str):
     return total_carregado
 
 
+def normalizar_codigo_ra(codigo_bruto) -> str:
+    """Padroniza o codigo da RA para RA-<romano> (a fonte alterna entre 'RA-VI' e 'VI')."""
+    codigo = str(codigo_bruto or "").strip().upper()
+    if codigo and not codigo.startswith("RA-"):
+        codigo = "RA-" + codigo
+    return codigo
+
+
+def formatar_nome_ra(nome_bruto) -> str:
+    """'SOBRADINHO II' -> 'Sobradinho II'; 'SOL NASCENTE E POR DO SOL' -> 'Sol Nascente e Por do Sol'."""
+    conectivos = {"de", "da", "do", "das", "dos", "e"}
+    romanos = {"ii", "iii", "iv"}
+    palavras = []
+    for i, palavra in enumerate(str(nome_bruto or "").strip().lower().split()):
+        if palavra in romanos:
+            palavras.append(palavra.upper())
+        elif palavra in conectivos and i > 0:
+            palavras.append(palavra)
+        else:
+            palavras.append(palavra.capitalize())
+    return " ".join(palavras)
+
+
+def carregar_regioes_administrativas(conn, raw_dir: str):
+    """Carrega as Regioes Administrativas do DF a partir do GeoJSON da IDE-DF."""
+    path = os.path.join(raw_dir, "regioes_administrativas.geojson")
+    if not os.path.exists(path):
+        print(f"[AVISO] Arquivo nao encontrado: {path}. Pulando Regioes Administrativas.")
+        return 0
+
+    data_download = ler_data_download(path, datetime.date.today().isoformat())
+    print("Processando Regioes Administrativas...")
+    gdf = gpd.read_file(path)
+    if gdf.crs is None or gdf.crs.to_epsg() != TARGET_SRID:
+        gdf = gdf.to_crs(epsg=TARGET_SRID)
+
+    registros = []
+    codigos = set()
+    for _, row in gdf.iterrows():
+        codigo = normalizar_codigo_ra(row.get("ra_codigo"))
+        nome = str(row.get("ra_nome") or "").strip()
+        if not codigo or codigo == "RA-NAN" or not nome or nome.lower() == "nan" or codigo in codigos:
+            continue
+
+        geom = normalizar_para_multipolygon(row.geometry)
+        if geom is None or geom.is_empty:
+            continue
+
+        codigos.add(codigo)
+        registros.append(
+            (
+                codigo[:20],
+                formatar_nome_ra(nome)[:100],
+                round(geom.area / 1_000_000.0, 2),
+                "IDE-DF / SEDUH",
+                data_download,
+                geom.wkb_hex,
+            )
+        )
+
+    sql = """
+        INSERT INTO regiao_administrativa (codigo, nome, area_km2, fonte, data_download, geom)
+        VALUES (%s, %s, %s, %s, %s, ST_SetSRID(ST_GeomFromWKB(decode(%s, 'hex')), 31983))
+    """
+    with conn.cursor() as cur:
+        execute_batch(cur, sql, registros, page_size=100)
+    conn.commit()
+    print(f"  -> {len(registros)} Regioes Administrativas carregadas.")
+    return len(registros)
+
+
 def carregar_imoveis_car(conn, raw_dir: str) -> set:
     """Carrega os imoveis rurais do CAR-DF a partir do zip do SICAR."""
     zip_path = os.path.join(raw_dir, "AREA_IMOVEL.zip")
@@ -345,13 +416,13 @@ def main():
     )
     parser.add_argument(
         "--db-user",
-        default=os.getenv("DB_USER", "queimada"),
-        help="Usuario do banco (padrao: queimada).",
+        default=os.getenv("DB_USER", "corta-fogo"),
+        help="Usuario do banco (padrao: corta-fogo).",
     )
     parser.add_argument(
         "--db-password",
-        default=os.getenv("DB_PASSWORD", "queimada"),
-        help="Senha do banco (padrao: queimada).",
+        default=os.getenv("DB_PASSWORD", "corta-fogo"),
+        help="Senha do banco (padrao: corta-fogo).",
     )
     parser.add_argument(
         "--db-url",
@@ -378,17 +449,18 @@ def main():
             print("Limpando tabelas geograficas para carga limpa...")
             with conn.cursor() as cur:
                 cur.execute("""
-                    TRUNCATE TABLE reserva_legal, imovel_car, area_preservacao_permanente, unidade_conservacao, hidrografia RESTART IDENTITY CASCADE;
+                    TRUNCATE TABLE reserva_legal, imovel_car, area_preservacao_permanente, unidade_conservacao, hidrografia, regiao_administrativa RESTART IDENTITY CASCADE;
                 """)
             conn.commit()
 
         carregar_unidades_conservacao(conn, args.raw_dir)
         carregar_apps_ibram(conn, args.raw_dir)
+        carregar_regioes_administrativas(conn, args.raw_dir)
         cods = carregar_imoveis_car(conn, args.raw_dir)
         carregar_reserva_legal(conn, args.raw_dir, cods)
 
         with conn.cursor() as cur:
-            cur.execute("ANALYZE unidade_conservacao, area_preservacao_permanente, imovel_car, reserva_legal;")
+            cur.execute("ANALYZE unidade_conservacao, area_preservacao_permanente, regiao_administrativa, imovel_car, reserva_legal;")
         conn.commit()
 
         print("\nCarga de todas as camadas geograficas finalizada com exito.")

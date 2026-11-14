@@ -20,6 +20,10 @@ with conn.cursor() as cur:
             "SELECT count(*), Find_SRID('public', 'area_preservacao_permanente', 'geom'), count(*) FILTER (WHERE ST_IsValid(geom)) FROM area_preservacao_permanente",
         ),
         (
+            "Regioes Administrativas",
+            "SELECT count(*), Find_SRID('public', 'regiao_administrativa', 'geom'), count(*) FILTER (WHERE ST_IsValid(geom)) FROM regiao_administrativa",
+        ),
+        (
             "Imoveis Rurais (CAR)",
             "SELECT count(*), Find_SRID('public', 'imovel_car', 'geom'), count(*) FILTER (WHERE ST_IsValid(geom)) FROM imovel_car",
         ),
