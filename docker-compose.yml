@@ -17,6 +17,7 @@ x-dagster: &dagster
     PIPELINE_DIR: /app/src/pipeline
     CSV_FOCOS: /app/data/processed/focos_df_2015_2025.csv
     FALHAS_INDUZIDAS: ${FALHAS_INDUZIDAS:-0}
+    SLA_FRESCOR_HORAS: ${SLA_FRESCOR_HORAS:-30}
   volumes:
     - lakehouse:/app/data/delta
     - warehouse:/app/data/warehouse
@@ -179,6 +180,38 @@ services:
     volumes:
       - lakehouse:/app/data/delta:ro
       - warehouse:/app/data/warehouse
+
+  # SLA de frescor da tabela de consumo do painel (docs/frescor_sla.md). Sai com codigo 1
+  # se a tabela ou um dado do lago ainda nao processado passar de SLA_FRESCOR_HORAS.
+  frescor:
+    profiles: ["transformacao"]
+    build:
+      context: ./transformacao
+    entrypoint: ["python", "/app/src/pipeline/frescor.py"]
+    command: []
+    environment:
+      DELTA_DIR: /app/data/delta
+      DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+      SLA_FRESCOR_HORAS: ${SLA_FRESCOR_HORAS:-30}
+    volumes:
+      - lakehouse:/app/data/delta:ro
+      - warehouse:/app/data/warehouse
+      - ./src/pipeline:/app/src/pipeline:ro
+
+  # Exporta a camada Gold para o JSON que o dashboard publicado le (docs/dashboard.md).
+  exportar_painel:
+    profiles: ["transformacao"]
+    build:
+      context: ./transformacao
+    entrypoint: ["python", "/app/scripts/exportar_painel_gold.py"]
+    command: []
+    environment:
+      DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+      SLA_FRESCOR_HORAS: ${SLA_FRESCOR_HORAS:-30}
+    volumes:
+      - warehouse:/app/data/warehouse
+      - ./scripts:/app/scripts:ro
+      - ./docs/assets/dados_dashboard:/app/saida
 
   dagster_webserver:
     <<: *dagster
