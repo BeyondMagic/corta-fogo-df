@@ -52,13 +52,13 @@ Etapa final da Entrega 3, dedicada à integração entre o dbt e o Dagster, exec
     - *Distribuição sazonal:* valida se a concentração de fogo no período de estiagem (maio a setembro) atinge pelo menos 70% da série (medido: 84,4% no total; pior ano foi 2020 com 70,1%).
     - *Distribuição espacial:* valida se 100% das coordenadas e geometrias situam-se no quadrilátero geográfico do DF com topologia válida.
 
-#### Issue #23: Decisão de Arquitetura (ADR 0003) e Mapa Interativo
+#### Issue #23: Decisão de Arquitetura (ADR 0003) e Dashboard Interativo
 - **Responsável:** João V. Farias
 - **Link da Issue:** [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23)
 - **Atividades executadas:**
   - Redação da Decisão Arquitetural [ADR 0003](adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md), comparando o modelo estrela contra alternativas (OBT e Data Vault) e dbt-duckdb com Dagster contra opções nulas (cron com SQL) e pesadas (SQLMesh/Airflow).
   - Medição de ganhos de desempenho: cálculo do mart em 9,9 s no dbt e leitura da pergunta final em 5,0 ms no DuckDB, contra 41,8 s da junção espacial direta no PostGIS.
-  - Desenvolvimento do [Mapa Interativo do DF](mapa.md) em Leaflet com linha do tempo deslizante de 11 anos (2015 a 2025), reprodução contínua e filtros dinâmicos.
+  - Desenvolvimento do [Dashboard do DF](dashboard.md) em D3.js (`d3-geo`) e Leaflet com linha do tempo de 11 anos (2015 a 2025), filtros cruzados e inspeção de UCs, RAs e imóveis CAR.
   - Implementação de polígonos reais das 84 Unidades de Conservação oficiais (SISDIA/IBRAM), camada independente de buffer métrico de 1.000 m (EPSG:31983) e polígonos cadastrais sob demanda para os 10 imóveis com maior histórico de fogo no CAR.
   - Mapeamento da pegada espacial do sensor orbital (VIIRS 375 m, MODIS 1 km, GOES 2 km e AVHRR 1.1 km) e integração do modo tela cheia.
 
@@ -157,4 +157,4 @@ Resumo das frentes de liderança técnica assumidas por cada membro da equipe na
 | **Gabriel Fernando** | Consumidor CDC e Replicação Lógica | Projeto dbt-duckdb, Staging e Intermediate | [#20](https://github.com/BeyondMagic/corta-fogo-df/issues/20) |
 | **Elias F.** | Benchmarks e Semântica de Entrega | Testes de Dados e Detecção de Erros Silenciosos | [#21](https://github.com/BeyondMagic/corta-fogo-df/issues/21) |
 | **Cláudio Henrique** | Infraestrutura e Suporte ao Lakehouse | Orquestração com Dagster, Retry e Backfill | [#22](https://github.com/BeyondMagic/corta-fogo-df/issues/22) |
-| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Mapa Interativo e Dicionário de Dados | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |
+| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Dashboard e Dicionário de Dados | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |

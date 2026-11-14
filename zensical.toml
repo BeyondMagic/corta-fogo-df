@@ -16,14 +16,15 @@ extra_css = [
 extra_javascript = [
   "https://cdn.jsdelivr.net/gh/BeyondMagic/zensical-slides@latest/dist/zensical-slides.min.mjs",
   "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
+  "https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-  "assets/dados_mapa_df.js",
   "javascripts/mapa_corta_fogo.js",
+  "javascripts/dashboard_corta_fogo.js",
 ]
 
 nav = [
   { "Visão Geral" = "index.md" },
-  { "Mapa Interativo" = "mapa.md" },
+  { "Dashboard" = "dashboard.md" },
   { "Entregas" = [
     { "Entrega 1" = "entrega/01/README.md" },
     { "Entrega 2" = "entrega/02/README.md" },

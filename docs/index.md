@@ -8,7 +8,7 @@ Plataforma de engenharia de dados para cruzamento espacial e temporal de focos d
 
 > Projeto desenvolvido para a disciplina [Sistemas de Bancos de Dados 2 (FCTE / UnB, Turma 03, Semestre 2026.2)](https://unb-bd2.github.io/PlanoEnsino/projeto/).
 >
-> Explore os dados e os cruzamentos territoriais no [Mapa Interativo do DF](mapa.md) com linha do tempo de 2015 a 2025, consulte as estruturas no [Dicionário de Dados](dicionario_dados.md) ou acompanhe o histórico de atividades no [Diário de Bordo](diario_de_bordo.md).
+> Explore os dados e os cruzamentos territoriais no [Dashboard do DF](dashboard.md) com linha do tempo de 2015 a 2025, consulte as estruturas no [Dicionário de Dados](dicionario_dados.md) ou acompanhe o histórico de atividades no [Diário de Bordo](diario_de_bordo.md).
 
 ## Equipe
 
@@ -22,7 +22,7 @@ A equipe é formada por sete integrantes, cada um responsável por uma frente de
 | [Elias F.](https://github.com/BeyondMagic/corta-fogo-df/commits?author=EliasOliver21)         | Caracterização e Métricas        | Semântica de Entrega e Benchmarks   | [Testes e Distribuição](https://github.com/BeyondMagic/corta-fogo-df/issues/21)          |     -     |
 | [Gabriel Fernando](https://github.com/BeyondMagic/corta-fogo-df/commits?author=MMcLovin)      | Ingestão de camadas territoriais | Consumidor CDC e Replicação         | [Camadas dbt e Staging](https://github.com/BeyondMagic/corta-fogo-df/issues/20)          |     -     |
 | [Gabriel Souza](https://github.com/BeyondMagic/corta-fogo-df/commits?author=GabrielMS00)      | Coordenação e Pergunta de Gestão | Coordenação e Arquitetura           | [Coordenação e Pergunta de Gestão](https://github.com/BeyondMagic/corta-fogo-df/issues/17) |     -     |
-| [João V. Farias](https://github.com/BeyondMagic/corta-fogo-df/commits?author=beyondmagic)     | ADR e ingestão de dados de focos | ADR e Ingestão em Lote              | [ADR e Mapa Interativo](https://github.com/BeyondMagic/corta-fogo-df/issues/23)          |     -     |
+| [João V. Farias](https://github.com/BeyondMagic/corta-fogo-df/commits?author=beyondmagic)     | ADR e ingestão de dados de focos | ADR e Ingestão em Lote              | [ADR e Dashboard](https://github.com/BeyondMagic/corta-fogo-df/issues/23)          |     -     |
 | [Manoel Felipe](https://github.com/BeyondMagic/corta-fogo-df/commits?author=Manoel835)       | Modelagem de Dados               | Modelagem de Tabela Aberta          | [Modelagem Dimensional Gold](https://github.com/BeyondMagic/corta-fogo-df/issues/18)     |     -     |
 | [Samuel Ribeiro](https://github.com/BeyondMagic/corta-fogo-df/commits?author=SamuelRicosta) | Migrações                        | Mutações OLTP e Artefatos           | [Dimensão SCD Tipo 2](https://github.com/BeyondMagic/corta-fogo-df/issues/19)            |     -     |
 
