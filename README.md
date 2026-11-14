@@ -56,7 +56,7 @@ docker compose down -v
 
 ### Verificar o ciclo CDC e a camada analítica
 
-Com o ambiente no ar, o script de mutações executa um INSERT e um DELETE em `foco_calor` e um UPDATE em `imovel_car`, cada um em transação própria (precisa de `pip install psycopg2-binary` no host):
+Com o ambiente no ar, o script de mutações executa um INSERT e um DELETE em `foco_calor`, um UPDATE em `imovel_car` e o ciclo INSERT, UPDATE e DELETE de um imóvel sentinela em `imovel_car` (precisa de `pip install psycopg2-binary` no host):
 
 ```bash
 python scripts/cdc/gerar_mutacoes_oltp.py
@@ -68,7 +68,7 @@ Em seguida, o serviço `verificar_lakehouse` lê as tabelas Delta direto com Duc
 docker compose run --rm verificar_lakehouse
 ```
 
-A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor` ou se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
+A verificação reprova (exit 1) se houver `id_foco` repetido em `foco_calor`, se os `cod_imovel` vivos do Delta divergirem dos de `imovel_car` no PostgreSQL ou se alguma geometria do Delta tiver sido gravada com o marcador `unchanged-toast-datum`. Como o CDC é assíncrono, a comparação é repetida por até 90 segundos antes de reprovar. A saída também informa, sem reprovar, a diferença de contagem de `foco_calor` entre Delta e PostgreSQL, as linhas por partição e os arquivos Parquet físicos.
 
 ### Orquestração (Dagster)
 
@@ -86,7 +86,7 @@ docker compose run --rm demo_reentrega
 
 O script usa o código de produção do `cdc_consumer` com um slot próprio (`cdc_demo`) e um Delta descartável, sem interferir no consumidor em execução. Ele faz 3 retificações reais em `imovel_car`, simula a queda do consumidor depois do commit no Delta e antes do avanço do slot, e deixa o slot reentregar os mesmos eventos. Reprova (exit 1) se o Delta ganhar duplicatas ou divergir do estado anterior à reentrega. Ao final, reverte as retificações e remove o slot.
 
-A tabela `imovel_car` do Delta preserva exclusões como `operacao_cdc='D'` em vez de apagar a linha. As mutações de `foco_calor` não passam pelo CDC: a tabela é insert-only no PostgreSQL e o Delta de `foco_calor` vem do lote.
+A tabela `imovel_car` do Delta preserva exclusões como `operacao_cdc='D'` em vez de apagar a linha, mantendo os atributos e a geometria do imóvel. As mutações de `foco_calor` não passam pelo CDC: a tabela é insert-only no PostgreSQL e o Delta de `foco_calor` vem do lote.
 
 Para conferir o total de registros carregados no PostgreSQL e ver detalhes de validação, consulte o [guia de reprodução na Entrega 1](docs/entrega/01/README.md#10-como-reproduzir-a-carga).
 

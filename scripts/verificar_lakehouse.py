@@ -6,6 +6,7 @@ Checagens que reprovam (exit 1):
 - foco_calor: id_foco unico no Delta.
 - imovel_car: o conjunto de cod_imovel vivos no Delta (operacao_cdc <> 'D') e igual ao
   do OLTP. O CDC e assincrono, entao a comparacao e repetida ate convergir ou ate --timeout.
+- imovel_car: nenhuma geometria gravada com o marcador unchanged-toast-datum.
 
 Checagens so informativas: contagem de foco_calor frente ao OLTP, arquivos Parquet fisicos
 frente ao que o log Delta considera ativo, linhas por particao.
@@ -106,7 +107,18 @@ def verificar_imovel_car(con, oltp, timeout):
           f"(faltando no Delta: {len(faltando)}, a mais no Delta: {len(sobrando)})")
     if sobrando:
         print(f"  exemplos a mais no Delta: {sorted(sobrando)[:3]}")
-    return ok
+
+    # O marcador do test_decoding para coluna TOAST inalterada nunca pode virar geometria.
+    marcador, excluidas_sem_atributos = con.execute(
+        f"SELECT count(*) FILTER (WHERE geom_ewkb_hex = 'unchanged-toast-datum'), "
+        f"count(*) FILTER (WHERE operacao_cdc = 'D' AND geom_ewkb_hex IS NULL) "
+        f"FROM delta_scan('{caminho}')"
+    ).fetchone()
+    ok_geom = marcador == 0
+    print(f"  [{'OK' if ok_geom else 'FALHA'}] nenhum marcador TOAST gravado como geometria ({marcador} linha(s))")
+    print(f"  exclusoes logicas sem geometria: {excluidas_sem_atributos} "
+          "(informativo: imovel excluido antes de o Delta conhece-lo)")
+    return ok and ok_geom
 
 
 def main():

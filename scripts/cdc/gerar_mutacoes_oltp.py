@@ -9,6 +9,10 @@ separado no WAL:
    e coordenadas dentro do DF.
 2. UPDATE: retificacao cadastral de um imovel_car existente (area_ha e condicao).
 3. DELETE: remocao do ultimo foco inserido na operacao 1 (foco temporario).
+4. Ciclo completo em imovel_car, a tabela que o CDC replica: INSERT de um imovel
+   sentinela (copia da geometria de um imovel real), UPDATE dele e DELETE dele.
+   O INSERT e o UPDATE ficam na mesma transacao de proposito: chegam ao consumidor
+   no mesmo micro-lote, com o geom do UPDATE como unchanged-toast-datum.
 
 foco_calor e insert-only (trigger tg_foco_calor_imutavel, migracao V3). O DELETE
 desativa o trigger dentro da mesma transacao e o reativa antes do COMMIT: outras
@@ -40,6 +44,10 @@ LON_MIN, LON_MAX = -47.95, -47.55
 LAT_MIN, LAT_MAX = -15.95, -15.60
 
 CONDICAO_RETIFICADA = "Analisado, em regularizacao ambiental (PRA) - retificacao de teste CDC"
+
+# Imovel sentinela do ciclo INSERT/UPDATE/DELETE em imovel_car. O prefixo respeita o
+# CHECK (cod_imovel LIKE 'DF-%') e nao colide com codigo real do SICAR (DF-5300108-...).
+COD_SENTINELA = "DF-0000000-SENTINELA-CDC"
 
 log = logging.getLogger("mutacoes_oltp")
 
@@ -189,6 +197,49 @@ def remover_foco_temporario(conn, id_foco: int) -> None:
     log.info("COMMIT DELETE xid=%s lsn=%s id_foco=%s", xid, lsn_atual(conn), id_foco)
 
 
+def inserir_e_retificar_sentinela(conn) -> None:
+    """INSERT e UPDATE do imovel sentinela na mesma transacao (mesmo micro-lote no consumidor)."""
+    with conn.cursor() as cur:
+        xid = xid_atual(cur)
+        cur.execute("DELETE FROM imovel_car WHERE cod_imovel = %s", (COD_SENTINELA,))
+        cur.execute(
+            """
+            INSERT INTO imovel_car (cod_imovel, situacao, condicao, area_ha, data_download, geom)
+            SELECT %s, 'AT', 'Sentinela de teste CDC', area_ha, data_download, geom
+              FROM imovel_car
+             WHERE cod_imovel <> %s
+             ORDER BY ST_NPoints(geom) DESC
+             LIMIT 1
+            RETURNING area_ha, ST_NPoints(geom)
+            """,
+            (COD_SENTINELA, COD_SENTINELA),
+        )
+        linha = cur.fetchone()
+        if linha is None:
+            raise RuntimeError("Nenhum imovel_car encontrado. Rode a carga (servico load_camadas) antes.")
+        area, vertices = linha
+        log.info("INSERT imovel_car cod_imovel=%s area_ha=%s vertices=%s", COD_SENTINELA, area, vertices)
+        cur.execute(
+            "UPDATE imovel_car SET situacao = 'PE', condicao = NULL WHERE cod_imovel = %s",
+            (COD_SENTINELA,),
+        )
+        log.info("UPDATE imovel_car cod_imovel=%s situacao: 'AT' -> 'PE' | condicao -> NULL", COD_SENTINELA)
+    conn.commit()
+    log.info("COMMIT INSERT+UPDATE xid=%s lsn=%s cod_imovel=%s", xid, lsn_atual(conn), COD_SENTINELA)
+
+
+def remover_sentinela(conn) -> None:
+    with conn.cursor() as cur:
+        xid = xid_atual(cur)
+        cur.execute("DELETE FROM imovel_car WHERE cod_imovel = %s RETURNING cod_imovel", (COD_SENTINELA,))
+        if cur.fetchone() is None:
+            conn.rollback()
+            raise RuntimeError(f"Imovel sentinela {COD_SENTINELA} nao encontrado para DELETE.")
+        log.info("DELETE imovel_car cod_imovel=%s", COD_SENTINELA)
+    conn.commit()
+    log.info("COMMIT DELETE xid=%s lsn=%s cod_imovel=%s", xid, lsn_atual(conn), COD_SENTINELA)
+
+
 def mostrar_slot(conn, slot: str) -> None:
     """Peek (sem consumir) das mudancas pendentes no slot, para conferencia."""
     with conn.cursor() as cur:
@@ -220,6 +271,11 @@ def main():
     parser.add_argument("--satelite", help="Nome do satelite. Padrao: satelite de referencia.")
     parser.add_argument("--cod-imovel", help="Imovel a retificar. Padrao: amostra aleatoria.")
     parser.add_argument("--seed", type=int, help="Semente para coordenadas e retificacao reprodutiveis.")
+    parser.add_argument(
+        "--sem-sentinela",
+        action="store_true",
+        help="Pula o ciclo INSERT/UPDATE/DELETE do imovel sentinela em imovel_car.",
+    )
     parser.add_argument("--slot", help="Slot logico para conferir os eventos via peek ao final (ex: cdc_imovel).")
     args = parser.parse_args()
 
@@ -241,14 +297,21 @@ def main():
 
     try:
         log.info("Inicio. lsn=%s", lsn_atual(conn))
-        log.info("Operacao 1/3: INSERT de %s foco(s) ficticio(s)", args.focos)
+        log.info("Operacao 1/5: INSERT de %s foco(s) ficticio(s)", args.focos)
         ids = inserir_focos(conn, args.focos, args.satelite, rng)
 
-        log.info("Operacao 2/3: UPDATE (retificacao cadastral) em imovel_car")
+        log.info("Operacao 2/5: UPDATE (retificacao cadastral) em imovel_car")
         cod = retificar_imovel(conn, args.cod_imovel, rng)
 
-        log.info("Operacao 3/3: DELETE do foco temporario id_foco=%s", ids[-1])
+        log.info("Operacao 3/5: DELETE do foco temporario id_foco=%s", ids[-1])
         remover_foco_temporario(conn, ids[-1])
+
+        if not args.sem_sentinela:
+            log.info("Operacao 4/5: INSERT e UPDATE do imovel sentinela %s (mesma transacao)", COD_SENTINELA)
+            inserir_e_retificar_sentinela(conn)
+
+            log.info("Operacao 5/5: DELETE do imovel sentinela %s", COD_SENTINELA)
+            remover_sentinela(conn)
 
         log.info(
             "Resumo: focos inseridos=%s, foco removido=%s, imovel retificado=%s",

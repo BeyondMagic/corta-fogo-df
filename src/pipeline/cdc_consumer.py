@@ -47,6 +47,9 @@ DEFAULT_SLOT_NAME = os.getenv("CDC_SLOT_NAME", "cdc_imovel")
 # Mesma compressao do lote (ADR 0002): ZSTD.
 WRITER_PROPERTIES = WriterProperties(compression="ZSTD")
 
+# Marcador do test_decoding para coluna TOAST que o UPDATE nao alterou.
+TOAST_INALTERADO = "unchanged-toast-datum"
+
 log = logging.getLogger("cdc_consumer")
 
 
@@ -81,10 +84,24 @@ def conectar_postgres(
     return conn
 
 
+def slot_existe(conn, slot_name: str = DEFAULT_SLOT_NAME) -> bool:
+    """Informa se o slot logico ja existe no PostgreSQL."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_replication_slots WHERE slot_name = %s", (slot_name,))
+        existe = cur.fetchone() is not None
+    conn.commit()
+    return existe
+
+
 def garantir_slot(conn, slot_name: str = DEFAULT_SLOT_NAME) -> str:
     """
     Verifica se o slot logico existe; se nao, cria o slot usando test_decoding.
-    Retorna o confirmed_flush_lsn ou LSN atual do banco.
+    Retorna o confirmed_flush_lsn do slot existente ou o ponto consistente do slot criado.
+
+    O ponto consistente vem do proprio pg_create_logical_replication_slot: toda mudanca
+    que o slot entrega tem LSN maior que ele. Um pg_current_wal_lsn() lido depois da
+    criacao poderia ficar acima do LSN de uma mudanca ainda nao confirmada, e a guarda
+    de LSN do MERGE descartaria essa mudanca.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -98,12 +115,11 @@ def garantir_slot(conn, slot_name: str = DEFAULT_SLOT_NAME) -> str:
         else:
             log.info("Criando slot logico '%s' com plugin test_decoding...", slot_name)
             cur.execute(
-                "SELECT pg_create_logical_replication_slot(%s, 'test_decoding')",
+                "SELECT lsn::text FROM pg_create_logical_replication_slot(%s, 'test_decoding')",
                 (slot_name,),
             )
-            cur.execute("SELECT pg_current_wal_lsn()::text")
             lsn_retorno = cur.fetchone()[0]
-            log.info("Slot '%s' criado com sucesso. LSN inicial: %s", slot_name, lsn_retorno)
+            log.info("Slot '%s' criado com sucesso. Ponto consistente: %s", slot_name, lsn_retorno)
     conn.commit()
     return lsn_retorno or "0/0"
 
@@ -169,10 +185,56 @@ def executar_snapshot_inicial(conn, delta_path: str = DEFAULT_DELTA_PATH, lsn_in
     df["data_download"] = pd.to_datetime(df["data_download"]).dt.date
 
     tabela_arrow = preparar_tabela_arrow(df)
-    log.info("Gravando %d registros no snapshot Delta Lake em '%s'...", len(df), delta_path)
-    write_deltalake(delta_path, tabela_arrow, mode="overwrite", writer_properties=WRITER_PROPERTIES)
+    if DeltaTable.is_deltatable(delta_path):
+        log.info("Tabela Delta ja existe. Ressincronizando %d registros em '%s'...", len(df), delta_path)
+        ressincronizar_snapshot(tabela_arrow, delta_path, lsn_numerico)
+    else:
+        log.info("Gravando %d registros no snapshot Delta Lake em '%s'...", len(df), delta_path)
+        write_deltalake(delta_path, tabela_arrow, mode="overwrite", writer_properties=WRITER_PROPERTIES)
     log.info("Snapshot gravado com sucesso.")
     return len(df)
+
+
+def ressincronizar_snapshot(tabela_arrow: pa.Table, delta_path: str, lsn_numerico: int) -> None:
+    """
+    Alinha uma tabela Delta existente com um snapshot novo do OLTP (slot recriado).
+
+    As mudancas ocorridas entre a perda do slot antigo e a criacao do novo nao chegam
+    pelo CDC, entao o snapshot e a unica fonte delas:
+    - linha cujo conteudo mudou (ou que estava excluida e voltou): regravada por inteiro;
+    - linha sem mudanca: so o lsn_origem passa a ser o do slot novo, sem tocar em
+      data_hora_ingestao, para nao gerar versao nova no snapshot SCD Tipo 2;
+    - linha ausente do snapshot e ainda viva no Delta: vira exclusao logica.
+    O historico de exclusoes anteriores e preservado (nada e apagado).
+    """
+    colunas_conteudo = ["situacao", "condicao", "area_ha", "data_download", "geom_ewkb_hex"]
+    conteudo_mudou = " OR ".join(f"(target.{c} IS DISTINCT FROM source.{c})" for c in colunas_conteudo)
+    todas = {campo.name: f"source.{campo.name}" for campo in SCHEMA_IMOVEL_DELTA if campo.name != "cod_imovel"}
+    agora = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
+
+    (
+        DeltaTable(delta_path)
+        .merge(
+            source=tabela_arrow,
+            predicate="target.cod_imovel = source.cod_imovel",
+            source_alias="source",
+            target_alias="target",
+            writer_properties=WRITER_PROPERTIES,
+        )
+        .when_matched_update(predicate=f"{conteudo_mudou} OR target.operacao_cdc = 'D'", updates=todas)
+        .when_matched_update(updates={"lsn_origem": "source.lsn_origem"})
+        .when_not_matched_insert_all()
+        .when_not_matched_by_source_update(
+            predicate="target.operacao_cdc != 'D'",
+            updates={
+                "operacao_cdc": "'D'",
+                "origem_ingestao": "'snapshot'",
+                "lsn_origem": str(int(lsn_numerico)),
+                "data_hora_ingestao": f"arrow_cast('{agora}', 'Timestamp(Microsecond, Some(\"UTC\"))')",
+            },
+        )
+        .execute()
+    )
 
 
 def parse_valores_tupla(dados_tupla: str) -> Dict[str, Any]:
@@ -234,10 +296,16 @@ def parse_linha_test_decoding(data_str: str) -> Optional[Dict[str, Any]]:
             dados_new = corpo.replace("new-tuple:", "").strip()
 
         campos = parse_valores_tupla(dados_new)
-        # O old-key sempre traz a PK real. No new-tuple a PK pode vir como
-        # unchanged-toast-datum quando o valor esta fora de linha.
+        # No new-tuple a PK pode vir como unchanged-toast-datum quando o valor esta fora
+        # de linha: nesse caso a chave real e a do old-key. Se o new-tuple traz uma chave
+        # diferente da do old-key, o UPDATE trocou a PK: a chave antiga segue em
+        # cod_imovel_anterior e vira uma exclusao logica (ver eventos_para_linhas_delta).
+        cod_imovel_new = campos.get("cod_imovel")
         if cod_imovel_old:
-            campos["cod_imovel"] = cod_imovel_old
+            if cod_imovel_new in (None, TOAST_INALTERADO):
+                campos["cod_imovel"] = cod_imovel_old
+            elif cod_imovel_new != cod_imovel_old:
+                campos["cod_imovel_anterior"] = cod_imovel_old
 
         campos["operacao_cdc"] = "U"
         return campos
@@ -300,41 +368,133 @@ def converter_evento_para_linha_delta(
     }
 
 
-def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DELTA_PATH) -> int:
+def eventos_para_linhas_delta(
+    evento: Dict[str, Any], lsn_str: str, now_utc: datetime
+) -> List[Dict[str, Any]]:
     """
-    Aplica MERGE idempotente na tabela Delta Lake garantindo:
-    - matched com lsn_origem >= target.lsn_origem: atualiza
-    - matched com lsn menor: ignora
-    - unchanged-toast-datum preserva target.geom_ewkb_hex
-    - delete: grava operacao_cdc='D' sem apagar a linha (soft-delete)
+    Converte um evento parseado em uma ou duas linhas do Delta.
+
+    O caso comum devolve uma linha. Um UPDATE que troca a PK devolve duas, com o mesmo
+    LSN: a exclusao logica da chave antiga e a linha da chave nova, que carrega
+    cod_imovel_anterior para herdar a geometria quando o geom veio como TOAST inalterado.
     """
-    if df_mudancas.empty:
-        return 0
+    linha = converter_evento_para_linha_delta(evento, lsn_str, now_utc)
+    if linha is None:
+        return []
 
-    tabela_arrow = preparar_tabela_arrow(df_mudancas)
+    anterior = evento.get("cod_imovel_anterior")
+    if not anterior:
+        return [linha]
 
-    if not DeltaTable.is_deltatable(delta_path):
-        log.info("Tabela Delta '%s' nao existe. Criando com o lote atual...", delta_path)
-        write_deltalake(delta_path, tabela_arrow, mode="error", writer_properties=WRITER_PROPERTIES)
-        return len(df_mudancas)
+    exclusao = converter_evento_para_linha_delta(
+        {"cod_imovel": anterior, "operacao_cdc": "D"}, lsn_str, now_utc
+    )
+    linha["cod_imovel_anterior"] = str(anterior)
+    return [exclusao, linha]
 
-    dt = DeltaTable(delta_path)
 
-    # Expressao de preservacao de geometria caso seja unchanged-toast-datum ou DELETE sem geometria
-    atualizacao = {
-        "situacao": "source.situacao",
-        "condicao": "source.condicao",
-        "area_ha": "source.area_ha",
-        "data_download": "source.data_download",
-        "geom_ewkb_hex": "CASE WHEN source.geom_ewkb_hex IS NOT NULL AND source.geom_ewkb_hex != 'unchanged-toast-datum' THEN source.geom_ewkb_hex ELSE target.geom_ewkb_hex END",
-        "data_hora_ingestao": "source.data_hora_ingestao",
-        "origem_ingestao": "source.origem_ingestao",
-        "operacao_cdc": "source.operacao_cdc",
-        "lsn_origem": "source.lsn_origem",
-    }
+def consolidar_micro_lote(
+    registros: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Reduz o micro-lote a no maximo um estado e uma exclusao por imovel, na ordem do LSN.
+
+    Devolve (estados, exclusoes):
+    - estados: a ultima linha de INSERT/UPDATE de cada imovel, inteira. Um NULL do
+      evento continua NULL (nao herda o valor de um evento anterior do lote).
+    - exclusoes: o DELETE de cada imovel cujo ultimo evento do lote foi um DELETE.
+      O estado anterior a ele, se houver no lote, continua em `estados`, com LSN menor.
+
+    A geometria TOAST inalterada herda a ultima geometria real vista no lote para o
+    mesmo imovel (ou para a chave antiga, na troca de PK). Sem geometria no lote, o
+    marcador segue adiante e o MERGE preserva a geometria que ja esta no Delta.
+    """
+    estados: Dict[str, Dict[str, Any]] = {}
+    exclusoes: Dict[str, Dict[str, Any]] = {}
+    geom_no_lote: Dict[str, str] = {}
+
+    for registro in sorted(registros, key=lambda r: r["lsn_origem"]):
+        cod = registro["cod_imovel"]
+        if registro.get("operacao_cdc") == "D":
+            exclusoes[cod] = registro
+            continue
+
+        linha = dict(registro)
+        geom = linha.get("geom_ewkb_hex")
+        if geom == TOAST_INALTERADO:
+            anterior = linha.get("cod_imovel_anterior")
+            herdada = geom_no_lote.get(cod) or (geom_no_lote.get(anterior) if anterior else None)
+            if herdada:
+                linha["geom_ewkb_hex"] = herdada
+        if _geom_real(linha.get("geom_ewkb_hex")):
+            geom_no_lote[cod] = linha["geom_ewkb_hex"]
+
+        estados[cod] = linha
+        # Reinsercao depois de uma exclusao no mesmo lote: vale o estado novo.
+        exclusoes.pop(cod, None)
+
+    return list(estados.values()), list(exclusoes.values())
+
+
+def _geom_real(valor: Any) -> bool:
+    return isinstance(valor, str) and valor != "" and valor != TOAST_INALTERADO
+
+
+def _herdar_geometria_da_chave_antiga(estados: List[Dict[str, Any]], delta_path: str) -> None:
+    """Troca de PK com geom TOAST inalterado: busca no Delta a geometria da chave antiga."""
+    pendentes = [
+        e for e in estados
+        if e.get("geom_ewkb_hex") == TOAST_INALTERADO and e.get("cod_imovel_anterior")
+    ]
+    if not pendentes or not DeltaTable.is_deltatable(delta_path):
+        return
+
+    atual = DeltaTable(delta_path).to_pandas(columns=["cod_imovel", "geom_ewkb_hex"])
+    geom_por_cod = dict(zip(atual["cod_imovel"], atual["geom_ewkb_hex"]))
+    for estado in pendentes:
+        herdada = geom_por_cod.get(estado["cod_imovel_anterior"])
+        if _geom_real(herdada):
+            estado["geom_ewkb_hex"] = herdada
+
+
+# Geometria gravada no Delta: o marcador TOAST nunca entra. Em linha nova sem geometria
+# conhecida fica NULL, e os testes not_null da camada dbt acusam o caso.
+_GEOM_PARA_INSERT = (
+    f"CASE WHEN source.geom_ewkb_hex = '{TOAST_INALTERADO}' THEN NULL ELSE source.geom_ewkb_hex END"
+)
+_GEOM_PARA_UPDATE = (
+    f"CASE WHEN source.geom_ewkb_hex IS NOT NULL AND source.geom_ewkb_hex != '{TOAST_INALTERADO}' "
+    "THEN source.geom_ewkb_hex ELSE target.geom_ewkb_hex END"
+)
+
+
+def _merge_estados(tabela_arrow: pa.Table, delta_path: str) -> None:
+    colunas = [campo.name for campo in SCHEMA_IMOVEL_DELTA]
+    atualizacao = {c: f"source.{c}" for c in colunas if c != "cod_imovel"}
+    atualizacao["geom_ewkb_hex"] = _GEOM_PARA_UPDATE
+    insercao = {c: f"source.{c}" for c in colunas}
+    insercao["geom_ewkb_hex"] = _GEOM_PARA_INSERT
 
     (
-        dt.merge(
+        DeltaTable(delta_path)
+        .merge(
+            source=tabela_arrow,
+            predicate="target.cod_imovel = source.cod_imovel",
+            source_alias="source",
+            target_alias="target",
+            writer_properties=WRITER_PROPERTIES,
+        )
+        .when_matched_update(predicate="source.lsn_origem >= target.lsn_origem", updates=atualizacao)
+        .when_not_matched_insert(updates=insercao)
+        .execute()
+    )
+
+
+def _merge_exclusoes(tabela_arrow: pa.Table, delta_path: str) -> None:
+    """Exclusao logica: so as colunas de controle mudam; os atributos do imovel ficam."""
+    (
+        DeltaTable(delta_path)
+        .merge(
             source=tabela_arrow,
             predicate="target.cod_imovel = source.cod_imovel",
             source_alias="source",
@@ -343,11 +503,53 @@ def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DEL
         )
         .when_matched_update(
             predicate="source.lsn_origem >= target.lsn_origem",
-            updates=atualizacao,
+            updates={
+                "operacao_cdc": "source.operacao_cdc",
+                "lsn_origem": "source.lsn_origem",
+                "data_hora_ingestao": "source.data_hora_ingestao",
+                "origem_ingestao": "source.origem_ingestao",
+            },
         )
+        # Exclusao de imovel que o Delta nunca viu: grava so a marca, para que um INSERT
+        # antigo reentregue depois nao ressuscite a linha.
         .when_not_matched_insert_all()
         .execute()
     )
+
+
+def aplicar_merge_delta(df_mudancas: pd.DataFrame, delta_path: str = DEFAULT_DELTA_PATH) -> int:
+    """
+    Aplica as mudancas na tabela Delta Lake de forma idempotente:
+    - o lote e consolidado por imovel na ordem do LSN (consolidar_micro_lote);
+    - matched com lsn_origem >= target.lsn_origem: atualiza; lsn menor: ignora;
+    - unchanged-toast-datum preserva a geometria que ja esta no Delta;
+    - DELETE: grava operacao_cdc='D' e preserva os atributos e a geometria (exclusao logica).
+
+    Estados e exclusoes entram em dois MERGEs. O slot so avanca depois dos dois, entao
+    uma queda entre eles reentrega o lote inteiro e o resultado e o mesmo.
+    """
+    if df_mudancas.empty:
+        return 0
+
+    estados, exclusoes = consolidar_micro_lote(df_mudancas.to_dict("records"))
+    _herdar_geometria_da_chave_antiga(estados, delta_path)
+
+    for linhas, merge in ((estados, _merge_estados), (exclusoes, _merge_exclusoes)):
+        if not linhas:
+            continue
+        tabela_arrow = preparar_tabela_arrow(pd.DataFrame(linhas))
+        if DeltaTable.is_deltatable(delta_path):
+            merge(tabela_arrow, delta_path)
+            continue
+
+        log.info("Tabela Delta '%s' nao existe. Criando com o lote atual...", delta_path)
+        geom = tabela_arrow["geom_ewkb_hex"].to_pylist()
+        tabela_arrow = tabela_arrow.set_column(
+            tabela_arrow.schema.get_field_index("geom_ewkb_hex"),
+            "geom_ewkb_hex",
+            pa.array([g if _geom_real(g) else None for g in geom], type=pa.string()),
+        )
+        write_deltalake(delta_path, tabela_arrow, mode="error", writer_properties=WRITER_PROPERTIES)
 
     return len(df_mudancas)
 
@@ -370,6 +572,9 @@ def processar_lote_cdc(
         linhas = cur.fetchall()
 
     if not linhas:
+        # Encerra a transacao aberta pelo peek: sem isso a sessao fica "idle in transaction"
+        # durante todo o intervalo de polling.
+        conn.rollback()
         return 0, None
 
     ultimo_lsn = linhas[-1][0]
@@ -380,16 +585,13 @@ def processar_lote_cdc(
         evento = parse_linha_test_decoding(data_str)
         if not evento:
             continue
-        linha_delta = converter_evento_para_linha_delta(evento, lsn_str, now_utc)
-        if linha_delta:
-            registros_cdc.append(linha_delta)
+        registros_cdc.extend(eventos_para_linhas_delta(evento, lsn_str, now_utc))
 
     if registros_cdc:
-        df_mudancas = pd.DataFrame(registros_cdc)
-        # Deduplica dentro do proprio micro-lote mantendo o maior LSN por imovel
-        df_mudancas = df_mudancas.sort_values("lsn_origem").groupby("cod_imovel").last().reset_index()
-        log.info("Aplicando MERGE de %d mutacoes de imovel_car no Delta Lake...", len(df_mudancas))
-        aplicar_merge_delta(df_mudancas, delta_path)
+        # A consolidacao por imovel (ultimo estado e exclusao, na ordem do LSN) acontece
+        # dentro de aplicar_merge_delta.
+        log.info("Aplicando MERGE de %d mutacoes de imovel_car no Delta Lake...", len(registros_cdc))
+        aplicar_merge_delta(pd.DataFrame(registros_cdc), delta_path)
 
     # Avanca o slot logico apenas apos a gravacao concluida no Delta Lake (At-Least-Once)
     with conn.cursor() as cur:
@@ -416,11 +618,14 @@ def executar_consumidor(
     """Orquestra o ciclo de vida completo do consumidor CDC."""
     conn = conectar_postgres(host, port, dbname, user, password, db_url)
     try:
+        slot_novo = not slot_existe(conn, slot_name)
         lsn_inicial = garantir_slot(conn, slot_name)
 
-        # Se solicitado ou se a tabela Delta ainda nao existir, realiza o snapshot
-        if snapshot_only or not DeltaTable.is_deltatable(delta_path):
-            log.info("Tabela Delta nao encontrada ou --snapshot-only ativo. Iniciando snapshot inicial...")
+        # Snapshot quando pedido, quando a tabela Delta ainda nao existe ou quando o slot
+        # acabou de ser criado: um slot novo nao entrega as mudancas anteriores a ele, entao
+        # so o snapshot alinha o Delta com o OLTP (D3 da arquitetura).
+        if snapshot_only or slot_novo or not DeltaTable.is_deltatable(delta_path):
+            log.info("Slot novo, tabela Delta ausente ou --snapshot-only ativo. Iniciando snapshot...")
             executar_snapshot_inicial(conn, delta_path, lsn_inicial)
             if snapshot_only:
                 log.info("Snapshot finalizado com sucesso (--snapshot-only).")

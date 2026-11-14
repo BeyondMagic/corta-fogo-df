@@ -29,9 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.pipeline.cdc_consumer import (
     aplicar_merge_delta,
     converter_evento_para_linha_delta,
+    eventos_para_linhas_delta,
     lsn_para_int,
     parse_linha_test_decoding,
     parse_valores_tupla,
+    preparar_tabela_arrow,
+    ressincronizar_snapshot,
 )
 
 
@@ -414,6 +417,215 @@ def test_preservacao_unchanged_toast_datum(temp_delta_dir):
     assert linha["geom_ewkb_hex"] == geometria_original
 
 
+GEOM_A = "0103000020E61000000100000005000000AAAA"
+GEOM_B = "0103000020E61000000100000005000000BBBB"
+AGORA = datetime(2026, 11, 14, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _linha(cod, lsn, op="I", geom=GEOM_A, situacao="AT", condicao="Ativo", area=100.0, origem="cdc"):
+    return {
+        "cod_imovel": cod,
+        "situacao": situacao,
+        "condicao": condicao,
+        "area_ha": area,
+        "data_download": date(2026, 9, 27),
+        "geom_ewkb_hex": geom,
+        "data_hora_ingestao": AGORA,
+        "origem_ingestao": origem,
+        "operacao_cdc": op,
+        "lsn_origem": lsn,
+    }
+
+
+def _evento(msg, lsn):
+    """Mensagem do test_decoding -> linhas do Delta, pelo mesmo caminho do consumidor."""
+    return eventos_para_linhas_delta(parse_linha_test_decoding(msg), lsn, AGORA)
+
+
+def _ler(delta_dir, cod):
+    df = DeltaTable(delta_dir).to_pandas()
+    return df[df["cod_imovel"] == cod].iloc[0]
+
+
+def test_delete_real_preserva_atributos(temp_delta_dir):
+    """O DELETE do test_decoding so traz a PK: os atributos do imovel nao podem virar NULL."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-1", 100, origem="snapshot")]), temp_delta_dir)
+
+    linhas = _evento("table public.imovel_car: DELETE: cod_imovel[character varying]:'DF-1'", "0/C8")
+    aplicar_merge_delta(pd.DataFrame(linhas), temp_delta_dir)
+
+    linha = _ler(temp_delta_dir, "DF-1")
+    assert linha["operacao_cdc"] == "D"
+    assert linha["lsn_origem"] == lsn_para_int("0/C8")
+    assert linha["situacao"] == "AT"
+    assert linha["condicao"] == "Ativo"
+    assert linha["area_ha"] == 100.0
+    assert linha["data_download"] == date(2026, 9, 27)
+    assert linha["geom_ewkb_hex"] == GEOM_A
+
+
+def test_insert_e_update_toast_no_mesmo_lote_herdam_a_geometria(temp_delta_dir):
+    """INSERT e UPDATE do mesmo imovel novo no mesmo micro-lote: o marcador TOAST nao vira geometria."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-0", 50)]), temp_delta_dir)
+
+    lote = _evento(
+        "table public.imovel_car: INSERT: cod_imovel[character varying]:'DF-2' situacao[character varying]:'AT' "
+        f"condicao[character varying]:'x' area_ha[numeric]:10.0 data_download[date]:'2026-09-27' geom[geometry]:'{GEOM_B}'",
+        "0/12C",
+    ) + _evento(
+        "table public.imovel_car: UPDATE: cod_imovel[character varying]:'DF-2' situacao[character varying]:'PE' "
+        "condicao[character varying]:'y' area_ha[numeric]:11.0 data_download[date]:'2026-09-27' "
+        "geom[geometry]:unchanged-toast-datum",
+        "0/190",
+    )
+    aplicar_merge_delta(pd.DataFrame(lote), temp_delta_dir)
+
+    linha = _ler(temp_delta_dir, "DF-2")
+    assert linha["situacao"] == "PE"
+    assert linha["area_ha"] == 11.0
+    assert linha["geom_ewkb_hex"] == GEOM_B
+
+
+def test_marcador_toast_nunca_e_gravado_como_geometria(temp_delta_dir):
+    """UPDATE com geom TOAST inalterado de imovel que o Delta nao tem: geometria fica NULL, nunca o marcador."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-0", 50)]), temp_delta_dir)
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-9", 60, op="U", geom="unchanged-toast-datum")]), temp_delta_dir)
+
+    assert pd.isna(_ler(temp_delta_dir, "DF-9")["geom_ewkb_hex"])
+    assert "unchanged-toast-datum" not in DeltaTable(temp_delta_dir).to_pandas()["geom_ewkb_hex"].tolist()
+
+
+def test_update_para_null_no_mesmo_lote_nao_herda_valor_anterior(temp_delta_dir):
+    """Dois UPDATEs no mesmo micro-lote: vale a ultima linha inteira, inclusive os NULLs."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-3", 100)]), temp_delta_dir)
+
+    lote = _evento(
+        "table public.imovel_car: UPDATE: cod_imovel[character varying]:'DF-3' situacao[character varying]:'PE' "
+        "condicao[character varying]:'pendencia X' area_ha[numeric]:100.0 data_download[date]:'2026-09-27' "
+        "geom[geometry]:unchanged-toast-datum",
+        "0/12C",
+    ) + _evento(
+        "table public.imovel_car: UPDATE: cod_imovel[character varying]:'DF-3' situacao[character varying]:'AT' "
+        "condicao[character varying]:null area_ha[numeric]:100.0 data_download[date]:'2026-09-27' "
+        "geom[geometry]:unchanged-toast-datum",
+        "0/190",
+    )
+    aplicar_merge_delta(pd.DataFrame(lote), temp_delta_dir)
+
+    linha = _ler(temp_delta_dir, "DF-3")
+    assert linha["situacao"] == "AT"
+    assert pd.isna(linha["condicao"])
+    assert linha["geom_ewkb_hex"] == GEOM_A
+    assert linha["lsn_origem"] == lsn_para_int("0/190")
+
+
+def test_update_seguido_de_delete_no_mesmo_lote(temp_delta_dir):
+    """UPDATE e DELETE no mesmo micro-lote: a linha excluida guarda o ultimo estado antes da exclusao."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-4", 100)]), temp_delta_dir)
+
+    lote = [_linha("DF-4", 200, op="U", geom=GEOM_B, condicao="Retificado", area=120.0)] + _evento(
+        "table public.imovel_car: DELETE: cod_imovel[character varying]:'DF-4'", "0/12C"
+    )
+    aplicar_merge_delta(pd.DataFrame(lote), temp_delta_dir)
+
+    linha = _ler(temp_delta_dir, "DF-4")
+    assert linha["operacao_cdc"] == "D"
+    assert linha["lsn_origem"] == lsn_para_int("0/12C")
+    assert linha["condicao"] == "Retificado"
+    assert linha["area_ha"] == 120.0
+    assert linha["geom_ewkb_hex"] == GEOM_B
+
+
+def test_delete_seguido_de_reinsercao_no_mesmo_lote(temp_delta_dir):
+    """DELETE e INSERT do mesmo imovel no mesmo micro-lote: o imovel termina vivo, com o estado novo."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-5", 100)]), temp_delta_dir)
+
+    lote = _evento("table public.imovel_car: DELETE: cod_imovel[character varying]:'DF-5'", "0/C8") + [
+        _linha("DF-5", 300, op="I", geom=GEOM_B, condicao="Recadastrado")
+    ]
+    aplicar_merge_delta(pd.DataFrame(lote), temp_delta_dir)
+
+    linha = _ler(temp_delta_dir, "DF-5")
+    assert linha["operacao_cdc"] == "I"
+    assert linha["condicao"] == "Recadastrado"
+    assert linha["geom_ewkb_hex"] == GEOM_B
+    assert len(DeltaTable(temp_delta_dir).to_pandas()) == 1
+
+
+def test_parse_update_que_troca_a_pk():
+    """old-key e new-tuple com chaves diferentes: a chave nova vale e a antiga fica registrada."""
+    msg = (
+        "table public.imovel_car: UPDATE: old-key: cod_imovel[character varying]:'DF-VELHO' "
+        "new-tuple: cod_imovel[character varying]:'DF-NOVO' situacao[character varying]:'AT' "
+        "geom[geometry]:unchanged-toast-datum"
+    )
+    evento = parse_linha_test_decoding(msg)
+    assert evento["cod_imovel"] == "DF-NOVO"
+    assert evento["cod_imovel_anterior"] == "DF-VELHO"
+
+
+def test_troca_de_pk_exclui_a_chave_antiga_e_cria_a_nova(temp_delta_dir):
+    """UPDATE que troca a PK: a chave antiga vira exclusao logica e a nova herda a geometria dela."""
+    aplicar_merge_delta(pd.DataFrame([_linha("DF-VELHO", 100)]), temp_delta_dir)
+
+    lote = _evento(
+        "table public.imovel_car: UPDATE: old-key: cod_imovel[character varying]:'DF-VELHO' "
+        "new-tuple: cod_imovel[character varying]:'DF-NOVO' situacao[character varying]:'AT' "
+        "condicao[character varying]:'Ativo' area_ha[numeric]:100.0 data_download[date]:'2026-09-27' "
+        "geom[geometry]:unchanged-toast-datum",
+        "0/C8",
+    )
+    assert [l["operacao_cdc"] for l in lote] == ["D", "U"]
+    aplicar_merge_delta(pd.DataFrame(lote), temp_delta_dir)
+
+    velho, novo = _ler(temp_delta_dir, "DF-VELHO"), _ler(temp_delta_dir, "DF-NOVO")
+    assert velho["operacao_cdc"] == "D"
+    assert velho["geom_ewkb_hex"] == GEOM_A
+    assert novo["operacao_cdc"] == "U"
+    assert novo["geom_ewkb_hex"] == GEOM_A
+    assert novo["lsn_origem"] == lsn_para_int("0/C8")
+
+
+def test_ressincronizacao_apos_slot_recriado(temp_delta_dir):
+    """
+    Slot recriado com a tabela Delta ja existente: o snapshot novo corrige o que o CDC
+    perdeu, sem regravar o que nao mudou e sem apagar o historico de exclusoes.
+    """
+    antes = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    base = [_linha(cod, 100, origem="snapshot") for cod in ("DF-IGUAL", "DF-MUDOU", "DF-SUMIU", "DF-VOLTOU")]
+    for linha in base:
+        linha["data_hora_ingestao"] = antes
+    base[3]["operacao_cdc"] = "D"
+    aplicar_merge_delta(pd.DataFrame(base[:3]), temp_delta_dir)
+    aplicar_merge_delta(pd.DataFrame(base[3:]), temp_delta_dir)
+
+    snapshot = [
+        _linha("DF-IGUAL", 900, origem="snapshot"),
+        _linha("DF-MUDOU", 900, origem="snapshot", condicao="Retificado", area=150.0),
+        _linha("DF-VOLTOU", 900, origem="snapshot"),
+        _linha("DF-NOVO", 900, origem="snapshot", geom=GEOM_B),
+    ]
+    ressincronizar_snapshot(preparar_tabela_arrow(pd.DataFrame(snapshot)), temp_delta_dir, 900)
+
+    df = DeltaTable(temp_delta_dir).to_pandas().set_index("cod_imovel")
+    assert len(df) == 5
+
+    assert df.loc["DF-IGUAL", "lsn_origem"] == 900
+    assert df.loc["DF-IGUAL", "data_hora_ingestao"] == antes, "linha sem mudanca nao pode ganhar carimbo novo"
+
+    assert df.loc["DF-MUDOU", "condicao"] == "Retificado"
+    assert df.loc["DF-MUDOU", "area_ha"] == 150.0
+    assert df.loc["DF-MUDOU", "data_hora_ingestao"] == AGORA
+
+    assert df.loc["DF-SUMIU", "operacao_cdc"] == "D"
+    assert df.loc["DF-SUMIU", "lsn_origem"] == 900
+    assert df.loc["DF-SUMIU", "condicao"] == "Ativo", "exclusao logica preserva os atributos"
+    assert df.loc["DF-SUMIU", "data_hora_ingestao"] > antes
+
+    assert df.loc["DF-VOLTOU", "operacao_cdc"] == "I"
+    assert df.loc["DF-NOVO", "geom_ewkb_hex"] == GEOM_B
+
+
 def main():
     """Execucao direta dos testes sem dependencia estrita do CLI do pytest."""
     print("=== Executando suite de testes automatizados do Consumidor CDC (Tarefa #09 / GH #3) ===")
@@ -457,7 +669,23 @@ def main():
         test_preservacao_unchanged_toast_datum(tmp_dir)
         print("-> OK!")
 
-    print("\nTodos os 8 testes unitarios e de idempotencia CDC foram executados e APROVADOS com sucesso!")
+    print("\n9. Testando consolidacao do micro-lote, exclusao logica, troca de PK e ressincronizacao...")
+    test_parse_update_que_troca_a_pk()
+    for teste in (
+        test_delete_real_preserva_atributos,
+        test_insert_e_update_toast_no_mesmo_lote_herdam_a_geometria,
+        test_marcador_toast_nunca_e_gravado_como_geometria,
+        test_update_para_null_no_mesmo_lote_nao_herda_valor_anterior,
+        test_update_seguido_de_delete_no_mesmo_lote,
+        test_delete_seguido_de_reinsercao_no_mesmo_lote,
+        test_troca_de_pk_exclui_a_chave_antiga_e_cria_a_nova,
+        test_ressincronizacao_apos_slot_recriado,
+    ):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            teste(tmp_dir)
+    print("-> OK!")
+
+    print("\nTodos os testes unitarios e de idempotencia CDC foram executados e APROVADOS com sucesso!")
 
 
 if __name__ == "__main__":
