@@ -69,12 +69,21 @@ def avaliar_fonte(
     )
 
 
-def _utc(valor) -> Optional[datetime]:
-    if valor is None:
+def _de_epoca(segundos) -> Optional[datetime]:
+    """
+    Converte a epoca Unix devolvida pelo DuckDB. As consultas leem epoch(...) em vez do
+    TIMESTAMPTZ porque o driver Python do DuckDB exige pytz para devolver data com fuso.
+    """
+    if segundos is None:
         return None
-    if valor.tzinfo is None:
-        return valor.replace(tzinfo=timezone.utc)
-    return valor.astimezone(timezone.utc)
+    return datetime.fromtimestamp(float(segundos), tz=timezone.utc)
+
+
+def duckdb_catalogo_erro():
+    """Erro do DuckDB para tabela inexistente (a tabela de consumo ainda nao foi gerada)."""
+    import duckdb
+
+    return duckdb.CatalogException
 
 
 def _conectar(duckdb_path: str, tentativas: int = 5, espera_s: float = 3.0):
@@ -101,8 +110,10 @@ def medir(
     con = _conectar(duckdb_path)
     try:
         try:
-            gerado_em = _utc(con.execute(f"SELECT max(gerado_em) FROM {TABELA_CONSUMO}").fetchone()[0])
-        except Exception:
+            gerado_em = _de_epoca(
+                con.execute(f"SELECT epoch(max(gerado_em)) FROM {TABELA_CONSUMO}").fetchone()[0]
+            )
+        except duckdb_catalogo_erro():
             gerado_em = None
 
         verificacoes = [avaliar_processamento(gerado_em, agora, sla_horas)]
@@ -112,13 +123,14 @@ def medir(
         con.execute("LOAD delta")
         for tabela in TABELAS_DELTA:
             caminho = os.path.join(delta_dir, tabela)
+            # data_hora_ingestao e gravada em UTC no Delta (com ou sem fuso no tipo).
             pendente = con.execute(
-                f"SELECT min(data_hora_ingestao::timestamp AT TIME ZONE 'UTC') "
+                f"SELECT min(epoch(data_hora_ingestao::timestamp)) "
                 f"FROM delta_scan('{caminho}') "
-                f"WHERE (data_hora_ingestao::timestamp AT TIME ZONE 'UTC') > ?",
-                [gerado_em],
+                f"WHERE epoch(data_hora_ingestao::timestamp) > ?",
+                [gerado_em.timestamp()],
             ).fetchone()[0]
-            verificacoes.append(avaliar_fonte(tabela, _utc(pendente), agora, sla_horas))
+            verificacoes.append(avaliar_fonte(tabela, _de_epoca(pendente), agora, sla_horas))
         return verificacoes
     finally:
         con.close()
