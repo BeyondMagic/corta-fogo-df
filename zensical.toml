@@ -72,6 +72,10 @@ features = [
   "search.highlight",
 ]
 
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
+
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
 toggle.icon = "lucide/sun-moon"

@@ -58,7 +58,7 @@
     layers: {
       ras: true,
       ucs: true,
-      buffers: true,
+      buffers: false,
       imoveis: true,
       rl: true,
       focos: true
@@ -88,6 +88,12 @@
     });
   }
 
+  // Codigo CAR curto para leitura (o completo vai no title e na busca).
+  function shortCod(cod) {
+    const c = String(cod || '');
+    return c.length > 24 ? `${c.slice(0, 16)}…${c.slice(-4)}` : c;
+  }
+
   function escapeHtml(text) {
     return String(text == null ? '' : text)
       .replace(/&/g, '&amp;')
@@ -107,34 +113,44 @@
     const dark = isDarkScheme();
     return {
       dark: dark,
-      text: dark ? '#e2e8f0' : '#0f172a',
-      muted: dark ? '#94a3b8' : '#475569',
-      border: dark ? '#334155' : '#cbd5e1',
-      grid: dark ? 'rgba(148, 163, 184, 0.16)' : 'rgba(15, 23, 42, 0.10)',
-      surface: dark ? '#161b22' : '#ffffff',
-      surfaceAlt: dark ? '#1e2530' : '#f8fafc',
-      totalBar: dark ? '#64748b' : '#94a3b8',
-      seca: '#ea580c',
-      chuvoso: dark ? '#38bdf8' : '#0284c7',
-      ref: '#dc2626',
-      otherSensor: dark ? '#fbbf24' : '#d97706',
-      uc: dark ? '#22c55e' : '#15803d',
-      ucFill: dark ? 'rgba(34, 197, 94, 0.24)' : 'rgba(21, 128, 61, 0.22)',
-      ucBuf: dark ? '#4ade80' : '#16a34a',
-      car: dark ? '#c084fc' : '#7c3aed',
-      rl: dark ? '#34d399' : '#059669',
-      raStroke: dark ? '#64748b' : '#475569',
+      text: dark ? '#e6e8eb' : '#111418',
+      muted: dark ? '#9aa1ab' : '#5b616b',
+      border: dark ? '#2a3039' : '#e3e5e8',
+      grid: dark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(17, 20, 24, 0.07)',
+      surface: dark ? '#14181e' : '#ffffff',
+      surfaceAlt: dark ? '#1a1f26' : '#f6f7f9',
+      totalBar: dark ? '#5b616b' : '#a3a9b2',
+      // Paleta categorica validada (daltonismo e contraste) nos dois modos.
+      seca: dark ? '#d95926' : '#eb6834',
+      chuvoso: dark ? '#3987e5' : '#2a78d6',
+      ref: dark ? '#e66767' : '#d03b3b',
+      otherSensor: dark ? '#5b616b' : '#a3a9b2',
+      foco: dark ? '#e66767' : '#d03b3b',
+      focoClaro: dark ? 'rgba(230, 103, 103, 0.45)' : 'rgba(208, 59, 59, 0.40)',
+      // Intensidade (matriz, hexagonos, coropletico): um matiz so, azul.
+      seqLow: dark ? '#1b2a3d' : '#e8f1fc',
+      seqHigh: dark ? '#b7d3f6' : '#0d366b',
+      ucClaro: dark ? '#3d7a3d' : '#8cc98c',
+      carForte: dark ? '#c3bcf5' : '#3d2f9e',
+      uc: dark ? '#0ca30c' : '#008300',
+      ucFill: dark ? 'rgba(12, 163, 12, 0.10)' : 'rgba(0, 131, 0, 0.08)',
+      ucBuf: dark ? '#0ca30c' : '#008300',
+      car: dark ? '#9085e9' : '#6250d6',
+      carSel: dark ? '#ffffff' : '#111418',
+      rl: dark ? '#199e70' : '#1baf7a',
+      raStroke: dark ? '#4a515c' : '#a3a9b2',
       sensorColors: {
-        '0': '#ea580c',
-        '1': '#dc2626',
-        '2': '#0284c7',
-        '3': '#7c3aed'
+        '0': dark ? '#3987e5' : '#2a78d6',
+        '1': dark ? '#d95926' : '#eb6834',
+        '2': dark ? '#199e70' : '#1baf7a',
+        '3': dark ? '#c98500' : '#eda100'
       },
+      // Situacao e identidade de uma unica serie por grafico: uma cor so.
       situacaoColors: {
-        AT: dark ? '#4ade80' : '#16a34a',
-        PE: dark ? '#fbbf24' : '#d97706',
-        SU: dark ? '#f87171' : '#dc2626',
-        CA: dark ? '#c084fc' : '#7c3aed'
+        AT: dark ? '#9085e9' : '#6250d6',
+        PE: dark ? '#9085e9' : '#6250d6',
+        SU: dark ? '#9085e9' : '#6250d6',
+        CA: dark ? '#9085e9' : '#6250d6'
       }
     };
   }
@@ -495,7 +511,10 @@
     const criticos = (cruz.por_classificacao && cruz.por_classificacao['PRIORIDADE CRITICA']) || { imoveis: 0 };
     if (kpiCar) kpiCar.textContent = formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes);
     if (kpiCarSub) {
-      kpiCarSub.textContent = `${formatInt(criticos.imoveis)} em prioridade crítica · fila exibe ${ativosTop} de ${imoveisTop.length}`;
+      const filtroFila = anoFiltro || situacaoFiltro;
+      kpiCarSub.textContent = filtroFila
+        ? `${ativosTop} dos ${imoveisTop.length} primeiros da fila no recorte`
+        : `${formatInt(criticos.imoveis)} em prioridade crítica`;
     }
   }
 
@@ -527,16 +546,25 @@
     const criticos = porClasse['PRIORIDADE CRITICA'] || { imoveis: 0, cadastro_ativo: 0 };
     const primeiros = fila.slice(0, 5);
 
-    const itens = primeiros.map((im) => `
-      <li>
-        <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}">
-          <code>${escapeHtml(im.cod_imovel)}</code>
-        </button>
-        <span class="cf-resposta-detalhe">
-          ${escapeHtml(im.ra || '-')} · ${escapeHtml(im.situacao || '-')} · ${formatDec(im.area_ha, 1)} ha ·
-          índice <b>${formatDec(im.indice, 1)}</b> · ${im.anos_qtd} anos com foco, último em ${im.ultimo_ano}
-        </span>
-      </li>`).join('');
+    const linhas = primeiros.map((im) => `
+      <tr>
+        <td class="cf-num cf-fila-pos">${im.rank}</td>
+        <td>
+          <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
+            <span class="cf-fila-ra">${escapeHtml(im.ra || '-')}</span>
+            <code>${escapeHtml(shortCod(im.cod_imovel))}</code>
+          </button>
+        </td>
+        <td>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</td>
+        <td class="cf-num">${formatDec(im.area_ha, 1)} ha</td>
+        <td class="cf-num">${im.anos_qtd} anos <span class="cf-muted">· último ${im.ultimo_ano}</span></td>
+        <td class="cf-num">
+          <span class="cf-indice">
+            <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
+            <b>${formatDec(im.indice, 1)}</b>
+          </span>
+        </td>
+      </tr>`).join('');
 
     let frescor = '';
     if (meta.gerado_em) {
@@ -548,15 +576,38 @@
         : `Retrato da Gold gerado em ${formatDataHoraUtc(meta.gerado_em)} (há ${idade}). O SLA de ${formatInt(sla)} h vale para a tabela no ambiente do pipeline; esta página estática mostra o último retrato exportado.`;
     }
 
+    const pctReinc = ref.imoveis_total_car > 0 ? (ref.imoveis_reincidentes / ref.imoveis_total_car) * 100 : 0;
+
     box.innerHTML = `
-      <p class="cf-resposta-frase">
-        <b>${formatInt(ref.imoveis_reincidentes)}</b> dos ${formatInt(ref.imoveis_total_car)} imóveis rurais do cadastro
-        tiveram foco em área protegida em 2 anos ou mais. <b>${formatInt(criticos.imoveis)}</b> estão em
-        <b>prioridade crítica</b> de vistoria (quartil mais alto do Índice de Prioridade de Vistoria),
-        ${formatInt(criticos.cadastro_ativo)} deles com cadastro ativo.
-      </p>
-      <p class="cf-resposta-sub">Primeiros da fila de vistoria:</p>
-      <ol class="cf-resposta-fila">${itens}</ol>
+      <div class="cf-hero">
+        <div class="cf-hero-stat">
+          <span class="cf-hero-num">${formatInt(ref.imoveis_reincidentes)}</span>
+          <span class="cf-hero-lbl">imóveis reincidentes</span>
+          <span class="cf-hero-sub">${formatDec(pctReinc, 1)}% dos ${formatInt(ref.imoveis_total_car)} imóveis do cadastro, com foco em área protegida em 2 anos ou mais</span>
+        </div>
+        <div class="cf-hero-stat cf-hero-stat--destaque">
+          <span class="cf-hero-num">${formatInt(criticos.imoveis)}</span>
+          <span class="cf-hero-lbl">em prioridade crítica</span>
+          <span class="cf-hero-sub">quartil mais alto do Índice de Prioridade de Vistoria</span>
+        </div>
+        <div class="cf-hero-stat">
+          <span class="cf-hero-num">${formatInt(criticos.cadastro_ativo)}</span>
+          <span class="cf-hero-lbl">críticos com cadastro ativo</span>
+          <span class="cf-hero-sub">os demais estão pendentes, suspensos ou cancelados no SICAR</span>
+        </div>
+      </div>
+      <div class="cf-fila">
+        <p class="cf-fila-titulo">Primeiros da fila de vistoria <span class="cf-muted">· clique para ver no mapa</span></p>
+        <div class="cf-fila-wrap">
+          <table class="cf-fila-tab">
+            <thead><tr>
+              <th scope="col" class="cf-num">#</th><th scope="col">Imóvel</th><th scope="col">Situação</th>
+              <th scope="col" class="cf-num">Área</th><th scope="col" class="cf-num">Reincidência</th><th scope="col" class="cf-num">Índice</th>
+            </tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>
+        </div>
+      </div>
       <p class="cf-resposta-fonte">
         Fonte: <code>${escapeHtml(meta.fonte || 'gold.painel_imoveis_prioritarios')}</code>. ${escapeHtml(frescor)}
       </p>`;
@@ -761,19 +812,23 @@
     return `
       <div class="cf-inspector-card">
         <div class="cf-inspector-head">
-          <span class="cf-badge cf-badge-car">CAR #${im.rank} · ${escapeHtml(im.situacao)}</span>
-          <button type="button" class="cf-btn-mini" data-action="clear-selection">Limpar foco</button>
+          <span class="cf-badge cf-badge-car">#${im.rank} na fila</span>
+          <button type="button" class="cf-btn-mini" data-action="clear-selection">Limpar seleção</button>
         </div>
-        <p class="cf-code-line"><code>${escapeHtml(im.cod_imovel)}</code></p>
+        <h4>${escapeHtml(im.ra || 'Imóvel rural')}</h4>
+        <p class="cf-code-line" title="${escapeHtml(im.cod_imovel)}"><code>${escapeHtml(im.cod_imovel)}</code></p>
         <dl class="cf-kv-list">
-          <div><dt>Índice de prioridade</dt><dd>${formatDec(im.indice, 1)} (${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')})</dd></div>
-          <div><dt>Região Administrativa</dt><dd>${escapeHtml(im.ra || '-')}</dd></div>
-          <div><dt>Focos no imóvel</dt><dd>${formatInt(im.focos_total)}</dd></div>
-          <div><dt>Em área protegida</dt><dd>${formatInt(im.focos_prot)} em ${formatInt(im.dias_com_foco)} dias</dd></div>
+          <div><dt>Índice de prioridade</dt><dd>${formatDec(im.indice, 1)}</dd></div>
+          <div><dt>Classificação</dt><dd>${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</dd></div>
+          <div><dt>Situação no CAR</dt><dd>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</dd></div>
           <div><dt>Área cadastrada</dt><dd>${formatDec(im.area_ha, 1)} ha</dd></div>
-          <div><dt>Reincidência</dt><dd>${im.anos_qtd} anos (${(im.anos || []).join(', ')})</dd></div>
+          <div><dt>Focos no imóvel</dt><dd>${formatInt(im.focos_total)}</dd></div>
+          <div><dt>Focos em área protegida</dt><dd>${formatInt(im.focos_prot)}</dd></div>
+          <div><dt>Dias com foco</dt><dd>${formatInt(im.dias_com_foco)}</dd></div>
+          <div><dt>Anos com foco</dt><dd>${im.anos_qtd}</dd></div>
         </dl>
-        <p class="cf-inspector-hint">${escapeHtml(im.condicao || '')}</p>
+        <p class="cf-anos-lista">${(im.anos || []).map((a) => `<span>${a}</span>`).join('')}</p>
+        ${im.condicao ? `<p class="cf-inspector-hint">Condição no SICAR: ${escapeHtml(im.condicao)}</p>` : ''}
       </div>
     `;
   }
@@ -896,7 +951,7 @@
     const ucMax = d3.max(ucTotVals) || 1;
     const ucDensMax = d3.max(loadedData.resumo.ucs_resumo, (u, idx) => (u.area_ha > 0 ? (ucTotVals[idx] / u.area_ha) * 100 : 0)) || 1;
 
-    const seqInterpolator = tokens.dark ? d3.interpolateOrRd : d3.interpolateYlOrRd;
+    const seqInterpolator = d3.interpolateLab(tokens.seqLow, tokens.seqHigh);
     const raScale = d3.scaleSequential(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? raDensMax : raExtent]);
     const ucScale = d3.scaleSequential(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? ucDensMax : ucMax]);
 
@@ -932,9 +987,9 @@
         return state.raIdx === idx ? 'rgba(234, 88, 12, 0.16)' : 'transparent';
       })
       .attr('fill-opacity', choroActive && state.choroTarget === 'ra' ? 0.85 : 1)
-      .attr('stroke', (d) => (state.raIdx === d.properties.idx ? tokens.seca : tokens.raStroke))
-      .attr('stroke-width', (d) => (state.raIdx === d.properties.idx ? 2.2 : 0.8))
-      .attr('stroke-dasharray', choroActive && state.choroTarget === 'ra' ? null : '2,2')
+      .attr('stroke', (d) => (state.raIdx === d.properties.idx ? tokens.text : tokens.raStroke))
+      .attr('stroke-width', (d) => (state.raIdx === d.properties.idx ? 2.2 : 0.7))
+      .attr('stroke-dasharray', null)
       .style('cursor', 'pointer')
       .on('mousemove', function (event, d) {
         const ra = loadedData.rasByIdx.get(d.properties.idx);
@@ -996,10 +1051,13 @@
           const val = state.choroMetric === 'densidade' ? (area > 0 ? (tot / area) * 100 : 0) : tot;
           return val > 0 ? ucScale(val) : tokens.surfaceAlt;
         }
-        return state.ucIdx === idx ? 'rgba(22, 163, 74, 0.42)' : tokens.ucFill;
+        // No coropletico por RA, a UC fica so com o contorno para nao tingir a rampa.
+        if (choroActive) return 'transparent';
+        return state.ucIdx === idx ? (tokens.dark ? 'rgba(12, 163, 12, 0.30)' : 'rgba(0, 131, 0, 0.24)') : tokens.ucFill;
       })
-      .attr('stroke', (d) => (state.ucIdx === d.properties.idx ? tokens.seca : tokens.uc))
-      .attr('stroke-width', (d) => (state.ucIdx === d.properties.idx ? 2.2 : 1.1))
+      .attr('stroke', (d) => (state.ucIdx === d.properties.idx ? tokens.text : tokens.uc))
+      .attr('stroke-width', (d) => (state.ucIdx === d.properties.idx ? 2 : 0.9))
+      .attr('stroke-opacity', 0.85)
       .style('cursor', 'pointer')
       .on('mousemove', function (event, d) {
         const uc = loadedData.ucsByIdx.get(d.properties.idx);
@@ -1037,7 +1095,7 @@
         carSelLayer.append('path')
           .datum({ type: 'Feature', geometry: gObj.imovel, properties: {} })
           .attr('d', d3Path)
-          .attr('fill', 'rgba(124, 58, 237, 0.25)')
+          .attr('fill', tokens.dark ? 'rgba(144, 133, 233, 0.22)' : 'rgba(98, 80, 214, 0.18)')
           .attr('stroke', tokens.car)
           .attr('stroke-width', 2.4)
           .attr('vector-effect', 'non-scaling-stroke');
@@ -1065,18 +1123,17 @@
       .join('circle')
       .attr('cx', (d) => d3Projection([d.lon, d.lat])[0])
       .attr('cy', (d) => d3Projection([d.lon, d.lat])[1])
-      .attr('r', (d) => (state.selectedCar === d.cod_imovel ? 6.5 : 4.2))
-      .attr('fill', (d) => (state.selectedCar === d.cod_imovel ? tokens.ref : tokens.car))
-      .attr('stroke', '#ffffff')
-      .attr('stroke-width', 1.3)
-      .attr('vector-effect', 'non-scaling-stroke')
+      .attr('r', (d) => (state.selectedCar === d.cod_imovel ? 9.5 : (d.rank <= 10 ? 8 : 4.5)))
+      .attr('fill', 'transparent')
+      .attr('stroke', 'none')
+      .style('pointer-events', 'all')
       .style('cursor', 'pointer')
       .on('mousemove', function (event, d) {
         showTooltip(
-          `<strong>#${d.rank} Imóvel CAR (${escapeHtml(d.situacao)})</strong><br/>` +
-          `<code>${escapeHtml(d.cod_imovel.slice(0, 22))}...</code><br/>` +
-          `Focos: <b>${formatInt(d.focos_total)}</b> (${formatInt(d.focos_prot)} em área protegida)<br/>` +
-          `Área: ${formatDec(d.area_ha, 1)} ha`,
+          `<strong>#${d.rank} na fila · ${escapeHtml(d.ra || 'Imóvel rural')}</strong><br/>` +
+          `Índice ${formatDec(d.indice, 1)} · ${escapeHtml(SITUACAO_LABELS[d.situacao] || d.situacao)} · ${formatDec(d.area_ha, 1)} ha<br/>` +
+          `${formatInt(d.focos_prot)} focos em área protegida em ${d.anos_qtd} anos<br/>` +
+          `<code>${escapeHtml(shortCod(d.cod_imovel))}</code>`,
           event.clientX,
           event.clientY
         );
@@ -1130,27 +1187,38 @@
       }
     }
 
-    const visibleCars = getVisibleCars();
+    // Fila de vistoria por cima dos focos: anel da cor da superficie separa o
+    // marcador dos pontos de baixo; os 10 primeiros levam a posicao escrita.
+    const visibleCars = getVisibleCars().slice().sort((a, b) => b.rank - a.rank);
     for (let i = 0; i < visibleCars.length; i += 1) {
       const d = visibleCars[i];
       const pt = d3Projection([d.lon, d.lat]);
       const isSel = (state.selectedCar === d.cod_imovel);
-      const r = (isSel ? 6.2 : 4.0) / scaleInv;
+      const top10 = d.rank <= 10;
+      const r = (isSel ? 9.5 : (top10 ? 8 : 4.5)) / scaleInv;
       ctx.beginPath();
       ctx.arc(pt[0], pt[1], r, 0, 2 * Math.PI);
-      ctx.fillStyle = isSel ? tokens.ref : tokens.car;
-      ctx.globalAlpha = 0.94;
+      ctx.fillStyle = isSel ? tokens.carSel : tokens.car;
+      ctx.globalAlpha = 1;
       ctx.fill();
-      ctx.lineWidth = 1.3 / transform.k;
-      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2 / transform.k;
+      ctx.strokeStyle = tokens.surface;
       ctx.stroke();
+      if (top10 || isSel) {
+        ctx.fillStyle = isSel ? tokens.surface : '#ffffff';
+        ctx.font = `600 ${(d.rank >= 10 ? 8.5 : 10) / scaleInv}px Inter, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(d.rank), pt[0], pt[1] + 0.4 / scaleInv);
+      }
     }
   }
 
   function updateD3StrokeWeights() {
     const k = d3CurrentTransform ? d3CurrentTransform.k : 1;
+    // Os circulos SVG so recebem o mouse; o desenho visivel e o do canvas.
     d3.select('#cf-d3-svg').selectAll('.cf-layer-car-pins circle')
-      .attr('r', (d) => ((state.selectedCar === d.cod_imovel ? 6.5 : 4.2) / Math.pow(k, 0.55)));
+      .attr('r', (d) => ((state.selectedCar === d.cod_imovel ? 9.5 : (d.rank <= 10 ? 8 : 4.5)) / Math.pow(k, 0.55)) + 2 / k);
   }
 
   function drawD3Canvas() {
@@ -1175,6 +1243,13 @@
 
     if (!state.layers.focos || state.d3Mode === 'choropleth') {
       hoverQuadtree = null;
+      // Sem focos, a fila de vistoria continua desenhada.
+      const t0 = d3CurrentTransform || d3.zoomIdentity;
+      ctx.save();
+      ctx.translate(t0.x, t0.y);
+      ctx.scale(t0.k, t0.k);
+      drawCanvasCarOverlay(ctx, t0, getTokens());
+      ctx.restore();
       return;
     }
 
@@ -1194,7 +1269,7 @@
       const radiusPx = 14 / Math.pow(t.k, 0.72);
       const bins = computeHexbins(pts, radiusPx);
       const maxCount = d3.max(bins, (b) => b.count) || 1;
-      const colorScale = d3.scaleSequential(tokens.dark ? d3.interpolateYlOrRd : d3.interpolateOrRd)
+      const colorScale = d3.scaleSequential(d3.interpolateLab(tokens.seqLow, tokens.seqHigh))
         .domain([1, Math.max(2, Math.sqrt(maxCount))]);
 
       for (let i = 0; i < bins.length; i += 1) {
@@ -1223,22 +1298,20 @@
     const activePts = [];
     const scaleInv = Math.pow(t.k, 0.65);
 
+    // Cada foco e um ponto pequeno e translucido de uma cor so: a sobreposicao
+    // mostra a densidade sem esconder os limites nem a fila de vistoria.
+    const rFoco = Math.max(0.5, 1.35 / Math.pow(t.k, 0.8));
+    ctx.fillStyle = tokens.foco;
+    ctx.globalAlpha = tokens.dark ? 0.30 : 0.28;
     for (let i = 0; i < indices.length; i += 1) {
       const pt = projectedFocos[indices[i]];
       activePts.push(pt);
-      const f = pt.f;
-      const isRef = f[5] === 1;
-      const isSeca = f[6] === 1;
-      const sensor = f[7];
-      const baseR = isRef ? 3.4 : (sensor === 0 ? 1.85 : 2.6);
-      const r = Math.max(0.55, baseR / scaleInv);
-
+      // Um fill por ponto: as sobreposicoes acumulam opacidade e mostram a densidade.
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = isRef ? tokens.ref : (isSeca ? tokens.seca : tokens.otherSensor);
-      ctx.globalAlpha = isRef ? 0.82 : 0.64;
+      ctx.arc(pt.x, pt.y, rFoco, 0, 2 * Math.PI);
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
 
     if (activeFocusIdx >= 0 && projectedFocos[activeFocusIdx]) {
       const pSel = projectedFocos[activeFocusIdx];
@@ -1267,13 +1340,10 @@
       const tokens = getTokens();
       legEl.hidden = false;
       legEl.innerHTML = `
-        <div class="cf-legend-title">Legenda do mapa</div>
         <div class="cf-d3-legend-list">
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.ref}"></span><span>Referência (AQUA_M-T)</span></div>
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.seca}"></span><span>Estiagem (Mai–Set)</span></div>
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.otherSensor}"></span><span>Período chuvoso</span></div>
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.uc}"></span><span>Unidade de Conservação</span></div>
-          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.car}"></span><span>Fila de vistoria (50 primeiros)</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch cf-d3-swatch--pin" style="background:${tokens.car}">1</span><span>Fila de vistoria (posição)</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch" style="background:${tokens.foco}"></span><span>Foco de calor</span></div>
+          <div class="cf-d3-legend-row"><span class="cf-d3-swatch cf-d3-swatch--area" style="background:${tokens.ucFill};border-color:${tokens.uc}"></span><span>Unidade de Conservação</span></div>
         </div>
       `;
       return;
@@ -1513,7 +1583,7 @@
 
     const x = d3.scaleBand().domain(MESES).range([0, iw]).padding(0.08);
     const y = d3.scaleBand().domain(ANOS.map(String)).range([0, ih]).padding(0.10);
-    const colorScale = d3.scaleSequential(tokens.dark ? d3.interpolateOrRd : d3.interpolateYlOrRd)
+    const colorScale = d3.scaleSequential(d3.interpolateLab(tokens.seqLow, tokens.seqHigh))
       .domain([0, Math.sqrt(maxCell)]);
 
     g.append('g')
@@ -1772,7 +1842,7 @@
         .attr('x', (d) => x(d.hora))
         .attr('width', x.bandwidth())
         .attr('rx', 2)
-        .attr('fill', (d) => ((d.hora >= 12 && d.hora <= 18) ? tokens.ref : tokens.seca))
+        .attr('fill', (d) => ((d.hora >= 12 && d.hora <= 18) ? tokens.foco : tokens.totalBar))
         .attr('opacity', 0.9)
         .attr('y', ih)
         .attr('height', 0)
@@ -1818,7 +1888,7 @@
       .attr('x', (d) => x(d.faixa))
       .attr('width', x.bandwidth())
       .attr('rx', 2)
-      .attr('fill', (d) => (d.min >= 80 ? tokens.ref : (d.min >= 50 ? tokens.seca : tokens.otherSensor)))
+      .attr('fill', (d) => (d.min >= 80 ? tokens.foco : (d.min >= 50 ? tokens.focoClaro : tokens.totalBar)))
       .attr('y', ih)
       .attr('height', 0)
       .on('mousemove', function (event, d) {
@@ -1897,7 +1967,7 @@
 
     g.append('g')
       .attr('transform', `translate(0,${ih})`)
-      .call(d3.axisBottom(x).ticks(5))
+      .call(d3.axisBottom(x).ticks(5).tickFormat((d) => formatDec(d, Number.isInteger(d) ? 0 : 1)))
       .call((ax) => ax.select('.domain').attr('stroke', tokens.border))
       .call((ax) => ax.selectAll('text').attr('fill', tokens.muted).attr('font-size', '11px'));
 
@@ -1908,13 +1978,13 @@
       .call((ax) => ax.selectAll('text')
         .attr('fill', (name) => {
           const item = rows.find((r) => r.nome === name);
-          return (item && state.ucIdx === item.idx) ? tokens.seca : tokens.text;
+          return (item && state.ucIdx === item.idx) ? tokens.car : tokens.text;
         })
         .attr('font-size', '11px')
         .text((name) => (name.length > 23 ? name.slice(0, 22) + '...' : name)));
 
     const stack = d3.stack().keys(['dentro', 'buf'])(rows);
-    const colorMap = { dentro: tokens.uc, buf: tokens.seca };
+    const colorMap = { dentro: tokens.uc, buf: tokens.ucClaro };
 
     g.selectAll('g.cf-uc-stack')
       .data(stack)
@@ -1954,7 +2024,7 @@
     const leg = svg.append('g').attr('transform', `translate(${margin.left}, 12)`);
     leg.append('rect').attr('x', 0).attr('y', -9).attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', tokens.uc);
     leg.append('text').attr('x', 14).attr('y', 0).attr('fill', tokens.muted).attr('font-size', '11px').text('Dentro da UC');
-    leg.append('rect').attr('x', 105).attr('y', -9).attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', tokens.seca);
+    leg.append('rect').attr('x', 105).attr('y', -9).attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', tokens.ucClaro);
     leg.append('text').attr('x', 119).attr('y', 0).attr('fill', tokens.muted).attr('font-size', '11px').text('Faixa de 1 km');
   }
 
@@ -1992,7 +2062,7 @@
       }));
 
       const y = d3.scaleBand().domain(sitRows.map((r) => r.label)).range([0, ih * 0.44]).padding(0.24);
-      const x = d3.scaleLinear().domain([0, d3.max(sitRows, (r) => r.imoveis) * 1.12]).range([0, iw]);
+      const x = d3.scaleLinear().domain([0, d3.max(sitRows, (r) => r.imoveis) * 1.45]).range([0, iw]);
 
       g.append('g').call(d3.axisLeft(y)).call((ax) => ax.select('.domain').remove()).call((ax) => ax.selectAll('line').remove())
         .call((ax) => ax.selectAll('text').attr('fill', tokens.text).attr('font-size', '11px'));
@@ -2031,7 +2101,7 @@
         .attr('y', (d) => y(d.label) + y.bandwidth() / 2 + 4)
         .attr('fill', tokens.muted)
         .attr('font-size', '11px')
-        .text((d) => `${formatInt(d.imoveis)} (${formatInt(d.focos)} focos)`);
+        .text((d) => `${formatInt(d.imoveis)} · ${formatInt(d.focos)} focos`);
 
       // Parte inferior: Faixa de area (ha)
       const areaOrder = ['Até 20 ha', '20 a 100 ha', '100 a 500 ha', '500 a 5.000 ha', 'Acima de 5.000 ha'];
@@ -2053,8 +2123,7 @@
         .attr('height', y2.bandwidth())
         .attr('width', (d) => x2(d.qtd))
         .attr('rx', 2)
-        .attr('fill', tokens.car)
-        .attr('opacity', 0.85);
+        .attr('fill', tokens.totalBar);
 
       g.selectAll('text.cf-area-val')
         .data(areaRows)
@@ -2087,7 +2156,7 @@
       const y = d3.scaleLinear().domain([0, (d3.max(anosDist, (d) => d.gold) || 750) * 1.12]).nice().range([ih, 0]);
 
       g.append('g')
-        .call(d3.axisLeft(y).ticks(5).tickSize(-iw))
+        .call(d3.axisLeft(y).ticks(5).tickSize(-iw).tickFormat((d) => formatInt(d)))
         .call((ax) => ax.select('.domain').remove())
         .call((ax) => ax.selectAll('line').attr('stroke', tokens.grid))
         .call((ax) => ax.selectAll('text').attr('fill', tokens.muted).attr('font-size', '11px'));
@@ -2104,7 +2173,7 @@
         .attr('y', (d) => y(d.gold))
         .attr('height', (d) => ih - y(d.gold))
         .attr('rx', 3)
-        .attr('fill', (d) => (d.anosNum >= 10 ? tokens.ref : tokens.seca))
+        .attr('fill', (d) => (d.anosNum >= 10 ? tokens.carForte : tokens.car))
         .on('mousemove', function (event, d) {
           showTooltip(
             `<strong>${d.anosNum} anos distintos com foco</strong><br/>` +
@@ -2135,7 +2204,7 @@
 
     g.append('g')
       .attr('transform', `translate(0,${ih})`)
-      .call(d3.axisBottom(x).ticks(4))
+      .call(d3.axisBottom(x).ticks(4).tickFormat((d) => formatInt(d)))
       .call((ax) => ax.select('.domain').attr('stroke', tokens.border))
       .call((ax) => ax.selectAll('text').attr('fill', tokens.muted).attr('font-size', '11px'));
 
@@ -2190,13 +2259,18 @@
             data-search="${escapeHtml((im.cod_imovel + ' ' + im.situacao + ' ' + (im.condicao || '') + ' ' + (im.ra || '')).toLowerCase())}">
           <td class="cf-num">${im.rank}</td>
           <td>
-            <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}">
-              <code>${escapeHtml(im.cod_imovel)}</code>
+            <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
+              <code>${escapeHtml(shortCod(im.cod_imovel))}</code>
             </button>
           </td>
           <td>${escapeHtml(im.ra || '-')}</td>
           <td><span class="cf-sit-pill cf-sit-${escapeHtml(im.situacao)}">${escapeHtml(im.situacao)}</span></td>
-          <td class="cf-num"><b>${formatDec(im.indice, 1)}</b></td>
+          <td class="cf-num">
+            <span class="cf-indice">
+              <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
+              <b>${formatDec(im.indice, 1)}</b>
+            </span>
+          </td>
           <td class="cf-num">${im.anos_qtd}</td>
           <td class="cf-num">${formatDec(im.area_ha, 1)}</td>
           <td class="cf-num">${formatInt(im.focos_total)}</td>

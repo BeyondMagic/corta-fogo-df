@@ -11,6 +11,7 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
   <div id="cf-loading-banner" class="cf-loading-banner" role="status">Carregando séries históricas e malhas vetoriais (resumo, geometrias e 38.945 focos)...</div>
   <div id="cf-live-status" class="cf-sr-only" role="status" aria-live="polite"></div>
   <section class="cf-resposta-card" aria-labelledby="cf-resposta-titulo">
+    <p class="cf-resposta-rotulo">Pergunta de gestão</p>
     <p class="cf-resposta-pergunta" id="cf-resposta-titulo">Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em reserva legal, APP ou a até 1 km de unidades de conservação entre 2015 e 2025?</p>
     <div id="cf-resposta-corpo"></div>
   </section>
@@ -122,8 +123,8 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
         <div id="cf-leaflet-toolbar-opts" class="cf-seg-group" hidden>
           <label for="cf-select-basemap" class="cf-sr-only">Mapa base Leaflet</label>
           <select id="cf-select-basemap" class="cf-select">
+            <option value="esri" selected>ESRI Light Gray (Neutro)</option>
             <option value="osm">OpenStreetMap (Ruas)</option>
-            <option value="esri">ESRI Light Gray (Neutro)</option>
           </select>
         </div>
         <button type="button" id="cf-btn-fullscreen" class="cf-btn" aria-pressed="false">Tela cheia</button>
@@ -132,8 +133,8 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
     <div class="cf-layer-bar" role="group" aria-label="Camadas vetoriais visíveis">
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-ras" checked/> 37 Regiões Administrativas</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-ucs" checked/> 84 UCs</label>
-      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-buffers" checked/> Faixa de 1 km (UC)</label>
-      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-imoveis" checked/> 50 primeiros da fila de vistoria</label>
+      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-buffers"/> Faixa de 1 km (UC)</label>
+      <label class="cf-layer-check"><input type="checkbox" id="cf-layer-imoveis" checked/> Fila de vistoria (50 primeiros)</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-rl" checked/> Reserva Legal selecionada</label>
       <label class="cf-layer-check"><input type="checkbox" id="cf-layer-focos" checked/> Focos de calor</label>
     </div>

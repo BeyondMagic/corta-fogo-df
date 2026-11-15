@@ -6,6 +6,7 @@
 (function () {
   let mapInstance = null;
   let canvasRenderer = null;
+  let pinsRenderer = null;
   let rasLayer = null;
   let bufferLayer = null;
   let ucsLayer = null;
@@ -54,6 +55,7 @@
     }
     mapInstance = null;
     canvasRenderer = null;
+    pinsRenderer = null;
     rasLayer = null;
     bufferLayer = null;
     ucsLayer = null;
@@ -113,11 +115,11 @@
     if (data.rasGeo) {
       const layer = L.geoJSON(data.rasGeo, {
         style: {
-          color: '#64748b',
-          weight: 1.1,
-          dashArray: '3, 3',
-          fillColor: '#94a3b8',
-          fillOpacity: 0.04
+          color: '#5b616b',
+          weight: 0.8,
+          opacity: 0.7,
+          fill: true,
+          fillOpacity: 0
         },
         onEachFeature: function (feature, lyr) {
           const p = feature.properties || {};
@@ -138,11 +140,10 @@
     if (data.buffersGeo) {
       const layer = L.geoJSON(data.buffersGeo, {
         style: {
-          color: '#15803d',
+          color: '#008300',
           dashArray: '4, 4',
-          weight: 1.1,
-          fillColor: '#86efac',
-          fillOpacity: 0.10
+          weight: 1,
+          fillOpacity: 0
         },
         onEachFeature: function (feature, lyr) {
           const nome = feature.properties ? feature.properties.nome : 'UC';
@@ -156,13 +157,8 @@
       const layer = L.geoJSON(data.ucsGeo, {
         style: function (feature) {
           const cat = (feature.properties && feature.properties.uc_conserv) || '';
-          if (cat.indexOf('Proteção Integral') !== -1) {
-            return { color: '#15803d', weight: 1.8, fillColor: '#22c55e', fillOpacity: 0.28 };
-          }
-          if (cat.indexOf('Uso Sustentável') !== -1) {
-            return { color: '#65a30d', weight: 1.3, fillColor: '#a3e635', fillOpacity: 0.18 };
-          }
-          return { color: '#0d9488', weight: 1.3, fillColor: '#2dd4bf', fillOpacity: 0.18 };
+          const integral = cat.indexOf('Proteção Integral') !== -1;
+          return { color: '#008300', weight: integral ? 1.4 : 1, fillColor: '#008300', fillOpacity: integral ? 0.14 : 0.08 };
         },
         onEachFeature: function (feature, lyr) {
           const p = feature.properties || {};
@@ -208,12 +204,13 @@
       if (anoFiltro && (!im.anos || !im.anos.includes(anoFiltro))) return;
 
       const marker = L.circleMarker([im.lat, im.lon], {
-        radius: 7,
-        color: '#6b21a8',
+        radius: im.rank <= 10 ? 8 : 5.5,
+        color: '#ffffff',
         weight: 2,
-        fillColor: '#a855f7',
-        fillOpacity: 0.9,
-        renderer: canvasRenderer
+        fillColor: '#6250d6',
+        fillOpacity: 1,
+        pane: 'cfPins',
+        renderer: pinsRenderer
       });
 
       const badges = [
@@ -231,7 +228,7 @@
 
       const popupHtml = `
         <div style="font-family: inherit; font-size: 13px; line-height: 1.45; min-width: 245px;">
-          <strong style="color:#6b21a8;font-size:14px;">#${im.rank} da fila de vistoria</strong><br/>
+          <strong style="color:#6250d6;font-size:14px;">#${im.rank} da fila de vistoria</strong><br/>
           <code style="font-size:10.5px;word-break:break-all;">${escapeHtml(im.cod_imovel)}</code>
           <div style="margin:6px 0;display:flex;gap:4px;flex-wrap:wrap;">${badges.join('')}</div>
           <hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0;"/>
@@ -245,7 +242,7 @@
       `;
 
       marker.bindPopup(popupHtml);
-      marker.bindTooltip(`#${im.rank} CAR: ${im.cod_imovel.slice(0, 18)}... (${im.focos_total} focos)`, { sticky: true });
+      marker.bindTooltip(`#${im.rank} na fila · ${im.ra || 'Imóvel rural'} · índice ${formatPtBr(im.indice, 1)}`, { sticky: true });
 
       marker.on('popupopen', function () {
         const g = geoms[im.cod_imovel];
@@ -275,10 +272,10 @@
     if (imovelGeom) {
       const carPoly = L.geoJSON(imovelGeom, {
         style: {
-          color: '#7c3aed',
+          color: '#6250d6',
           weight: 2.5,
-          fillColor: '#c084fc',
-          fillOpacity: 0.25
+          fillColor: '#6250d6',
+          fillOpacity: 0.18
         }
       });
       activeOverlayGroup.addLayer(carPoly);
@@ -288,11 +285,11 @@
     if (showRl && Array.isArray(rlGeoms) && rlGeoms.length > 0) {
       const rlPoly = L.geoJSON({ type: 'FeatureCollection', features: rlGeoms.map(g => ({ type: 'Feature', geometry: g, properties: {} })) }, {
         style: {
-          color: '#059669',
+          color: '#1baf7a',
           weight: 2,
           dashArray: '4, 3',
-          fillColor: '#34d399',
-          fillOpacity: 0.35
+          fillColor: '#1baf7a',
+          fillOpacity: 0.25
         }
       });
       activeOverlayGroup.addLayer(rlPoly);
@@ -334,15 +331,11 @@
       const sensorTipo = f[7];
       const risco = f[8];
 
-      const cor = isRef ? '#dc2626' : (isSeca ? '#ea580c' : '#f59e0b');
-      const raio = isRef ? 4.2 : (sensorTipo === 0 ? 2.4 : 3.3);
-
       const circle = L.circleMarker([lat, lon], {
-        radius: raio,
-        color: cor,
-        weight: 0.8,
-        fillColor: cor,
-        fillOpacity: 0.65,
+        radius: 2,
+        stroke: false,
+        fillColor: '#d03b3b',
+        fillOpacity: 0.28,
         renderer: canvasRenderer
       });
 
@@ -358,7 +351,7 @@
 
       const popupHtml = `
         <div style="font-family:inherit;font-size:13px;line-height:1.45;min-width:240px;">
-          <strong style="color:#c2410c;font-size:14px;">Foco de Calor (${ano})</strong><br/>
+          <strong style="color:#d03b3b;font-size:14px;">Foco de Calor (${ano})</strong><br/>
           <small>${isRef ? 'Satélite de Referência (AQUA_M-T)' : 'Sensor complementar'} · ${isSeca ? 'Estiagem (Mai-Set)' : 'Período Chuvoso'}</small>
           <hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0;"/>
           <b>Coordenadas:</b> ${lat.toFixed(4)}°, ${lon.toFixed(4)}°<br/>
@@ -423,6 +416,10 @@
     });
 
     canvasRenderer = L.canvas({ padding: 0.5 });
+    // A fila de vistoria fica num painel proprio, acima dos focos.
+    mapInstance.createPane('cfPins');
+    mapInstance.getPane('cfPins').style.zIndex = 450;
+    pinsRenderer = L.canvas({ padding: 0.5, pane: 'cfPins' });
 
     osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
@@ -435,7 +432,7 @@
     });
 
     const isDark = document.body.getAttribute('data-md-color-scheme') === 'slate';
-    currentBaseLayer = osmLayer;
+    currentBaseLayer = esriLayer;
     currentBaseLayer.addTo(mapInstance);
     if (isDark) {
       // Leve atenuacao de brilho controlada por CSS no modo escuro
