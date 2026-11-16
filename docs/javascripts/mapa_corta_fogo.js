@@ -546,7 +546,19 @@
     mapInstance.setView(cfg.centro, cfg.zoom);
   }
 
+  // Enquadra o DF inteiro no tamanho atual do mapa (usado ao entrar e sair da tela cheia).
+  function fitDf() {
+    if (!mapInstance || !storedData || !storedData.rasGeo) return;
+    setTimeout(() => {
+      if (!mapInstance) return;
+      mapInstance.invalidateSize();
+      const bounds = L.geoJSON(storedData.rasGeo).getBounds();
+      if (bounds.isValid()) mapInstance.fitBounds(bounds, { padding: [16, 16] });
+    }, 300);
+  }
+
   window.CFLeafletBridge = {
+    fitDf: fitDf,
     mount: mount,
     updateView: updateView,
     setLayersVisible: syncLayers,

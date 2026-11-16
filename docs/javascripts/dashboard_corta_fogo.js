@@ -2577,6 +2577,11 @@
       window.CFLeafletBridge.mount('corta-fogo-map', loadedData.leafletBundle);
       syncLeafletBridge();
       window.CFLeafletBridge.invalidate();
+      // Em tela cheia o mapa e bem maior: enquadra o DF para nao ficar pequeno no meio.
+      const stageCard = document.getElementById('cf-stage-card');
+      const emTelaCheia = stageCard && (document.fullscreenElement === stageCard || stageCard.classList.contains('cf-fullscreen-fallback'));
+      const semFoco = state.raIdx === null && state.ucIdx === null && !state.selectedCar;
+      if (emTelaCheia && semFoco && window.CFLeafletBridge.fitDf) window.CFLeafletBridge.fitDf();
     } else if (isD3) {
       renderD3Map(true);
     }
@@ -2618,7 +2623,12 @@
     }
     setTimeout(() => {
       renderD3Map(true);
-      if (window.CFLeafletBridge) window.CFLeafletBridge.invalidate();
+      if (window.CFLeafletBridge) {
+        window.CFLeafletBridge.invalidate();
+        // Sem RA, UC ou imovel em foco, reenquadra o DF no novo tamanho do mapa.
+        const semFoco = state.raIdx === null && state.ucIdx === null && !state.selectedCar;
+        if (semFoco && window.CFLeafletBridge.fitDf) window.CFLeafletBridge.fitDf();
+      }
     }, 120);
   }
 

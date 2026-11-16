@@ -246,6 +246,46 @@ body,
   min-height: 0 !important;
 }
 
+/* Mapa analitico em tela cheia: o mapa ocupa toda a altura livre (antes ficava
+   em 600 px) e o inspetor fica mais largo e legivel para apresentar. */
+.cf-map-card:fullscreen .cf-tabpanel:not([hidden]),
+.cf-map-card:-webkit-full-screen .cf-tabpanel:not([hidden]),
+.cf-map-card.cf-fullscreen-fallback .cf-tabpanel:not([hidden]) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cf-map-card:fullscreen .cf-stage-body,
+.cf-map-card:-webkit-full-screen .cf-stage-body,
+.cf-map-card.cf-fullscreen-fallback .cf-stage-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.cf-map-card:fullscreen .cf-d3-viewport,
+.cf-map-card:-webkit-full-screen .cf-d3-viewport,
+.cf-map-card.cf-fullscreen-fallback .cf-d3-viewport {
+  height: 100%;
+  min-height: 0;
+}
+
+.cf-map-card:fullscreen .cf-inspector,
+.cf-map-card:-webkit-full-screen .cf-inspector,
+.cf-map-card.cf-fullscreen-fallback .cf-inspector {
+  max-height: none;
+  font-size: 0.9rem;
+  padding: 18px;
+}
+
+.cf-map-card:fullscreen .cf-inspector h4,
+.cf-map-card:-webkit-full-screen .cf-inspector h4,
+.cf-map-card.cf-fullscreen-fallback .cf-inspector h4 {
+  font-size: 1.35rem;
+}
+
 .cf-map-card:fullscreen .cf-stats-grid,
 .cf-map-card:-webkit-full-screen .cf-stats-grid,
 .cf-map-card.cf-fullscreen-fallback .cf-stats-grid {
