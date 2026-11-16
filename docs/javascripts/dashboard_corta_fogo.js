@@ -4,6 +4,9 @@
  * filtros cruzados entre mapa d3-geo, mapa Leaflet, graficos e tabela CAR.
  */
 (function () {
+  const INITIAL_SCRIPT_URL = (typeof document !== 'undefined' && document.currentScript && document.currentScript.src)
+    ? document.currentScript.src
+    : null;
   const ANOS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
   const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const SENSOR_NOMES = {
@@ -156,9 +159,19 @@
   }
 
   function resolveDataBaseUrl() {
-    const script = document.querySelector('script[src*="dashboard_corta_fogo.js"]');
-    if (script && script.src) {
-      return new URL('../assets/dados_dashboard/', script.src).href;
+    if (INITIAL_SCRIPT_URL) {
+      return new URL('../assets/dados_dashboard/', INITIAL_SCRIPT_URL).href;
+    }
+    const cfgEl = document.getElementById('__config');
+    if (cfgEl && cfgEl.textContent) {
+      try {
+        const cfg = JSON.parse(cfgEl.textContent);
+        if (cfg && typeof cfg.base === 'string') {
+          const base = cfg.base.replace(/\/+$/, '');
+          const rel = (base === '.' || base === '') ? 'assets/dados_dashboard/' : base + '/assets/dados_dashboard/';
+          return new URL(rel, window.location.href).href;
+        }
+      } catch (e) { }
     }
     return '../assets/dados_dashboard/';
   }
@@ -262,6 +275,9 @@
         }
       };
       return loadedData;
+    }).catch((err) => {
+      dataCachePromise = null;
+      throw err;
     });
     return dataCachePromise;
   }
