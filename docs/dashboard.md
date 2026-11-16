@@ -59,6 +59,38 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
           <input type="range" id="cf-ano-slider" min="2015" max="2026" step="1" value="2026"/>
           <span class="cf-year-pill" id="cf-ano-badge">2015 a 2025 (Todos)</span>
         </div>
+        <div class="cf-field cf-field-ano">
+          <label for="cf-ano-de">De</label>
+          <select id="cf-ano-de" class="cf-select">
+            <option value="2015" selected>2015</option>
+            <option value="2016">2016</option>
+            <option value="2017">2017</option>
+            <option value="2018">2018</option>
+            <option value="2019">2019</option>
+            <option value="2020">2020</option>
+            <option value="2021">2021</option>
+            <option value="2022">2022</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+          </select>
+        </div>
+        <div class="cf-field cf-field-ano">
+          <label for="cf-ano-ate">Até</label>
+          <select id="cf-ano-ate" class="cf-select">
+            <option value="2015">2015</option>
+            <option value="2016">2016</option>
+            <option value="2017">2017</option>
+            <option value="2018">2018</option>
+            <option value="2019">2019</option>
+            <option value="2020">2020</option>
+            <option value="2021">2021</option>
+            <option value="2022">2022</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+            <option value="2025" selected>2025</option>
+          </select>
+        </div>
         <button type="button" id="cf-btn-todos" class="cf-btn">Todos (2015–2025)</button>
       </div>
       <div class="cf-field">
@@ -88,6 +120,12 @@ Painel interativo em **D3.js** (`d3-geo` + Canvas + SVG) integrado ao mapa **Lea
           <option value="PE">PE (Pendente)</option>
           <option value="SU">SU (Suspenso)</option>
           <option value="CA">CA (Cancelado)</option>
+        </select>
+      </div>
+      <div class="cf-field">
+        <label for="cf-filter-ra">Região Administrativa</label>
+        <select id="cf-filter-ra" class="cf-select">
+          <option value="todos">Todas as RAs</option>
         </select>
       </div>
       <button type="button" id="cf-btn-reset-filters" class="cf-btn">Limpar filtros</button>

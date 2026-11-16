@@ -197,11 +197,13 @@
     const imoveis = data.carTop50 || [];
     const geoms = data.carTop50Geoms || {};
     const situacaoFiltro = state && state.situacao && state.situacao !== 'todos' ? state.situacao : null;
-    const anoFiltro = state && state.ano && state.ano !== 'todos' ? Number(state.ano) : null;
+    // Periodo do painel: ano = inicio, anoFim = fim (igual ao inicio quando e um ano so).
+    const anoIni = state && state.ano && state.ano !== 'todos' ? Number(state.ano) : null;
+    const anoFim = anoIni === null ? null : Number(state.anoFim != null ? state.anoFim : anoIni);
 
     imoveis.forEach((im) => {
       if (situacaoFiltro && im.situacao !== situacaoFiltro) return;
-      if (anoFiltro && (!im.anos || !im.anos.includes(anoFiltro))) return;
+      if (anoIni !== null && !(im.anos && im.anos.some((a) => a >= anoIni && a <= anoFim))) return;
 
       const marker = L.circleMarker([im.lat, im.lon], {
         radius: im.rank <= 10 ? 8 : 5.5,

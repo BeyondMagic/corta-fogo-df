@@ -42,7 +42,9 @@
   let activeFocusIdx = -1;
 
   const state = {
+    // Periodo: ano = inicio ('todos' = serie inteira) e anoFim = fim. Ano unico: ano === anoFim.
     ano: 'todos',
+    anoFim: null,
     mes: null,
     estacao: 'todos',
     sensor: 'todos',
@@ -130,9 +132,10 @@
       otherSensor: dark ? '#5b616b' : '#a3a9b2',
       foco: dark ? '#e66767' : '#d03b3b',
       focoClaro: dark ? 'rgba(230, 103, 103, 0.45)' : 'rgba(208, 59, 59, 0.40)',
-      // Intensidade (matriz, hexagonos, coropletico): um matiz so, azul.
-      seqLow: dark ? '#1b2a3d' : '#e8f1fc',
-      seqHigh: dark ? '#b7d3f6' : '#0d366b',
+      // Intensidade (matriz, hexagonos, coropletico): um matiz so, laranja de fogo.
+      // Mais focos = laranja mais forte, nos dois temas. Mesmo par em extra.css.
+      seqLow: dark ? '#2b1d16' : '#fdebdf',
+      seqHigh: dark ? '#ff9a5c' : '#8a2b0a',
       ucClaro: dark ? '#3d7a3d' : '#8cc98c',
       carForte: dark ? '#c3bcf5' : '#3d2f9e',
       uc: dark ? '#0ca30c' : '#008300',
@@ -314,12 +317,31 @@
   }
 
   // Filtragem unica de 38.945 registros com agregacoes para todos os graficos
+  const ANO_MIN = 2015;
+  const ANO_MAX = 2025;
+
+  // O ano esta no periodo filtrado? Sem filtro de ano, todos estao.
+  function anoNoFiltro(ano) {
+    if (state.ano === 'todos') return true;
+    return ano >= state.ano && ano <= state.anoFim;
+  }
+
+  // Ano do filtro quando o periodo e um ano so; null quando e 'todos' ou um intervalo.
+  function anoUnico() {
+    return (state.ano !== 'todos' && state.ano === state.anoFim) ? state.ano : null;
+  }
+
+  // Imovel da fila com foco em algum ano do periodo.
+  function imovelNoPeriodo(im) {
+    if (state.ano === 'todos') return true;
+    return Boolean(im.anos && im.anos.some(anoNoFiltro));
+  }
+
   function filterAndAggregate() {
     if (!loadedData) return;
     const focos = loadedData.focos;
     const extraMap = loadedData.extraMap;
     const hasYear = state.ano !== 'todos';
-    const targetYear = hasYear ? Number(state.ano) : null;
     const hasMonth = state.mes !== null;
     const targetMonth = hasMonth ? Number(state.mes) : null;
     const hasRa = state.raIdx !== null;
@@ -415,7 +437,7 @@
         heatmapMatrix[yIdx][mIdx] += 1;
       }
 
-      if (hasYear && ano !== targetYear) continue;
+      if (hasYear && !anoNoFiltro(ano)) continue;
       if (hasMonth && mes !== targetMonth) continue;
 
       filteredIndices.push(i);
@@ -516,18 +538,17 @@
     const kpiCar = document.getElementById('cf-kpi-car');
     const kpiCarSub = document.getElementById('cf-kpi-car-sub');
     const imoveisTop = loadedData.resumo.car_top50 || [];
-    const anoFiltro = state.ano !== 'todos' ? Number(state.ano) : null;
     const situacaoFiltro = state.situacao !== 'todos' ? state.situacao : null;
     const ativosTop = imoveisTop.filter((im) => {
       if (situacaoFiltro && im.situacao !== situacaoFiltro) return false;
-      if (anoFiltro && (!im.anos || !im.anos.includes(anoFiltro))) return false;
+      if (!imovelNoPeriodo(im)) return false;
       return true;
     }).length;
     const cruz = loadedData.resumo.car_cruzamento || {};
     const criticos = (cruz.por_classificacao && cruz.por_classificacao['PRIORIDADE CRITICA']) || { imoveis: 0 };
     if (kpiCar) kpiCar.textContent = formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes);
     if (kpiCarSub) {
-      const filtroFila = anoFiltro || situacaoFiltro;
+      const filtroFila = state.ano !== 'todos' || situacaoFiltro;
       kpiCarSub.textContent = filtroFila
         ? `${ativosTop} dos ${imoveisTop.length} primeiros da fila no recorte`
         : `${formatInt(criticos.imoveis)} em prioridade crítica`;
@@ -641,7 +662,7 @@
 
     const chips = [];
     if (state.ano !== 'todos') {
-      chips.push({ key: 'ano', label: `Ano: ${state.ano}` });
+      chips.push({ key: 'ano', label: anoUnico() !== null ? `Ano: ${state.ano}` : `Anos: ${state.ano}–${state.anoFim}` });
     }
     if (state.mes !== null) {
       chips.push({ key: 'mes', label: `Mês: ${MESES[state.mes - 1]}` });
@@ -698,11 +719,20 @@
   }
 
   function syncControlsFromState() {
+    const isAll = state.ano === 'todos';
+    // Bolinha e selo: num periodo, a bolinha fica no ultimo ano e o selo mostra o intervalo.
     const slider = document.getElementById('cf-ano-slider');
     const badge = document.getElementById('cf-ano-badge');
-    const isAll = state.ano === 'todos';
-    if (slider) slider.value = isAll ? '2026' : String(state.ano);
-    if (badge) badge.textContent = isAll ? '2015 a 2025 (Todos)' : String(state.ano);
+    if (slider) slider.value = isAll ? '2026' : String(state.anoFim);
+    if (badge) {
+      badge.textContent = isAll
+        ? '2015 a 2025 (Todos)'
+        : (anoUnico() !== null ? String(state.ano) : `${state.ano} a ${state.anoFim}`);
+    }
+    const selDe = document.getElementById('cf-ano-de');
+    const selAte = document.getElementById('cf-ano-ate');
+    if (selDe) selDe.value = isAll ? String(ANO_MIN) : String(state.ano);
+    if (selAte) selAte.value = isAll ? String(ANO_MAX) : String(state.anoFim);
 
     const selEst = document.getElementById('cf-filter-estacao');
     if (selEst) selEst.value = state.estacao;
@@ -710,6 +740,19 @@
     if (selSen) selSen.value = state.sensor;
     const selSit = document.getElementById('cf-filter-situacao');
     if (selSit) selSit.value = state.situacao;
+
+    // Lista de RAs: preenchida uma vez, quando os dados chegam; segue state.raIdx,
+    // que tambem muda ao clicar numa RA no mapa ou no ranking.
+    const selRa = document.getElementById('cf-filter-ra');
+    if (selRa && loadedData) {
+      if (selRa.options.length <= 1) {
+        loadedData.resumo.ras_resumo
+          .slice()
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .forEach((r) => selRa.add(new Option(r.nome, String(r.idx))));
+      }
+      selRa.value = state.raIdx === null ? 'todos' : String(state.raIdx);
+    }
 
     document.querySelectorAll('#cf-d3-mode-group button[data-mode]').forEach((btn) => {
       const active = btn.getAttribute('data-mode') === state.d3Mode;
@@ -726,9 +769,24 @@
     if (choroMetric) choroMetric.value = state.choroMetric;
   }
 
-  function setYearFilter(anoVal, fromPlayback) {
+  // Um ano so (anoFimVal omitido) ou um periodo. De ANO_MIN a ANO_MAX equivale a 'todos'.
+  function setYearFilter(anoVal, fromPlayback, anoFimVal) {
     if (!fromPlayback && isPlaying) stopPlayback();
-    state.ano = (anoVal === 'todos' || Number(anoVal) === 2026) ? 'todos' : Number(anoVal);
+    if (anoVal === 'todos' || Number(anoVal) === 2026) {
+      state.ano = 'todos';
+      state.anoFim = null;
+    } else {
+      let ini = Number(anoVal);
+      let fim = (anoFimVal === undefined || anoFimVal === null) ? ini : Number(anoFimVal);
+      if (fim < ini) { const t = ini; ini = fim; fim = t; }
+      if (ini <= ANO_MIN && fim >= ANO_MAX) {
+        state.ano = 'todos';
+        state.anoFim = null;
+      } else {
+        state.ano = ini;
+        state.anoFim = fim;
+      }
+    }
     syncControlsFromState();
   }
 
@@ -968,8 +1026,10 @@
     const ucDensMax = d3.max(loadedData.resumo.ucs_resumo, (u, idx) => (u.area_ha > 0 ? (ucTotVals[idx] / u.area_ha) * 100 : 0)) || 1;
 
     const seqInterpolator = d3.interpolateLab(tokens.seqLow, tokens.seqHigh);
-    const raScale = d3.scaleSequential(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? raDensMax : raExtent]);
-    const ucScale = d3.scaleSequential(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? ucDensMax : ucMax]);
+    // Escala raiz: poucas RAs concentram muitos focos e, na escala linear, as demais
+    // ficavam todas com a mesma cor. A legenda usa a mesma escala (meio = max / 4).
+    const raScale = d3.scaleSequentialSqrt(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? raDensMax : raExtent]);
+    const ucScale = d3.scaleSequentialSqrt(seqInterpolator).domain([0, state.choroMetric === 'densidade' ? ucDensMax : ucMax]);
 
     // 1. Limite DF
     zoomGroup.select('g.cf-layer-df')
@@ -1169,10 +1229,9 @@
   function getVisibleCars() {
     if (!loadedData || !state.layers.imoveis) return [];
     const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
-    const anoFilter = state.ano !== 'todos' ? Number(state.ano) : null;
     return (loadedData.resumo.car_top50 || []).filter((im) => {
       if (sitFilter && im.situacao !== sitFilter) return false;
-      if (anoFilter && (!im.anos || !im.anos.includes(anoFilter))) return false;
+      if (!imovelNoPeriodo(im)) return false;
       return true;
     });
   }
@@ -1373,9 +1432,9 @@
     legEl.hidden = false;
     if (state.d3Mode === 'hexbin') {
       legEl.innerHTML = `
-        <div class="cf-legend-title">Densidade espacial (Hexágonos)</div>
+        <div class="cf-legend-title">Focos de calor por hexágono</div>
         <div class="cf-legend-ramp"></div>
-        <div class="cf-legend-ticks"><span>Baixa concentração</span><span>Alta concentração</span></div>
+        <div class="cf-legend-ticks"><span>menos focos</span><span>mais focos</span></div>
       `;
       return;
     }
@@ -1383,10 +1442,12 @@
     const isRa = state.choroTarget === 'ra';
     const maxVal = state.choroMetric === 'densidade' ? (isRa ? raDensMax : ucDensMax) : (isRa ? raMax : ucMax);
     const unit = state.choroMetric === 'densidade' ? (isRa ? 'focos/100 km²' : 'focos/100 ha') : 'focos';
+    const titulo = state.choroMetric === 'densidade' ? 'Densidade de focos de calor' : 'Focos de calor';
     legEl.innerHTML = `
-      <div class="cf-legend-title">${isRa ? 'Regiões Administrativas' : 'Unidades de Conservação'} (${unit})</div>
+      <div class="cf-legend-title">${titulo} por ${isRa ? 'Região Administrativa' : 'Unidade de Conservação'} (${unit})</div>
       <div class="cf-legend-ramp"></div>
-      <div class="cf-legend-ticks"><span>0</span><span>${formatDec(maxVal / 2, maxVal < 20 ? 1 : 0)}</span><span>${formatDec(maxVal, maxVal < 20 ? 1 : 0)}</span></div>
+      <div class="cf-legend-ticks"><span>0</span><span>${formatDec(maxVal / 4, maxVal < 20 ? 1 : 0)}</span><span>${formatDec(maxVal, maxVal < 20 ? 1 : 0)}</span></div>
+      <div class="cf-legend-ticks"><span>menos focos</span><span>mais focos</span></div>
     `;
   }
 
@@ -1529,7 +1590,7 @@
       .attr('x', (d) => x(String(d.data.ano)))
       .attr('width', x.bandwidth())
       .attr('rx', 2)
-      .attr('opacity', (d) => (state.ano === 'todos' || Number(state.ano) === d.data.ano ? 0.94 : 0.34))
+      .attr('opacity', (d) => (anoNoFiltro(d.data.ano) ? 0.94 : 0.34))
       .attr('y', ih)
       .attr('height', 0)
       .style('cursor', 'pointer')
@@ -1547,7 +1608,7 @@
       .on('mouseleave', hideTooltip)
       .on('click', function (_, d) {
         const clicked = d.data.ano;
-        setYearFilter(state.ano === clicked ? 'todos' : clicked, false);
+        setYearFilter(anoUnico() === clicked ? 'todos' : clicked, false);
         refreshAll(false);
       })
       .transition()
@@ -1625,12 +1686,12 @@
       .attr('rx', 3)
       .attr('fill', (d) => (d.count === 0 ? tokens.surfaceAlt : colorScale(Math.sqrt(d.count))))
       .attr('stroke', (d) => {
-        const isActive = (state.ano === d.ano && state.mes === d.mes);
+        const isActive = (anoUnico() === d.ano && state.mes === d.mes);
         return isActive ? tokens.text : 'transparent';
       })
       .attr('stroke-width', 1.8)
       .attr('opacity', (d) => {
-        const anoMatch = state.ano === 'todos' || Number(state.ano) === d.ano;
+        const anoMatch = anoNoFiltro(d.ano);
         const mesMatch = state.mes === null || state.mes === d.mes;
         return (anoMatch && mesMatch) ? 1 : 0.32;
       })
@@ -1646,7 +1707,7 @@
       })
       .on('mouseleave', hideTooltip)
       .on('click', function (_, d) {
-        if (state.ano === d.ano && state.mes === d.mes) {
+        if (anoUnico() === d.ano && state.mes === d.mes) {
           setYearFilter('todos', false);
           state.mes = null;
         } else {
@@ -2469,17 +2530,19 @@
     const mult = speedSel ? Number(speedSel.value || 1) : 1;
     const delayMs = Math.round(1200 / mult);
 
-    if (state.ano === 'todos') {
-      setYearFilter(2015, true);
+    // Percorre o periodo escolhido ano a ano e, no fim, mostra o periodo inteiro antes de recomecar.
+    const ini = state.ano === 'todos' ? ANO_MIN : state.ano;
+    const fim = state.ano === 'todos' ? ANO_MAX : state.anoFim;
+    let passo = 0;
+    const mostrar = () => {
+      const ano = ini + passo;
+      if (ano > fim) setYearFilter(ini, true, fim);
+      else setYearFilter(ano, true);
       refreshAll(false);
-    }
-
-    playTimer = setInterval(() => {
-      const cur = (state.ano === 'todos') ? 2026 : Number(state.ano);
-      const next = cur >= 2026 ? 2015 : cur + 1;
-      setYearFilter(next === 2026 ? 'todos' : next, true);
-      refreshAll(false);
-    }, delayMs);
+      passo = ano > fim ? 0 : passo + 1;
+    };
+    mostrar();
+    playTimer = setInterval(mostrar, delayMs);
   }
 
   function stopPlayback() {
@@ -2568,6 +2631,24 @@
       });
     }
 
+    // De / Ate: escolher um "De" depois do "Ate" (ou o contrario) leva o outro junto.
+    const selDe = document.getElementById('cf-ano-de');
+    const selAte = document.getElementById('cf-ano-ate');
+    const aplicarPeriodo = (mudou) => {
+      let de = Number(selDe.value);
+      let ate = Number(selAte.value);
+      if (de > ate) {
+        if (mudou === 'de') ate = de; else de = ate;
+      }
+      state.mes = null;
+      setYearFilter(de, false, ate);
+      refreshAll(false);
+    };
+    if (selDe && selAte) {
+      selDe.addEventListener('change', () => aplicarPeriodo('de'));
+      selAte.addEventListener('change', () => aplicarPeriodo('ate'));
+    }
+
     const playBtn = document.getElementById('cf-play-btn');
     if (playBtn) {
       playBtn.addEventListener('click', function () {
@@ -2605,11 +2686,24 @@
     bindSelect('cf-filter-sensor', 'sensor');
     bindSelect('cf-filter-situacao', 'situacao');
 
+    const selRaEl = document.getElementById('cf-filter-ra');
+    if (selRaEl) {
+      selRaEl.addEventListener('change', function () {
+        if (this.value === 'todos') {
+          if (state.raIdx !== null) selectRA(state.raIdx);
+        } else {
+          const idx = Number(this.value);
+          if (state.raIdx !== idx) selectRA(idx);
+        }
+      });
+    }
+
     const resetAllBtn = document.getElementById('cf-btn-reset-filters');
     if (resetAllBtn) {
       resetAllBtn.addEventListener('click', function () {
         stopPlayback();
         state.ano = 'todos';
+        state.anoFim = null;
         state.mes = null;
         state.estacao = 'todos';
         state.sensor = 'todos';
@@ -2808,6 +2902,7 @@
 
         renderResposta();
         buildCarTableRows();
+        syncControlsFromState();
         refreshAll(true);
 
         if (typeof ResizeObserver !== 'undefined') {
