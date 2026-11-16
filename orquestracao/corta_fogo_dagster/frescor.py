@@ -9,8 +9,9 @@ from frescor import SLA_HORAS_PADRAO, medir  # noqa: E402
 DUCKDB_PATH = os.getenv("DUCKDB_PATH", "/app/data/warehouse/corta_fogo.duckdb")
 DELTA_DIR = os.getenv("DELTA_DIR", "/app/data/delta")
 
-# Chave do modelo dbt na tradução padrão do dagster-dbt (nome do modelo).
-PAINEL = AssetKey("painel_imoveis_prioritarios")
+# Chave do modelo dbt no dagster-dbt: schema + nome. Sem o prefixo "gold", o check ficava preso a um
+# asset fantasma (sem dependencias) em vez do modelo real do grafo.
+PAINEL = AssetKey(["gold", "painel_imoveis_prioritarios"])
 
 
 @asset_check(
