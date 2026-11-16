@@ -160,19 +160,39 @@ Três pontos explicam contagens que parecem divergir entre o PostGIS e a Gold:
 
 <p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
-Imóveis rurais são retificados, mudam de área e de situação cadastral. Sobrescrever essas mudanças tornaria errada a resposta sobre focos de anos anteriores. A `dim_imovel_car` guarda uma linha por versão:
+Imóveis rurais são retificados, mudam de área e de situação cadastral. Sobrescrever essas mudanças tornaria errada a resposta sobre focos de anos anteriores.
 
-| Elemento | Regra |
+**Exemplo (ilustrativo):** um imóvel cadastrado com 100 ha é retificado para 60 ha em 2023. Um foco de 2020 no trecho que saiu do cadastro caiu no imóvel naquela época. Comparado com a área de hoje, ele sumiria da resposta.
+
+Por isso a `dim_imovel_car` não sobrescreve: guarda **uma linha por versão**, cada uma com o período em que valeu.
+
+![Exemplo ilustrativo de SCD Tipo 2: o imóvel de 100 ha é retificado para 60 ha em 2023; o foco de 2020 casa com a versão 1 e o foco de 2024 com a versão 2](../../assets/scd2_exemplo_imovel.svg)
+
+<p style="text-align: center; font-size: 0.9em; color: #64748b;">Figura 2: Exemplo ilustrativo. Cada foco casa com a versão do imóvel vigente na data dele</p>
+
+As regras:
+
+| Regra | Como funciona |
 | :--- | :--- |
-| Detecção da mudança | Snapshot `snp_imovel_car`, estratégia `timestamp` sobre `data_hora_ingestao`. |
-| Chave | `sk_imovel = md5(cod_imovel, lsn_origem)`, uma por versão. Reentregas do CDC com o mesmo `lsn_origem` não geram versão nova. |
-| Vigência | `dbt_valid_from <= data_hora_evento < dbt_valid_to`. A primeira versão vale desde 1900-01-01 e a versão corrente vai até 9999-12-31 (`is_current`). |
-| Cruzamento com focos | O foco cruza com a **geometria** da versão do imóvel vigente na data do evento (`int_focos_imoveis`). Geometria e atributos do par vêm da mesma versão. |
-| Versão nova | Só quando o conteúdo do imóvel muda (atributos, geometria ou exclusão). Reentregas do CDC e recargas do OLTP com os mesmos dados não abrem versão. |
+| 1. Detecção da mudança | Snapshot `snp_imovel_car`, estratégia `timestamp` sobre `data_hora_ingestao`: quando a data avança, fecha a versão antiga e abre uma nova. |
+| 2. Versão nova só se o conteúdo mudar | Um hash de atributos, geometria e exclusão é comparado com o da versão anterior. Reentregas do CDC e recargas do OLTP com os mesmos dados não abrem versão. |
+| 3. Chave | `sk_imovel = md5(cod_imovel, lsn_origem)`, uma por versão. |
+| 4. Vigência | `dbt_valid_from <= data_hora_evento < dbt_valid_to`. A primeira versão vale desde 1900-01-01, para que focos anteriores à carga do CDC achem versão. A corrente vai até 9999-12-31 (`is_current`). |
+| 5. Cruzamento com focos | O foco cruza com a **geometria** da versão vigente na data do evento (`int_focos_imoveis`). Geometria e atributos do par vêm da mesma versão. |
 
-Evidências: o teste unitário `dim_imovel_car_preserva_versao_anterior_para_focos_antigos` e os testes singulares de versão corrente única e de vigências contíguas passam no `dbt build`. A demonstração `orquestracao/demo_scd2_imovel.py` retifica e cancela um imóvel em uma cópia descartável do Delta e gera 3 versões (original, retificada e cancelada). Cada foco casa com a versão vigente na data do evento: um foco de 2020 usa a área original e um foco posterior à retificação usa a área nova.
+**Evidências**, todas aprovadas no `dbt build`:
 
-A tabela tem hoje 21.049 versões para 21.048 imóveis: a carga inicial do CDC, a retificação feita pelo script de mutações e o imóvel sentinela inserido e excluído por ele (só a versão excluída foi observada). O histórico tem a granularidade da frequência do `dbt build`: várias mudanças entre duas execuções viram uma versão.
+- **Teste unitário** `dim_imovel_car_preserva_versao_anterior_para_focos_antigos`: o foco antigo continua casando com a versão anterior do imóvel.
+- **Testes singulares:** uma única versão corrente por imóvel e vigências contíguas, sem buracos.
+- **Demonstração** `orquestracao/demo_scd2_imovel.py`: retifica e cancela um imóvel em uma cópia descartável do Delta e gera 3 versões (original, retificada e cancelada). Um foco de 2020 usa a área original e um foco posterior à retificação usa a área nova.
+
+**A tabela hoje:** 21.049 versões para 21.048 imóveis.
+
+- 21.047 imóveis com a versão da carga inicial do CDC;
+- +1 versão da retificação feita pelo script de mutações;
+- +1 imóvel sentinela, inserido e excluído pelo script (só a versão excluída foi observada).
+
+**Limitação:** o histórico tem a granularidade da frequência do `dbt build`. Várias mudanças entre duas execuções viram uma versão.
 
 ## 5. Transformações Declarativas no dbt-duckdb
 
@@ -341,7 +361,11 @@ As RAs com mais imóveis reincidentes são Planaltina (224), Paranoá (195), Bra
 
 <p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
-Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério tinham área mediana de 25.808 ha, 7 passavam de 10.000 ha e só 1 estava ativo: perímetros que cobrem áreas inteiras de UC somam mais focos por estarem expostos a mais pixels de satélite. O Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)) combina recorrência (40%), recência (30%) e dias com foco por 100 ha (30%):
+Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério tinham área mediana de 25.808 ha, 7 passavam de 10.000 ha e só 1 estava ativo: perímetros que cobrem áreas inteiras de UC somam mais focos por estarem expostos a mais pixels de satélite. O Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)) combina três critérios:
+
+- **Recorrência (40%):** em quantos anos diferentes o imóvel teve foco.
+- **Recência (30%):** quão recente foi o último foco.
+- **Densidade (30%):** dias com foco a cada 100 hectares. É isso que tira a vantagem do imóvel gigante.
 
 | # | Código CAR | RA | Situação | Área (ha) | Índice | Anos | Último ano | Dias com foco | RL | APP | UC |
 | ---: | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: |

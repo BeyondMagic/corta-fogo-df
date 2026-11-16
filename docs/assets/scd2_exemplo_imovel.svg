@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" width="1000" height="460" role="img" aria-label="Exemplo ilustrativo de SCD Tipo 2: um imóvel de 100 ha retificado para 60 ha em 2023. O foco de 2020, no trecho que saiu do cadastro, casa com a versão 1; o foco de 2024 casa com a versão 2.">
+  <style>
+    text { font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif; fill: #2B3035; }
+    .titulo { font-size: 18px; font-weight: 700; }
+    .rotulo { font-size: 15px; font-weight: 600; }
+    .apoio { font-size: 13px; fill: #5F6770; }
+    .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12px; fill: #5F6770; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="460" rx="12" fill="#FBFAF6" stroke="#E2DED3"/>
+
+  <!-- Mapa -->
+  <text x="30" y="40" class="titulo">No mapa</text>
+  <polygon points="70,80 410,66 440,300 260,385 60,330" fill="#F3E6CF" stroke="#B07A2E" stroke-width="2.5" stroke-dasharray="8 6"/>
+  <polygon points="70,80 275,72 290,362 260,385 60,330" fill="#CFE5D6" stroke="#2F6B4A" stroke-width="2.5"/>
+  <text x="300" y="110" class="rotulo" fill="#8A5A17" style="fill:#8A5A17">trecho que saiu</text>
+  <text x="300" y="128" class="apoio">retificação de 2023</text>
+  <text x="100" y="120" class="rotulo" style="fill:#2F6B4A">versão 2 · 60 ha</text>
+
+  <circle cx="365" cy="215" r="13" fill="#D2471F" fill-opacity="0.22"/>
+  <circle cx="365" cy="215" r="6" fill="#D2471F"/>
+  <text x="352" y="248" class="rotulo">foco 2020</text>
+
+  <circle cx="165" cy="240" r="13" fill="#D2471F" fill-opacity="0.22"/>
+  <circle cx="165" cy="240" r="6" fill="#D2471F"/>
+  <text x="140" y="273" class="rotulo">foco 2024</text>
+
+  <line x1="40" y1="412" x2="70" y2="412" stroke="#B07A2E" stroke-width="2.5" stroke-dasharray="8 6"/>
+  <text x="78" y="417" class="apoio">versão 1 · 100 ha (2018 a 2023)</text>
+  <rect x="290" y="404" width="28" height="16" fill="#CFE5D6" stroke="#2F6B4A" stroke-width="2"/>
+  <text x="326" y="417" class="apoio">versão 2 · 60 ha (atual)</text>
+
+  <line x1="490" y1="30" x2="490" y2="430" stroke="#E2DED3" stroke-width="1.5"/>
+
+  <!-- Linha do tempo -->
+  <text x="520" y="40" class="titulo">Na dim_imovel_car</text>
+
+  <text x="530" y="95" class="rotulo">Versão 1 · 100 ha</text>
+  <rect x="530" y="106" width="230" height="30" rx="4" fill="#F3E6CF" stroke="#B07A2E" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="530" y="156" class="mono">1900-01-01 → 2023-05-10</text>
+
+  <text x="760" y="195" class="rotulo">Versão 2 · 60 ha · is_current</text>
+  <rect x="760" y="206" width="210" height="30" rx="4" fill="#CFE5D6" stroke="#2F6B4A" stroke-width="2"/>
+  <text x="760" y="256" class="mono">2023-05-10 → 9999-12-31</text>
+
+  <circle cx="690" cy="121" r="7" fill="#D2471F"/>
+  <line x1="690" y1="128" x2="690" y2="318" stroke="#D2471F" stroke-width="1.5" stroke-dasharray="3 4"/>
+  <circle cx="830" cy="221" r="7" fill="#D2471F"/>
+  <line x1="830" y1="228" x2="830" y2="318" stroke="#D2471F" stroke-width="1.5" stroke-dasharray="3 4"/>
+
+  <line x1="530" y1="320" x2="970" y2="320" stroke="#8A9199" stroke-width="2"/>
+  <line x1="560" y1="313" x2="568" y2="327" stroke="#8A9199" stroke-width="2"/>
+  <line x1="568" y1="313" x2="576" y2="327" stroke="#8A9199" stroke-width="2"/>
+  <line x1="530" y1="314" x2="530" y2="326" stroke="#8A9199" stroke-width="2"/>
+  <line x1="690" y1="314" x2="690" y2="326" stroke="#8A9199" stroke-width="2"/>
+  <line x1="760" y1="314" x2="760" y2="326" stroke="#8A9199" stroke-width="2"/>
+  <line x1="830" y1="314" x2="830" y2="326" stroke="#8A9199" stroke-width="2"/>
+  <line x1="970" y1="314" x2="970" y2="326" stroke="#8A9199" stroke-width="2"/>
+  <text x="530" y="346" class="apoio" text-anchor="middle">1900</text>
+  <text x="690" y="346" class="apoio" text-anchor="middle">2020</text>
+  <text x="760" y="346" class="apoio" text-anchor="middle">2023</text>
+  <text x="830" y="346" class="apoio" text-anchor="middle">2024</text>
+  <text x="970" y="346" class="apoio" text-anchor="end">9999</text>
+
+  <text x="520" y="392" class="rotulo">Foco 2020 → versão 1: cai dentro dos 100 ha.</text>
+  <text x="520" y="416" class="rotulo">Foco 2024 → versão 2: usa os 60 ha.</text>
+</svg>
