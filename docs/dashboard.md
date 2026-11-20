@@ -270,7 +270,7 @@ icon: material/view-dashboard
       <div class="cf-card-head">
         <div>
           <h3 id="cf-car-table-title">Fila de Vistoria: 50 Primeiros Imóveis</h3>
-          <p class="cf-card-sub">Ordem do Índice de Prioridade de Vistoria (<code>gold.painel_imoveis_prioritarios</code>). Clique no código para desenhar o perímetro e as Reservas Legais no mapa.</p>
+          <p class="cf-card-sub">Ordem do Índice de Prioridade de Vistoria. Clique no código para desenhar o perímetro e as Reservas Legais no mapa.</p>
         </div>
         <div class="cf-table-toolbar">
           <div class="cf-field" style="min-width:240px;">
