@@ -2,13 +2,13 @@
 icon: material/sort-numeric-descending
 ---
 
-# :material-sort-numeric-descending: 0006. Índice de Prioridade de Vistoria para ordenar os imóveis reincidentes
+# :material-sort-numeric-descending: 0005. Índice de Prioridade de Vistoria para ordenar os imóveis reincidentes
 
-- **Status:** Proposto (pesos aguardam validação do grupo)
+- **Status:** Aceito
 - **Data:** 2026-11-14
 - **Decisores:** Cláudio H., Elias F., Gabriel F., Gabriel S., João V., Manoel F., Samuel R.
 
-Fora das cinco decisões previstas no plano de ensino: complementa o ADR 0003 na definição da camada Gold.
+Decisão arquitetural de maior impacto da equipe (Etapa Livre): complementa o ADR 0003 na definição da camada Gold.
 
 ## Contexto
 
@@ -59,7 +59,7 @@ Os pesos e o piso de área são variáveis do dbt (`transformacao/dbt_project.ym
 ## Consequências
 
 - A fila passa a ter imóveis menores e ativos no topo: 9 dos 10 primeiros com cadastro ativo, área máxima de 1.563 ha. Os 9 imóveis acima de 10.000 ha continuam na lista; o primeiro deles está na posição 61, e 8 ficam no quartil crítico.
-- Os pesos são uma escolha de valor do grupo, não um resultado estatístico. Esta decisão fica como **Proposta** até o grupo validá-los.
+- Os pesos são uma escolha de valor do grupo, validada pela equipe, não um resultado estatístico.
 - A intensidade depende da distribuição dos reincidentes (percentis 5 e 95). Uma carga nova pode mudar o índice de um imóvel sem que os focos dele mudem. A classificação por quartil tem o mesmo efeito.
 - A área declarada no CAR é a do imóvel inteiro. Focos dentro do imóvel, mas fora de área protegida, não entram na intensidade: só contam focos em Reserva Legal própria, APP ou a até 1 km de UC.
 

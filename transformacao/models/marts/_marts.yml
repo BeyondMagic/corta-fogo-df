@@ -445,7 +445,7 @@ models:
       entre 2015 e 2025. Fato da pergunta de gestao no grao do sujeito da decisao.
       Contagens sao aditivas entre imoveis (um foco sobre imoveis sobrepostos conta em
       cada um); densidade, componentes e indice nao sao. O Indice de Prioridade de
-      Vistoria (ADR 0006) so e calculado para imoveis reincidentes. Reconciliado com a
+      Vistoria (ADR 0005) so e calculado para imoveis reincidentes. Reconciliado com a
       Materialized View da E1 em tests/reconcilia_fato_imovel_com_mv_postgis.sql.
     data_tests:
       - volume_entre:
@@ -565,7 +565,7 @@ models:
               arguments: {minimo: 0, maximo: 1}
       - name: indice_prioridade
         description: >
-          Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0006). Nulo para imovel nao
+          Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0005). Nulo para imovel nao
           reincidente.
         data_tests:
           - entre:
@@ -644,7 +644,7 @@ models:
                 values: ['PRIORIDADE CRITICA', 'PRIORIDADE ALTA', 'PRIORIDADE MEDIA', 'PRIORIDADE BAIXA']
       - name: indice_prioridade
         data_type: double
-        description: Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0006).
+        description: Indice de Prioridade de Vistoria, de 0 a 100 (ADR 0005).
         data_tests:
           - not_null
           - entre:

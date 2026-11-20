@@ -18,7 +18,7 @@ A documentação detalhada do projeto está disponível na pasta `docs/` e publi
 - [Entrega 1: Fonte Transacional e Sistema de Origem](docs/entrega/01/README.md): escopo da primeira etapa, modelo relacional e espacial, histórico e procedimentos de carga.
 - [Esquema da tabela aberta (E2)](docs/modelagem/esquema_tabela_aberta.md): contrato Delta Lake, partição temporal e evolução de esquema.
 - [Esquema dimensional Gold (E3)](docs/modelagem/esquema_dimensional_gold.md): fato atômica, fato por imóvel, dimensões e a tabela de consumo do painel (dbt-duckdb).
-- [Índice de Prioridade de Vistoria (ADR 0006)](docs/adr/06-indice-de-prioridade-de-vistoria.md): como a fila de imóveis reincidentes é ordenada.
+- [Índice de Prioridade de Vistoria (ADR 0005)](docs/adr/05-indice-de-prioridade-de-vistoria.md): como a fila de imóveis reincidentes é ordenada.
 - [Frescor e SLA](docs/frescor_sla.md): SLA de 30 horas da tabela de consumo e como é verificado.
 - [Registros de Decisões de Arquitetura (ADRs)](docs/adr/README.md): justificativas técnicas para escolhas de banco de dados, extensões espaciais e projeção cartográfica.
 - [Glossário Técnico](docs/glossario.md): conceitos espaciais, cadastrais e referências bibliográficas.

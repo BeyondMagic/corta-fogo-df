@@ -52,7 +52,7 @@ Descrições de colunas e contratos de cada modelo estão em [`models/staging/_s
 
 Especificação conceitual: [`docs/modelagem/esquema_dimensional_gold.md`](../docs/modelagem/esquema_dimensional_gold.md).
 
-O teste [`tests/reconcilia_fato_imovel_com_mv_postgis.sql`](tests/reconcilia_fato_imovel_com_mv_postgis.sql) compara `fct_reincidencia_imovel` com a `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS (migração `V9`), imóvel a imóvel, em anos, focos e critérios atingidos. A ordem da fila segue o [ADR 0006](../docs/adr/06-indice-de-prioridade-de-vistoria.md); pesos e parâmetros do índice são `vars` em [`dbt_project.yml`](dbt_project.yml).
+O teste [`tests/reconcilia_fato_imovel_com_mv_postgis.sql`](tests/reconcilia_fato_imovel_com_mv_postgis.sql) compara `fct_reincidencia_imovel` com a `gold.mv_imoveis_reincidentes_areas_protegidas` do PostGIS (migração `V9`), imóvel a imóvel, em anos, focos e critérios atingidos. A ordem da fila segue o [ADR 0005](../docs/adr/05-indice-de-prioridade-de-vistoria.md); pesos e parâmetros do índice são `vars` em [`dbt_project.yml`](dbt_project.yml).
 
 ## Histórico de imóveis (SCD Tipo 2)
 

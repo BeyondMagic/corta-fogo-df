@@ -9,7 +9,7 @@ Camada `gold` no dbt-duckdb (`transformacao/models/marts/`). Estrela em torno da
 | Qual o grão da fato atômica? | Uma linha por `id_foco` (detecção = tempo + espaço + satélite). |
 | A fato atômica explode por imóvel? | Não. Há sobreposição no SICAR (um foco em N imóveis). A relação N:N fica em `int_focos_imoveis`. |
 | Onde está o sujeito da pergunta de gestão? | Em `fct_reincidencia_imovel`, uma linha por imóvel. A pergunta é sobre imóveis, e a decisão (ordem das vistorias) também. |
-| Como ordenar os imóveis reincidentes? | Índice de Prioridade de Vistoria ([ADR 0006](../adr/06-indice-de-prioridade-de-vistoria.md)). |
+| Como ordenar os imóveis reincidentes? | Índice de Prioridade de Vistoria ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)). |
 | Tempo: dia ou mês? | Dia civil local (`data_evento_local`). Estação seca do DF: maio a setembro. |
 | `dim_territorio`: chave estável? | `sk_territorio = md5(tipo_area, cod_imovel, WKT da geometria)`. Não usa o IDENTITY do PostGIS. |
 | Região Administrativa | `dim_regiao_administrativa`, ligada ao foco (ponto) e ao imóvel (ponto interno do perímetro). |

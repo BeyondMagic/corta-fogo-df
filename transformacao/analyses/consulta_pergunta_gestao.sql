@@ -3,7 +3,7 @@
 -- 2015 e 2025, na ordem em que devem ser vistoriados.
 --
 -- Reincidente: foco em area protegida em pelo menos 2 anos civis (UTC) distintos.
--- Ordem: Indice de Prioridade de Vistoria (docs/adr/06-indice-de-prioridade-de-vistoria.md).
+-- Ordem: Indice de Prioridade de Vistoria (docs/adr/05-indice-de-prioridade-de-vistoria.md).
 -- Granularidade do resultado: uma linha por imovel reincidente.
 -- total_focos soma os focos distintos do imovel; um foco sobre imoveis sobrepostos
 -- no SICAR e contado em cada um deles.

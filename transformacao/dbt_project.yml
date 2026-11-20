@@ -24,7 +24,7 @@ vars:
   fim_vigencia_aberta: "9999-12-31 00:00:00+00"
   # Foco ou imovel fora de todas as RAs (borda do DF): vale a RA mais proxima ate esta distancia.
   tolerancia_ra_m: 2000
-  # Indice de Prioridade de Vistoria (ADR 0006). Os pesos somam 1 e sao uma escolha de
+  # Indice de Prioridade de Vistoria (ADR 0005). Os pesos somam 1 e sao uma escolha de
   # valor do grupo, nao um resultado estatistico.
   ano_inicio_serie: 2015
   ano_fim_serie: 2025

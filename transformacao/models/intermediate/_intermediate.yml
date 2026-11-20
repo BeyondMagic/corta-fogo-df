@@ -172,7 +172,7 @@ models:
   - name: int_indice_prioridade_imovel
     description: >
       Granularidade: uma linha por imovel reincidente (cod_imovel). Calcula o Indice de
-      Prioridade de Vistoria (ADR 0006) a partir de recorrencia, recencia e intensidade,
+      Prioridade de Vistoria (ADR 0005) a partir de recorrencia, recencia e intensidade,
       e a classificacao pelos quartis do indice.
     columns:
       - name: cod_imovel

@@ -12,7 +12,7 @@ icon: material/numeric-3-box
 
 > **Quais imóveis rurais do Distrito Federal tiveram focos de calor reincidentes em áreas de reserva legal, de preservação permanente ou a até 1 km de unidades de conservação entre 2015 e 2025?**
 
-Um imóvel é reincidente quando tem foco em uma dessas áreas em pelo menos 2 anos civis (UTC) distintos. Todos os satélites entram na contagem. A decisão apoiada é a ordem das vistorias: a camada Gold entrega os reincidentes como uma fila, ordenada pelo Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)).
+Um imóvel é reincidente quando tem foco em uma dessas áreas em pelo menos 2 anos civis (UTC) distintos. Todos os satélites entram na contagem. A decisão apoiada é a ordem das vistorias: a camada Gold entrega os reincidentes como uma fila, ordenada pelo Índice de Prioridade de Vistoria ([ADR 0005](../../adr/05-indice-de-prioridade-de-vistoria.md)).
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 30, "rankSpacing": 70, "curve": "basis", "padding": 14}}}%%
@@ -361,7 +361,7 @@ As RAs com mais imóveis reincidentes são Planaltina (224), Paranoá (195), Bra
 
 <p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
-Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério tinham área mediana de 25.808 ha, 7 passavam de 10.000 ha e só 1 estava ativo: perímetros que cobrem áreas inteiras de UC somam mais focos por estarem expostos a mais pixels de satélite. O Índice de Prioridade de Vistoria ([ADR 0006](../../adr/06-indice-de-prioridade-de-vistoria.md)) combina três critérios:
+Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério tinham área mediana de 25.808 ha, 7 passavam de 10.000 ha e só 1 estava ativo: perímetros que cobrem áreas inteiras de UC somam mais focos por estarem expostos a mais pixels de satélite. O Índice de Prioridade de Vistoria ([ADR 0005](../../adr/05-indice-de-prioridade-de-vistoria.md)) combina três critérios:
 
 - **Recorrência (40%):** em quantos anos diferentes o imóvel teve foco.
 - **Recência (30%):** quão recente foi o último foco.
@@ -380,7 +380,7 @@ Até a E3, o ranking era por total de focos. Os 10 primeiros por esse critério 
 | 9 | `DF-5300108-88395A2F730346E8837BE8D70EAA58D7` | Paranoá | PE | 1.562,9 | 80,6 | 11 | 2025 | 123 | não | sim | sim |
 | 10 | `DF-5300108-0A2225C98AEE48DC8FEBB40FC4A3434B` | Paranoá | AT | 96,0 | 79,9 | 9 | 2025 | 13 | sim | não | sim |
 
-Nove dos 10 estão ativos, e todos tiveram foco em 2025. Os 9 imóveis acima de 10.000 ha continuam na lista (o primeiro na posição 61). Os pesos do índice são uma escolha do grupo e estão marcados como proposta no ADR.
+Nove dos 10 estão ativos, e todos tiveram foco em 2025. Os 9 imóveis acima de 10.000 ha continuam na lista (o primeiro na posição 61). Os pesos do índice são uma escolha validada pelo grupo no ADR 0005.
 
 ## 12. Auditoria do Checklist da E3
 
@@ -406,7 +406,7 @@ Os oito itens da [página da E3](https://unb-bd2.github.io/PlanoEnsino/projeto/e
 Código, testes e documentos da Entrega 3, versionados no repositório:
 
 - **[Decisão de Arquitetura 0003](../../adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md):** modelagem dimensional e ferramenta de transformação, com alternativas e medições.
-- **[Decisão de Arquitetura 0006](../../adr/06-indice-de-prioridade-de-vistoria.md):** Índice de Prioridade de Vistoria, com cinco critérios de ordenação medidos.
+- **[Decisão de Arquitetura 0005](../../adr/05-indice-de-prioridade-de-vistoria.md):** Índice de Prioridade de Vistoria, com cinco critérios de ordenação medidos.
 - **[Frescor e SLA](../../frescor_sla.md)** e **[planos `EXPLAIN`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/docs/explain)** da consulta otimizada.
 - **[Esquema dimensional Gold](../../modelagem/esquema_dimensional_gold.md):** granularidades e decisões de modelagem.
 - **[Projeto dbt (`transformacao/`)](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao):** staging, intermediate, snapshot, gold, testes e consultas em `analyses/`.

@@ -340,7 +340,7 @@ O painel não recalcula o cruzamento de imóveis: os números de reincidência s
 docker compose --profile transformacao run --rm exportar_painel
 ```
 
-A ordem da fila é a do Índice de Prioridade de Vistoria ([ADR 0006](adr/06-indice-de-prioridade-de-vistoria.md)). A data exibida no bloco de resposta é a da execução do dbt que gerou a tabela ([frescor e SLA](frescor_sla.md)).
+A ordem da fila é a do Índice de Prioridade de Vistoria ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)). A data exibida no bloco de resposta é a da execução do dbt que gerou a tabela ([frescor e SLA](frescor_sla.md)).
 
 ---
 
