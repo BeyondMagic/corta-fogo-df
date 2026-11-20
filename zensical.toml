@@ -38,6 +38,7 @@ nav = [
       { "5ª: Índice de Prioridade" = "adr/05-indice-de-prioridade-de-vistoria.md" }
   ]},
   { "Referência" = [
+      { "Metodologia" = "metodologia.md" },
       { "Dicionário de Dados" = "dicionario_dados.md" },
       { "Glossário" = "glossario.md" },
       { "Diário de Bordo" = "diario_de_bordo.md" }
