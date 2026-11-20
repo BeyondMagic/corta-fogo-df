@@ -37,10 +37,11 @@ nav = [
       { "3ª: Modelagem e Transformação" = "adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md" },
       { "6ª: Índice de Prioridade" = "adr/06-indice-de-prioridade-de-vistoria.md" }
   ]},
-  { "Dicionário de Dados" = "dicionario_dados.md" },
-  { "Frescor e SLA" = "frescor_sla.md" },
-  { "Diário de Bordo" = "diario_de_bordo.md" },
-  { "Glossário" = "glossario.md" }
+  { "Referência" = [
+      { "Dicionário de Dados" = "dicionario_dados.md" },
+      { "Glossário" = "glossario.md" },
+      { "Diário de Bordo" = "diario_de_bordo.md" }
+  ]}
   # { "Diretrizes Técnicas" = [
   #     { "Contexto do Projeto" = "ai/CONTEXT.md" },
   #     { "Guia para Assistentes" = "ai/README.md" }
