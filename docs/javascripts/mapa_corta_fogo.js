@@ -197,11 +197,13 @@
     const imoveis = data.carTop50 || [];
     const geoms = data.carTop50Geoms || {};
     const situacaoFiltro = state && state.situacao && state.situacao !== 'todos' ? state.situacao : null;
+    const checkedSet = (state && state.checkedCars instanceof Set && state.checkedCars.size > 0) ? state.checkedCars : null;
     // Periodo do painel: ano = inicio, anoFim = fim (igual ao inicio quando e um ano so).
     const anoIni = state && state.ano && state.ano !== 'todos' ? Number(state.ano) : null;
     const anoFim = anoIni === null ? null : Number(state.anoFim != null ? state.anoFim : anoIni);
 
     imoveis.forEach((im) => {
+      if (checkedSet && !checkedSet.has(im.cod_imovel)) return;
       if (situacaoFiltro && im.situacao !== situacaoFiltro) return;
       if (anoIni !== null && !(im.anos && im.anos.some((a) => a >= anoIni && a <= anoFim))) return;
 
@@ -247,20 +249,59 @@
       marker.bindTooltip(`#${im.rank} na fila · ${im.ra || 'Imóvel rural'} · índice ${formatPtBr(im.indice, 1)}`, { sticky: true });
 
       marker.on('popupopen', function () {
-        const g = geoms[im.cod_imovel];
-        if (g) {
-          showActiveGeometries(g.imovel, g.reserva_legal, false);
-        }
         if (window.CFDashboardBridge && typeof window.CFDashboardBridge.selectCAR === 'function') {
           window.CFDashboardBridge.selectCAR(im.cod_imovel, false);
         }
       });
 
-      marker.on('popupclose', function () {
-        clearActiveGeometries();
-      });
-
       imoveisLayer.addLayer(marker);
+    });
+  }
+
+  function syncCheckedGeometries(data, state) {
+    if (!mapInstance || !data) return;
+    clearActiveGeometries();
+
+    const geoms = data.carTop50Geoms || {};
+    const showImoveis = !state || !state.layers || state.layers.imoveis !== false;
+    const showRl = !state || !state.layers || state.layers.rl !== false;
+    const cods = new Set();
+
+    if (showImoveis && state && state.checkedCars instanceof Set && state.checkedCars.size > 0) {
+      state.checkedCars.forEach((c) => cods.add(c));
+    }
+    if (state && state.selectedCar) {
+      cods.add(state.selectedCar);
+    }
+
+    cods.forEach((cod) => {
+      const g = geoms[cod];
+      if (!g) return;
+      const isSelected = Boolean(state && state.selectedCar === cod);
+      if (g.imovel) {
+        activeOverlayGroup.addLayer(L.geoJSON(g.imovel, {
+          style: {
+            color: isSelected ? '#dc2626' : '#6250d6',
+            weight: isSelected ? 2.8 : 2.0,
+            fillColor: isSelected ? '#dc2626' : '#6250d6',
+            fillOpacity: isSelected ? 0.22 : 0.14
+          }
+        }));
+      }
+      if (showRl && Array.isArray(g.reserva_legal) && g.reserva_legal.length > 0) {
+        activeOverlayGroup.addLayer(L.geoJSON({
+          type: 'FeatureCollection',
+          features: g.reserva_legal.map((geom) => ({ type: 'Feature', geometry: geom, properties: {} }))
+        }, {
+          style: {
+            color: '#1baf7a',
+            weight: 1.8,
+            dashArray: '4, 3',
+            fillColor: '#1baf7a',
+            fillOpacity: 0.24
+          }
+        }));
+      }
     });
   }
 
@@ -386,9 +427,8 @@
     toggle(layers.imoveis, imoveisLayer);
     toggle(layers.focos, focosLayer);
 
-    if (lastState && lastState.selectedCar && storedData && storedData.carTop50Geoms) {
-      const g = storedData.carTop50Geoms[lastState.selectedCar];
-      if (g) showActiveGeometries(g.imovel, g.reserva_legal, false);
+    if (lastState && storedData) {
+      syncCheckedGeometries(storedData, lastState);
     }
   }
 
@@ -506,6 +546,7 @@
     }
 
     drawImoveisMarkers(storedData, lastState);
+    syncCheckedGeometries(storedData, lastState);
     drawFocos(payload.focos || [], storedData);
     if (lastState && lastState.layers) {
       syncLayers(lastState.layers);
@@ -522,8 +563,23 @@
 
   function focusFeature(opts) {
     if (!mapInstance || !opts) return;
+    if (opts.features && Array.isArray(opts.features) && opts.features.length > 0) {
+      const bounds = L.geoJSON({ type: 'FeatureCollection', features: opts.features }).getBounds();
+      if (bounds.isValid()) {
+        mapInstance.fitBounds(bounds, { padding: [32, 32], maxZoom: 13 });
+      }
+      return;
+    }
     if (opts.geojson || opts.rlGeoms) {
-      showActiveGeometries(opts.geojson, opts.rlGeoms, true);
+      if (storedData && lastState) {
+        syncCheckedGeometries(storedData, lastState);
+        if (opts.geojson) {
+          const b = L.geoJSON(opts.geojson).getBounds();
+          if (b.isValid()) mapInstance.fitBounds(b, { padding: [36, 36], maxZoom: 14 });
+        }
+      } else {
+        showActiveGeometries(opts.geojson, opts.rlGeoms, true);
+      }
       return;
     }
     if (opts.feature) {

@@ -270,9 +270,15 @@ icon: material/view-dashboard
       <div class="cf-card-head">
         <div>
           <h3 id="cf-car-table-title">Fila de Vistoria: 50 Primeiros Imóveis</h3>
-          <p class="cf-card-sub">Ordem do Índice de Prioridade de Vistoria. Clique no código para desenhar o perímetro e as Reservas Legais no mapa.</p>
+          <p class="cf-card-sub">Ordem do Índice de Prioridade de Vistoria. Marque os imóveis para filtrar focos, mapa e gráficos (5 primeiros ativos por padrão); desmarque todos para ver o DF inteiro.</p>
         </div>
         <div class="cf-table-toolbar">
+          <div class="cf-seg-group" role="group" aria-label="Atalhos de seleção da fila">
+            <button type="button" class="cf-btn-mini is-active" id="cf-btn-car-top5">Top 5</button>
+            <button type="button" class="cf-btn-mini" id="cf-btn-car-all">Todos (50)</button>
+            <button type="button" class="cf-btn-mini" id="cf-btn-car-none">DF completo (0)</button>
+            <button type="button" class="cf-btn-mini" id="cf-btn-car-fit">Enquadrar marcados</button>
+          </div>
           <div class="cf-field" style="min-width:240px;">
             <label for="cf-car-search">Filtrar código CAR, RA, situação ou condição</label>
             <input type="search" id="cf-car-search" class="cf-input" placeholder="Ex.: DF-5300108, Planaltina, PE..."/>
@@ -284,6 +290,9 @@ icon: material/view-dashboard
         <table id="cf-car-table">
           <thead>
             <tr>
+              <th scope="col" class="cf-chk-col">
+                <input type="checkbox" id="cf-car-check-all" class="cf-car-chk-input" aria-label="Selecionar ou desmarcar todos os imóveis visíveis"/>
+              </th>
               <th scope="col" class="cf-num" data-sort="rank" data-type="number" aria-sort="ascending"><button type="button" class="cf-sort-btn"><span>#</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" data-sort="cod_imovel" data-type="string"><button type="button" class="cf-sort-btn"><span>Código CAR</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>
               <th scope="col" data-sort="ra" data-type="string"><button type="button" class="cf-sort-btn"><span>RA</span><span class="cf-sort-indicator" aria-hidden="true"></span></button></th>

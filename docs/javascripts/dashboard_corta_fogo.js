@@ -52,6 +52,9 @@
     raIdx: null,
     ucIdx: null,
     selectedCar: null,
+    checkedCars: new Set(),
+    checkedInitialized: false,
+    defaultTop5Cods: [],
     tab: 'd3geo',
     d3Mode: 'points',
     choroTarget: 'ra',
@@ -179,27 +182,141 @@
     return '../assets/dados_dashboard/';
   }
 
-  // Reverte aneis GeoJSON quando a orientacao esferica excede hemisferio no d3-geo
+  function ringArea2D(ring) {
+    if (!ring || ring.length < 4) return 0;
+    let a = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      a += (ring[i][0] * ring[j][1]) - (ring[j][0] * ring[i][1]);
+    }
+    return a / 2;
+  }
+
+  function normalizePolygonRings(rings) {
+    if (!Array.isArray(rings) || rings.length === 0) return null;
+    const ext = rings[0];
+    if (Math.abs(ringArea2D(ext)) < 1e-12) return null;
+    const out = [];
+    for (let idx = 0; idx < rings.length; idx += 1) {
+      const r = rings[idx];
+      if (Math.abs(ringArea2D(r)) < 1e-12) continue;
+      const area = d3.geoArea({ type: 'Polygon', coordinates: [r] });
+      const needFlip = (idx === 0) ? (area > 2 * Math.PI) : (area <= 2 * Math.PI);
+      out.push(needFlip ? r.slice().reverse() : r);
+    }
+    return out.length > 0 ? out : null;
+  }
+
+  function rewindGeometry(geom) {
+    if (!geom || typeof d3 === 'undefined') return geom;
+    if (geom.type === 'Polygon') {
+      const norm = normalizePolygonRings(geom.coordinates);
+      return norm ? { type: 'Polygon', coordinates: norm } : null;
+    }
+    if (geom.type === 'MultiPolygon') {
+      const polys = [];
+      for (let i = 0; i < geom.coordinates.length; i += 1) {
+        const norm = normalizePolygonRings(geom.coordinates[i]);
+        if (norm) polys.push(norm);
+      }
+      return polys.length > 0 ? { type: 'MultiPolygon', coordinates: polys } : null;
+    }
+    return geom;
+  }
+
+  function rewindFeature(feat) {
+    if (!feat || !feat.geometry || typeof d3 === 'undefined') return feat;
+    const g = rewindGeometry(feat.geometry);
+    if (!g) return null;
+    return {
+      type: 'Feature',
+      properties: feat.properties,
+      geometry: g
+    };
+  }
+
+  // Normaliza aneis de cada poligono individualmente (remove aneis degenerados e evita inversao global)
   function rewindFeatureCollection(fc) {
     if (!fc || typeof d3 === 'undefined') return fc;
-    const features = (fc.features || []).map((feat) => {
-      if (!feat || !feat.geometry) return feat;
-      if (d3.geoArea(feat) <= 2 * Math.PI) return feat;
-      const g = feat.geometry;
-      const flipRings = (rings) => rings.map((r) => r.slice().reverse());
-      let coords = g.coordinates;
-      if (g.type === 'Polygon') {
-        coords = flipRings(g.coordinates);
-      } else if (g.type === 'MultiPolygon') {
-        coords = g.coordinates.map(flipRings);
+    return {
+      type: 'FeatureCollection',
+      features: (fc.features || []).map(rewindFeature).filter(Boolean)
+    };
+  }
+
+  // Indice espacial em memoria: mapeia cada foco aos cod_imovel da fila Top 50 que o contem.
+  function ringContainsPoint(lon, lat, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0];
+      const yi = ring[i][1];
+      const xj = ring[j][0];
+      const yj = ring[j][1];
+      if (((yi > lat) !== (yj > lat)) && (lon < ((xj - xi) * (lat - yi)) / ((yj - yi) || 1e-12) + xi)) {
+        inside = !inside;
       }
-      return {
-        type: 'Feature',
-        properties: feat.properties,
-        geometry: { type: g.type, coordinates: coords }
-      };
-    });
-    return { type: 'FeatureCollection', features: features };
+    }
+    return inside;
+  }
+
+  function polyContainsPoint(lon, lat, rings) {
+    if (!rings || !rings.length || !ringContainsPoint(lon, lat, rings[0])) return false;
+    for (let h = 1; h < rings.length; h += 1) {
+      if (ringContainsPoint(lon, lat, rings[h])) return false;
+    }
+    return true;
+  }
+
+  function geomContainsPoint(lon, lat, geom) {
+    if (!geom) return false;
+    if (geom.type === 'Polygon') return polyContainsPoint(lon, lat, geom.coordinates);
+    if (geom.type === 'MultiPolygon') {
+      for (let p = 0; p < geom.coordinates.length; p += 1) {
+        if (polyContainsPoint(lon, lat, geom.coordinates[p])) return true;
+      }
+    }
+    return false;
+  }
+
+  function expandBboxRing(ring, bbox) {
+    for (let i = 0; i < ring.length; i += 1) {
+      const x = ring[i][0];
+      const y = ring[i][1];
+      if (x < bbox[0]) bbox[0] = x;
+      if (y < bbox[1]) bbox[1] = y;
+      if (x > bbox[2]) bbox[2] = x;
+      if (y > bbox[3]) bbox[3] = y;
+    }
+  }
+
+  function buildFocoCarsIndex(focos, carTop50, carGeoms) {
+    const cars = (carTop50 || []).map((im) => {
+      const geom = carGeoms && carGeoms[im.cod_imovel] ? carGeoms[im.cod_imovel].imovel : null;
+      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+      if (geom) {
+        if (geom.type === 'Polygon') geom.coordinates.forEach((r) => expandBboxRing(r, bbox));
+        else if (geom.type === 'MultiPolygon') geom.coordinates.forEach((p) => p.forEach((r) => expandBboxRing(r, bbox)));
+      }
+      return { cod: im.cod_imovel, geom: geom, bbox: bbox };
+    }).filter((c) => c.geom);
+
+    const result = new Array(focos.length);
+    for (let i = 0; i < focos.length; i += 1) {
+      const f = focos[i];
+      const lat = f[0];
+      const lon = f[1];
+      let matched = null;
+      for (let c = 0; c < cars.length; c += 1) {
+        const car = cars[c];
+        const b = car.bbox;
+        if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) continue;
+        if (geomContainsPoint(lon, lat, car.geom)) {
+          if (!matched) matched = [];
+          matched.push(car.cod);
+        }
+      }
+      result[i] = matched;
+    }
+    return result;
   }
 
   function loadAllData() {
@@ -255,6 +372,18 @@
       const carByCod = new Map();
       (resumo.car_top50 || []).forEach((c) => carByCod.set(c.cod_imovel, c));
 
+      const focosList = focosRaw.focos || [];
+      const focoCars = buildFocoCarsIndex(focosList, resumo.car_top50, geometrias.car_top50_geoms);
+      state.defaultTop5Cods = (resumo.car_top50 || [])
+        .slice()
+        .sort((a, b) => a.rank - b.rank)
+        .slice(0, 5)
+        .map((im) => im.cod_imovel);
+      if (!state.checkedInitialized) {
+        state.checkedCars = new Set(state.defaultTop5Cods);
+        state.checkedInitialized = true;
+      }
+
       loadedData = {
         resumo: resumo,
         geometrias: geometrias,
@@ -262,7 +391,8 @@
         rasGeo: rasGeo,
         ucsGeo: ucsGeo,
         buffersGeo: buffersGeo,
-        focos: focosRaw.focos || [],
+        focos: focosList,
+        focoCars: focoCars,
         extraMap: extraMap,
         ucsByIdx: ucsByIdx,
         rasByIdx: rasByIdx,
@@ -348,6 +478,8 @@
     const targetRa = hasRa ? Number(state.raIdx) : null;
     const hasUc = state.ucIdx !== null;
     const targetUc = hasUc ? Number(state.ucIdx) : null;
+    const hasCheckedCars = state.checkedCars.size > 0;
+    const focoCars = loadedData.focoCars;
 
     const filteredIndices = [];
     const filteredFocos = [];
@@ -409,6 +541,23 @@
       if (state.sensor === 'ref' && !isRef) continue;
       if (state.sensor !== 'todos' && state.sensor !== 'ref' && String(sensor) !== state.sensor) continue;
       if (hasRa && ra !== targetRa) continue;
+
+      if (hasCheckedCars) {
+        const cars = focoCars ? focoCars[i] : null;
+        if (!cars) continue;
+        let hitCar = false;
+        for (let c = 0; c < cars.length; c += 1) {
+          const cod = cars[c];
+          if (!state.checkedCars.has(cod)) continue;
+          if (state.situacao !== 'todos') {
+            const imObj = loadedData.carByCod.get(cod);
+            if (imObj && imObj.situacao !== state.situacao) continue;
+          }
+          hitCar = true;
+          break;
+        }
+        if (!hitCar) continue;
+      }
 
       if (hasUc) {
         let matchUc = false;
@@ -511,7 +660,9 @@
     if (kpiFocos) kpiFocos.textContent = formatInt(total);
     if (kpiFocosSub) {
       const pct = totalGlobal > 0 ? (total / totalGlobal) * 100 : 0;
-      kpiFocosSub.textContent = `${formatDec(pct, 1)}% da série 2015–2025`;
+      kpiFocosSub.textContent = state.checkedCars.size > 0
+        ? `${formatDec(pct, 1)}% do DF (${state.checkedCars.size} imóveis marcados)`
+        : `${formatDec(pct, 1)}% da série 2015–2025`;
     }
 
     const kpiSeca = document.getElementById('cf-kpi-seca');
@@ -549,9 +700,13 @@
     if (kpiCar) kpiCar.textContent = formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes);
     if (kpiCarSub) {
       const filtroFila = state.ano !== 'todos' || situacaoFiltro;
-      kpiCarSub.textContent = filtroFila
-        ? `${ativosTop} dos ${imoveisTop.length} primeiros da fila no recorte`
-        : `${formatInt(criticos.imoveis)} em prioridade crítica`;
+      if (state.checkedCars.size > 0) {
+        kpiCarSub.textContent = `${state.checkedCars.size} marcados filtrando o painel`;
+      } else {
+        kpiCarSub.textContent = filtroFila
+          ? `${ativosTop} dos ${imoveisTop.length} primeiros da fila no recorte`
+          : `${formatInt(criticos.imoveis)} em prioridade crítica`;
+      }
     }
   }
 
@@ -688,9 +843,15 @@
     if (state.selectedCar) {
       chips.push({ key: 'selectedCar', label: `Imóvel CAR: ${state.selectedCar.slice(0, 18)}...` });
     }
+    if (state.checkedCars.size > 0) {
+      let chkLabel = `Imóveis marcados: ${state.checkedCars.size}`;
+      if (isTop5Selection()) chkLabel = 'Imóveis da fila: Top 5 (padrão)';
+      else if (state.checkedCars.size === (loadedData.resumo.car_top50 || []).length) chkLabel = 'Imóveis da fila: Todos (50)';
+      chips.push({ key: 'checkedCars', label: chkLabel });
+    }
 
     if (chips.length === 0) {
-      wrap.innerHTML = '<span class="cf-chip-empty">Série completa ativa: 2015–2025, 37 RAs, 84 UCs e os 50 primeiros da fila de vistoria.</span>';
+      wrap.innerHTML = '<span class="cf-chip-empty">Série completa ativa: 2015–2025, 37 RAs, 84 UCs e todos os 38.945 focos do DF.</span>';
       return;
     }
 
@@ -712,6 +873,7 @@
         else if (key === 'raIdx') state.raIdx = null;
         else if (key === 'ucIdx') state.ucIdx = null;
         else if (key === 'selectedCar') state.selectedCar = null;
+        else if (key === 'checkedCars') state.checkedCars.clear();
         syncControlsFromState();
         refreshAll(true);
       });
@@ -814,11 +976,14 @@
         return;
       }
 
+      const selResumo = state.checkedCars.size > 0
+        ? `Filtrando <b>${state.checkedCars.size}</b> imóveis marcados da fila · `
+        : 'DF completo · ';
       box.innerHTML = `
         <div class="cf-inspector-empty">
           <strong>Inspetor territorial</strong>
           <p>Passe o cursor sobre focos, polígonos de Regiões Administrativas ou Unidades de Conservação para ver detalhes instantâneos, ou clique para filtrar e aproximar.</p>
-          <p class="cf-inspector-hint">No recorte atual: <b>${formatInt(currentAgg ? currentAgg.total : 0)}</b> focos visíveis.</p>
+          <p class="cf-inspector-hint">${selResumo}<b>${formatInt(currentAgg ? currentAgg.total : 0)}</b> focos visíveis.</p>
         </div>
       `;
       return;
@@ -1003,7 +1168,7 @@
       d3CurrentTransform = d3.zoomIdentity;
 
       d3ZoomBehavior = d3.zoom()
-        .scaleExtent([0.85, 22])
+        .scaleExtent([0.85, 50])
         .on('zoom', (event) => {
           d3CurrentTransform = event.transform;
           zoomGroup.attr('transform', d3CurrentTransform.toString());
@@ -1012,6 +1177,9 @@
         });
 
       svg.call(d3ZoomBehavior);
+      svgEl.addEventListener('wheel', function (e) {
+        e.preventDefault();
+      }, { passive: false });
     }
 
     const choroActive = (state.d3Mode === 'choropleth');
@@ -1162,33 +1330,43 @@
         refreshAll(true);
       });
 
-    // 5. Poligono do Imovel CAR selecionado + Reservas Legais
+    // 5. Poligonos dos imoveis marcados e/ou imovel focado + Reservas Legais
     const carSelLayer = zoomGroup.select('g.cf-layer-car-sel');
     carSelLayer.selectAll('*').remove();
-    if (state.selectedCar && loadedData.geometrias.car_top50_geoms[state.selectedCar]) {
-      const gObj = loadedData.geometrias.car_top50_geoms[state.selectedCar];
+    const polyCods = getMapPolygonCods();
+    polyCods.forEach((cod) => {
+      const gObj = loadedData.geometrias.car_top50_geoms[cod];
+      if (!gObj) return;
+      const isFocused = (state.selectedCar === cod);
       if (gObj.imovel) {
-        carSelLayer.append('path')
-          .datum({ type: 'Feature', geometry: gObj.imovel, properties: {} })
-          .attr('d', d3Path)
-          .attr('fill', tokens.dark ? 'rgba(144, 133, 233, 0.22)' : 'rgba(98, 80, 214, 0.18)')
-          .attr('stroke', tokens.car)
-          .attr('stroke-width', 2.4)
-          .attr('vector-effect', 'non-scaling-stroke');
+        const imFeat = rewindFeature({ type: 'Feature', geometry: gObj.imovel, properties: {} });
+        if (imFeat) {
+          carSelLayer.append('path')
+            .datum(imFeat)
+            .attr('d', d3Path)
+            .attr('fill', isFocused
+              ? (tokens.dark ? 'rgba(144, 133, 233, 0.24)' : 'rgba(98, 80, 214, 0.20)')
+              : (tokens.dark ? 'rgba(249, 115, 22, 0.14)' : 'rgba(194, 65, 12, 0.10)'))
+            .attr('stroke', isFocused ? tokens.carSel : tokens.car)
+            .attr('stroke-width', isFocused ? 2.6 : 1.8)
+            .attr('vector-effect', 'non-scaling-stroke');
+        }
       }
       if (state.layers.rl && Array.isArray(gObj.reserva_legal)) {
         gObj.reserva_legal.forEach((rlG) => {
+          const rlFeat = rewindFeature({ type: 'Feature', geometry: rlG, properties: {} });
+          if (!rlFeat) return;
           carSelLayer.append('path')
-            .datum({ type: 'Feature', geometry: rlG, properties: {} })
+            .datum(rlFeat)
             .attr('d', d3Path)
-            .attr('fill', 'rgba(5, 150, 105, 0.35)')
+            .attr('fill', 'rgba(5, 150, 105, 0.28)')
             .attr('stroke', tokens.rl)
-            .attr('stroke-width', 1.8)
+            .attr('stroke-width', 1.4)
             .attr('stroke-dasharray', '4,2')
             .attr('vector-effect', 'non-scaling-stroke');
         });
       }
-    }
+    });
 
     // 6. Pinos dos 50 primeiros imoveis da fila de vistoria
     const visibleCars = getVisibleCars();
@@ -1226,10 +1404,35 @@
     bindCanvasInteractions();
   }
 
+  function isTop5Selection() {
+    if (!state.defaultTop5Cods || state.defaultTop5Cods.length === 0) return false;
+    if (state.checkedCars.size !== state.defaultTop5Cods.length) return false;
+    return state.defaultTop5Cods.every((cod) => state.checkedCars.has(cod));
+  }
+
+  function getMapPolygonCods() {
+    const cods = [];
+    const seen = new Set();
+    if (state.layers.imoveis && state.checkedCars.size > 0) {
+      getVisibleCars().forEach((im) => {
+        if (!seen.has(im.cod_imovel)) {
+          seen.add(im.cod_imovel);
+          cods.push(im.cod_imovel);
+        }
+      });
+    }
+    if (state.selectedCar && !seen.has(state.selectedCar)) {
+      cods.push(state.selectedCar);
+    }
+    return cods;
+  }
+
   function getVisibleCars() {
     if (!loadedData || !state.layers.imoveis) return [];
     const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
+    const filterChecked = state.checkedCars.size > 0;
     return (loadedData.resumo.car_top50 || []).filter((im) => {
+      if (filterChecked && !state.checkedCars.has(im.cod_imovel)) return false;
       if (sitFilter && im.situacao !== sitFilter) return false;
       if (!imovelNoPeriodo(im)) return false;
       return true;
@@ -1240,14 +1443,16 @@
     if (!loadedData || !d3Projection) return;
     const scaleInv = Math.pow(transform.k, 0.55);
 
-    if (state.selectedCar && loadedData.geometrias.car_top50_geoms[state.selectedCar]) {
-      const gObj = loadedData.geometrias.car_top50_geoms[state.selectedCar];
-      const canvasPath = d3.geoPath(d3Projection, ctx);
+    const canvasPath = d3.geoPath(d3Projection, ctx);
+    getMapPolygonCods().forEach((cod) => {
+      const gObj = loadedData.geometrias.car_top50_geoms[cod];
+      if (!gObj) return;
+      const isFocused = (state.selectedCar === cod);
       if (gObj.imovel) {
         ctx.beginPath();
         canvasPath({ type: 'Feature', geometry: gObj.imovel, properties: {} });
-        ctx.strokeStyle = tokens.car;
-        ctx.lineWidth = 2.4 / transform.k;
+        ctx.strokeStyle = isFocused ? tokens.carSel : tokens.car;
+        ctx.lineWidth = (isFocused ? 2.6 : 1.8) / transform.k;
         ctx.globalAlpha = 1;
         ctx.stroke();
       }
@@ -1256,11 +1461,11 @@
           ctx.beginPath();
           canvasPath({ type: 'Feature', geometry: rlG, properties: {} });
           ctx.strokeStyle = tokens.rl;
-          ctx.lineWidth = 1.8 / transform.k;
+          ctx.lineWidth = 1.5 / transform.k;
           ctx.stroke();
         });
       }
-    }
+    });
 
     // Fila de vistoria por cima dos focos: anel da cor da superficie separa o
     // marcador dos pontos de baixo; os 10 primeiros levam a posicao escrita.
@@ -2334,6 +2539,9 @@
             data-focos_total="${im.focos_total}"
             data-focos_prot="${im.focos_prot}"
             data-search="${escapeHtml((im.cod_imovel + ' ' + im.situacao + ' ' + (im.condicao || '') + ' ' + (im.ra || '')).toLowerCase())}">
+          <td class="cf-chk-col">
+            <input type="checkbox" class="cf-car-chk-input" data-check-car="${escapeHtml(im.cod_imovel)}" aria-label="Selecionar imóvel #${im.rank} (${escapeHtml(im.ra || im.cod_imovel)})"/>
+          </td>
           <td class="cf-num">${im.rank}</td>
           <td>
             <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
@@ -2360,6 +2568,15 @@
     tbody.querySelectorAll('.cf-car-select-btn').forEach((btn) => {
       btn.addEventListener('click', function () {
         selectCAR(this.getAttribute('data-select-car'), true);
+      });
+    });
+
+    tbody.querySelectorAll('.cf-car-chk-input').forEach((chk) => {
+      chk.addEventListener('change', function () {
+        const cod = this.getAttribute('data-check-car');
+        if (this.checked) state.checkedCars.add(cod);
+        else state.checkedCars.delete(cod);
+        refreshAll(false);
       });
     });
 
@@ -2415,15 +2632,23 @@
     const searchTerm = state.carSearch.trim().toLowerCase();
     const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
     let visibleCount = 0;
+    let checkedVisibleCount = 0;
 
     rows.forEach((row) => {
       const cod = row.getAttribute('data-cod');
       const sit = row.getAttribute('data-situacao');
       const hay = row.getAttribute('data-search') || '';
       const matches = (!sitFilter || sit === sitFilter) && (!searchTerm || hay.includes(searchTerm));
+      const isChecked = state.checkedCars.has(cod);
       row.hidden = !matches;
+      row.classList.toggle('is-checked', isChecked);
       row.classList.toggle('is-selected', cod === state.selectedCar);
-      if (matches) visibleCount += 1;
+      const chkEl = row.querySelector('.cf-car-chk-input');
+      if (chkEl) chkEl.checked = isChecked;
+      if (matches) {
+        visibleCount += 1;
+        if (isChecked) checkedVisibleCount += 1;
+      }
 
       if (typeof tbody.moveBefore === 'function') {
         tbody.moveBefore(row, null);
@@ -2432,9 +2657,25 @@
       }
     });
 
+    const masterChk = document.getElementById('cf-car-check-all');
+    if (masterChk) {
+      masterChk.checked = (visibleCount > 0 && checkedVisibleCount === visibleCount);
+      masterChk.indeterminate = (checkedVisibleCount > 0 && checkedVisibleCount < visibleCount);
+    }
+
+    const totalLen = (loadedData.resumo.car_top50 || []).length;
+    const btnTop5 = document.getElementById('cf-btn-car-top5');
+    const btnAll = document.getElementById('cf-btn-car-all');
+    const btnNone = document.getElementById('cf-btn-car-none');
+    const btnFit = document.getElementById('cf-btn-car-fit');
+    if (btnTop5) btnTop5.classList.toggle('is-active', isTop5Selection());
+    if (btnAll) btnAll.classList.toggle('is-active', totalLen > 0 && state.checkedCars.size === totalLen);
+    if (btnNone) btnNone.classList.toggle('is-active', state.checkedCars.size === 0);
+    if (btnFit) btnFit.disabled = (state.checkedCars.size === 0);
+
     const stEl = document.getElementById('cf-table-status');
     if (stEl) {
-      stEl.textContent = `${visibleCount} de ${rows.length} imóveis exibidos; ordenado por ${state.sortCol} (${state.sortDir}).`;
+      stEl.textContent = `${visibleCount} de ${rows.length} imóveis exibidos; ${state.checkedCars.size} marcados filtrando o painel; ordenado por ${state.sortCol} (${state.sortDir}).`;
     }
   }
 
@@ -2721,6 +2962,7 @@
         state.raIdx = null;
         state.ucIdx = null;
         state.selectedCar = null;
+        state.checkedCars.clear();
         state.carSearch = '';
         const searchEl = document.getElementById('cf-car-search');
         if (searchEl) searchEl.value = '';
@@ -2865,6 +3107,72 @@
       carSearch.addEventListener('input', function () {
         state.carSearch = this.value;
         updateCarTable();
+      });
+    }
+
+    const masterChk = document.getElementById('cf-car-check-all');
+    if (masterChk) {
+      masterChk.addEventListener('change', function () {
+        const tbody = document.getElementById('cf-car-tbody');
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach((row) => {
+          if (row.hidden) return;
+          const cod = row.getAttribute('data-cod');
+          if (!cod) return;
+          if (this.checked) state.checkedCars.add(cod);
+          else state.checkedCars.delete(cod);
+        });
+        refreshAll(false);
+      });
+    }
+
+    const btnTop5 = document.getElementById('cf-btn-car-top5');
+    if (btnTop5) {
+      btnTop5.addEventListener('click', function () {
+        state.checkedCars = new Set(state.defaultTop5Cods || []);
+        refreshAll(false);
+      });
+    }
+
+    const btnAll = document.getElementById('cf-btn-car-all');
+    if (btnAll) {
+      btnAll.addEventListener('click', function () {
+        const list = (loadedData && loadedData.resumo && loadedData.resumo.car_top50) || [];
+        state.checkedCars = new Set(list.map((im) => im.cod_imovel));
+        refreshAll(false);
+      });
+    }
+
+    const btnNone = document.getElementById('cf-btn-car-none');
+    if (btnNone) {
+      btnNone.addEventListener('click', function () {
+        state.checkedCars.clear();
+        refreshAll(false);
+      });
+    }
+
+    const btnFit = document.getElementById('cf-btn-car-fit');
+    if (btnFit) {
+      btnFit.addEventListener('click', function () {
+        if (!loadedData || state.checkedCars.size === 0) return;
+        const d3Feats = [];
+        const rawFeats = [];
+        state.checkedCars.forEach((cod) => {
+          const g = loadedData.geometrias.car_top50_geoms[cod];
+          if (g && g.imovel) {
+            const rawFeat = { type: 'Feature', geometry: g.imovel, properties: {} };
+            rawFeats.push(rawFeat);
+            const rew = rewindFeature(rawFeat);
+            if (rew) d3Feats.push(rew);
+          }
+        });
+        if (d3Feats.length > 0) {
+          zoomToFeature({ type: 'FeatureCollection', features: d3Feats }, 13);
+          if (window.CFLeafletBridge) {
+            window.CFLeafletBridge.focusFeature({ features: rawFeats });
+          }
+        }
       });
     }
   }

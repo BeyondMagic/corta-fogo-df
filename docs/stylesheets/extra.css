@@ -1323,9 +1323,28 @@ body:has(.cf-dashboard-page) .md-main__inner {
 .cf-table-toolbar {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 8px 14px;
+}
+
+#cf-car-table th.cf-chk-col,
+#cf-car-table td.cf-chk-col {
+  width: 36px;
+  text-align: center;
+  padding: 6px 8px;
+}
+
+.cf-car-chk-input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cf-accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+#cf-car-table tbody tr.is-checked {
+  background: color-mix(in srgb, var(--cf-accent) 7%, transparent);
 }
 
 .cf-table-wrap {
