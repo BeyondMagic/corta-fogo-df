@@ -252,11 +252,11 @@
   ];
 
   const COLUMNS = [
-    { col: 0, title: 'Bronze · Fontes', badge: 'Ingestão E1/E2', layer: 'bronze' },
-    { col: 1, title: 'Silver · Staging', badge: 'Views de limpeza', layer: 'silver' },
-    { col: 2, title: 'Silver · Intermediate', badge: 'SCD2 & Cruzamentos', layer: 'silver' },
-    { col: 3, title: 'Gold · Estrela & Fila', badge: 'Camada Analítica', layer: 'gold' },
-    { col: 4, title: 'Orquestração & Consumo', badge: 'Entrega E3/E4', layer: 'ops' }
+    { col: 0, title: 'Bronze', layer: 'bronze' },
+    { col: 1, title: 'Silver · Staging', layer: 'silver' },
+    { col: 2, title: 'Silver · Intermediate', layer: 'silver' },
+    { col: 3, title: 'Gold', layer: 'gold' },
+    { col: 4, title: 'Consumo', layer: 'ops' }
   ];
 
   const LAYER_LABELS = {
@@ -371,22 +371,24 @@
 
     colsEl.innerHTML = COLUMNS.map((c) => {
       const colNodes = NODES.filter((n) => n.col === c.col);
-      const cardsHtml = colNodes.map((n) => `
+      const cardsHtml = colNodes.map((n) => {
+        const rowsHtml = (n.linhas && n.linhas !== '—')
+          ? `<span class="cf-arch-node-rows">${escapeHtml(n.linhas)}</span>`
+          : '';
+        return `
         <button type="button" class="cf-arch-node cf-arch-node--${n.layer}" data-node-id="${n.id}">
           <div class="cf-arch-node-head">
-            <code class="cf-arch-node-name">${escapeHtml(n.nome)}</code>
-            <span class="cf-arch-node-rows">${escapeHtml(n.linhas)}</span>
+            <span class="cf-arch-node-name">${escapeHtml(n.nome)}</span>
+            ${rowsHtml}
           </div>
-          <div class="cf-arch-node-meta">${escapeHtml(n.tipo)}</div>
-          <div class="cf-arch-node-desc">${escapeHtml(n.papel)}</div>
         </button>
-      `).join('');
+      `;
+      }).join('');
 
       return `
         <div class="cf-arch-col cf-arch-col--${c.layer}" data-col-layer="${c.layer}">
           <div class="cf-arch-col-head">
             <strong>${escapeHtml(c.title)}</strong>
-            <span>${escapeHtml(c.badge)}</span>
           </div>
           <div class="cf-arch-col-body">${cardsHtml}</div>
         </div>
@@ -454,7 +456,10 @@
       nodeEls.forEach((el, id) => {
         const node = graph.byId.get(id);
         const matchesLayer = (layerFilter === 'all' || node.layer === layerFilter);
-        const matchesSearch = !term || node.nome.toLowerCase().includes(term) || node.papel.toLowerCase().includes(term);
+        const matchesSearch = !term
+          || node.nome.toLowerCase().includes(term)
+          || node.tipo.toLowerCase().includes(term)
+          || node.papel.toLowerCase().includes(term);
 
         let dim = !matchesLayer || (Boolean(term) && !matchesSearch);
         el.classList.toggle('is-focus', id === focusId);
@@ -473,11 +478,12 @@
         const n = graph.byId.get(focusId);
         const ups = (graph.parents.get(focusId) || []).map((id) => `<code>${escapeHtml(graph.byId.get(id).nome)}</code>`).join(', ') || 'Origem direta';
         const downs = (graph.children.get(focusId) || []).map((id) => `<code>${escapeHtml(graph.byId.get(id).nome)}</code>`).join(', ') || 'Consumo final';
+        const metaText = (n.linhas && n.linhas !== '—') ? `${n.tipo} · ${n.linhas}` : n.tipo;
         detailEl.innerHTML = `
           <div class="cf-arch-detail-row">
             <span class="cf-arch-badge cf-arch-badge--${n.layer}">${escapeHtml(LAYER_LABELS[n.layer])}</span>
             <strong><code>${escapeHtml(n.nome)}</code></strong>
-            <span class="cf-muted">${escapeHtml(n.tipo)} · ${escapeHtml(n.linhas)} linhas</span>
+            <span class="cf-muted">${escapeHtml(metaText)}</span>
           </div>
           <p class="cf-arch-detail-papel">${escapeHtml(n.papel)}</p>
           <div class="cf-arch-detail-lin">

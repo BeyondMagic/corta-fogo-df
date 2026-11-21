@@ -1911,19 +1911,25 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 .cf-arch-widget {
   --arch-surface: #ffffff;
   --arch-surface-alt: #f8fafc;
-  --arch-border: #d0d7de;
+  --arch-border: #cbd5e1;
   --arch-border-strong: #94a3b8;
   --arch-text: #0f172a;
   --arch-muted: #475569;
-  --arch-bronze: #b45309;
-  --arch-bronze-bg: #fffbeb;
-  --arch-silver: #1d4ed8;
-  --arch-silver-bg: #eff6ff;
-  --arch-gold: #a16207;
-  --arch-gold-bg: #fefce8;
-  --arch-ops: #0f766e;
-  --arch-ops-bg: #f0fdfa;
-  --arch-edge: rgba(100, 116, 139, 0.36);
+  --arch-bronze: #9a4a12;
+  --arch-bronze-bg: #f5e1cc;
+  --arch-bronze-border: #d9b28c;
+  --arch-silver: #475569;
+  --arch-silver-bg: #e5e7eb;
+  --arch-silver-border: #cbd5e1;
+  --arch-gold: #854d0e;
+  --arch-gold-bg: #fef0b8;
+  --arch-gold-border: #e5c453;
+  --arch-ops: #166534;
+  --arch-ops-bg: #dcfce7;
+  --arch-ops-border: #86efac;
+  --arch-up: #2563eb;
+  --arch-down: #d97706;
+  --arch-edge: rgba(100, 116, 139, 0.34);
 
   margin: 1rem 0 1.4rem;
   border: 1px solid var(--arch-border);
@@ -1943,15 +1949,21 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
   --arch-border: #30363d;
   --arch-border-strong: #64748b;
   --arch-text: #e6edf3;
-  --arch-muted: #8b949e;
-  --arch-bronze: #fbbf24;
-  --arch-bronze-bg: rgba(180, 83, 9, 0.16);
-  --arch-silver: #60a5fa;
-  --arch-silver-bg: rgba(29, 78, 216, 0.16);
-  --arch-gold: #facc15;
-  --arch-gold-bg: rgba(161, 98, 7, 0.18);
-  --arch-ops: #2dd4bf;
-  --arch-ops-bg: rgba(15, 118, 110, 0.18);
+  --arch-muted: #9aa4b2;
+  --arch-bronze: #f3b584;
+  --arch-bronze-bg: rgba(180, 95, 38, 0.26);
+  --arch-bronze-border: rgba(217, 138, 78, 0.45);
+  --arch-silver: #cbd5e1;
+  --arch-silver-bg: rgba(148, 163, 184, 0.18);
+  --arch-silver-border: rgba(148, 163, 184, 0.36);
+  --arch-gold: #fde047;
+  --arch-gold-bg: rgba(202, 138, 4, 0.24);
+  --arch-gold-border: rgba(234, 179, 8, 0.44);
+  --arch-ops: #86efac;
+  --arch-ops-bg: rgba(22, 163, 74, 0.22);
+  --arch-ops-border: rgba(74, 222, 128, 0.42);
+  --arch-up: #60a5fa;
+  --arch-down: #fbbf24;
   --arch-edge: rgba(148, 163, 184, 0.32);
 }
 
@@ -2012,6 +2024,7 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
   font-size: 0.78rem;
   line-height: 1.45;
   color: var(--arch-muted);
+  min-height: 139px;
 }
 
 .cf-arch-detail-row {
@@ -2055,7 +2068,7 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 
 .cf-arch-stage {
   position: relative;
-  min-width: 960px;
+  min-width: 1040px;
 }
 
 .cf-arch-links {
@@ -2073,13 +2086,13 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 }
 
 .cf-arch-edge.is-upstream {
-  stroke: var(--arch-silver);
+  stroke: var(--arch-up);
   stroke-width: 2.5;
   opacity: 1;
 }
 
 .cf-arch-edge.is-downstream {
-  stroke: var(--arch-ops);
+  stroke: var(--arch-down);
   stroke-width: 2.5;
   opacity: 1;
 }
@@ -2092,16 +2105,15 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: repeat(5, minmax(175px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(5, minmax(170px, 1fr));
+  gap: 36px;
   align-items: start;
 }
 
 .cf-arch-col {
-  border: 1px solid var(--arch-border);
-  border-radius: 10px;
-  background: var(--arch-surface-alt);
-  padding: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2113,26 +2125,14 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 }
 
 .cf-arch-col-head {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 2px 4px 6px;
+  padding: 0 2px 6px;
   border-bottom: 1px solid var(--arch-border);
 }
 
 .cf-arch-col-head strong {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 700;
-}
-
-.cf-arch-col--bronze .cf-arch-col-head strong { color: var(--arch-bronze); }
-.cf-arch-col--silver .cf-arch-col-head strong { color: var(--arch-silver); }
-.cf-arch-col--gold .cf-arch-col-head strong { color: var(--arch-gold); }
-.cf-arch-col--ops .cf-arch-col-head strong { color: var(--arch-ops); }
-
-.cf-arch-col-head span {
-  font-size: 0.7rem;
-  color: var(--arch-muted);
+  color: var(--arch-text);
 }
 
 .cf-arch-col-body {
@@ -2144,27 +2144,41 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 .cf-arch-node {
   width: 100%;
   text-align: left;
-  padding: 8px 9px;
-  border-radius: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
   border: 1px solid var(--arch-border);
-  border-left-width: 3px;
   background: var(--arch-surface);
   color: var(--arch-text);
   font: inherit;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   transition: opacity 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
-.cf-arch-node--bronze { border-left-color: var(--arch-bronze); }
-.cf-arch-node--silver { border-left-color: var(--arch-silver); }
-.cf-arch-node--gold { border-left-color: var(--arch-gold); }
-.cf-arch-node--ops { border-left-color: var(--arch-ops); }
+.cf-arch-node--bronze {
+  background: var(--arch-bronze-bg);
+  border-color: var(--arch-bronze-border);
+}
+
+.cf-arch-node--silver {
+  background: var(--arch-silver-bg);
+  border-color: var(--arch-silver-border);
+}
+
+.cf-arch-node--gold {
+  background: var(--arch-gold-bg);
+  border-color: var(--arch-gold-border);
+}
+
+.cf-arch-node--ops {
+  background: var(--arch-ops-bg);
+  border-color: var(--arch-ops-border);
+}
 
 .cf-arch-node:hover {
-  border-color: var(--arch-border-strong);
+  border-color: var(--arch-text);
 }
 
 .cf-arch-node.is-focus {
@@ -2173,11 +2187,13 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 }
 
 .cf-arch-node.is-upstream {
-  border-color: var(--arch-silver);
+  border-color: var(--arch-up);
+  box-shadow: 0 0 0 1px var(--arch-up);
 }
 
 .cf-arch-node.is-downstream {
-  border-color: var(--arch-ops);
+  border-color: var(--arch-down);
+  box-shadow: 0 0 0 1px var(--arch-down);
 }
 
 .cf-arch-node.is-search-hit {
@@ -2190,44 +2206,38 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 
 .cf-arch-node-head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
-.cf-arch-node-name {
-  font-size: 0.74rem;
+.cf-arch-widget .cf-arch-node-name {
+  font-family: var(--md-code-font-family, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.65rem;
   font-weight: 700;
+  line-height: 1.25;
   padding: 0;
-  background: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: var(--arch-text);
   word-break: break-word;
 }
 
-.cf-arch-node-rows {
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--arch-muted);
+.cf-arch-widget .cf-arch-node-rows {
+  font-size: 0.6rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--arch-text);
+  opacity: 0.78;
   white-space: nowrap;
-}
-
-.cf-arch-node-meta {
-  font-size: 0.69rem;
-  font-weight: 600;
-  color: var(--arch-muted);
-}
-
-.cf-arch-node-desc {
-  font-size: 0.71rem;
-  line-height: 1.35;
-  color: var(--arch-muted);
 }
 
 .cf-arch-pill:focus-visible,
 .cf-arch-clear-btn:focus-visible,
 .cf-arch-node:focus-visible,
 .cf-arch-search:focus-visible {
-  outline: 2px solid var(--arch-silver);
+  outline: 2px solid var(--arch-up);
   outline-offset: 2px;
 }
 
