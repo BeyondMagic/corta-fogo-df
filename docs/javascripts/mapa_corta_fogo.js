@@ -395,10 +395,10 @@
       const popupHtml = `
         <div style="font-family:inherit;font-size:13px;line-height:1.45;min-width:240px;">
           <strong style="color:#d03b3b;font-size:14px;">Foco de Calor (${ano})</strong><br/>
-          <small>${isRef ? 'Satélite de Referência (AQUA_M-T)' : 'Sensor complementar'} · ${isSeca ? 'Estiagem (Mai-Set)' : 'Período Chuvoso'}</small>
+          <small>${isRef ? 'Satélite de referência' : 'Sensor complementar'} · ${isSeca ? 'Estiagem (Mai-Set)' : 'Período Chuvoso'}</small>
           <hr style="margin:6px 0;border:none;border-top:1px solid #e2e8f0;"/>
           <b>Coordenadas:</b> ${lat.toFixed(4)}°, ${lon.toFixed(4)}°<br/>
-          <b>Data/hora aproximada:</b> ${mesNome}/${ano}, ${String(hora).padStart(2, '0')}h BRT<br/>
+          <b>Data/hora aproximada:</b> ${mesNome}/${ano}, ${String(hora).padStart(2, '0')}h (horário local)<br/>
           <b>Risco de fogo (INPE):</b> ${riscoTxt}<br/>
           <b>Sensor / Pegada:</b> ${escapeHtml(meta.nome)} (${escapeHtml(meta.dimensao)}, ~${formatPtBr(meta.area_ha, 1)} ha)
         </div>

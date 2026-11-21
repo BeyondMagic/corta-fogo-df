@@ -248,6 +248,14 @@ body,
 
 /* Mapa analitico em tela cheia: o mapa ocupa toda a altura livre (antes ficava
    em 600 px) e o inspetor fica mais largo e legivel para apresentar. */
+.cf-map-card:fullscreen .cf-stage-maps,
+.cf-map-card:-webkit-full-screen .cf-stage-maps,
+.cf-map-card.cf-fullscreen-fallback .cf-stage-maps {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .cf-map-card:fullscreen .cf-tabpanel:not([hidden]),
 .cf-map-card:-webkit-full-screen .cf-tabpanel:not([hidden]),
 .cf-map-card.cf-fullscreen-fallback .cf-tabpanel:not([hidden]) {
@@ -262,7 +270,7 @@ body,
 .cf-map-card.cf-fullscreen-fallback .cf-stage-body {
   flex: 1 1 auto;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 400px;
 }
 
 .cf-map-card:fullscreen .cf-d3-viewport,
@@ -272,18 +280,11 @@ body,
   min-height: 0;
 }
 
-.cf-map-card:fullscreen .cf-inspector,
-.cf-map-card:-webkit-full-screen .cf-inspector,
-.cf-map-card.cf-fullscreen-fallback .cf-inspector {
-  max-height: none;
-  font-size: 0.9rem;
-  padding: 18px;
-}
-
-.cf-map-card:fullscreen .cf-inspector h4,
-.cf-map-card:-webkit-full-screen .cf-inspector h4,
-.cf-map-card.cf-fullscreen-fallback .cf-inspector h4 {
-  font-size: 1.35rem;
+.cf-map-card:fullscreen .cf-queue-rail,
+.cf-map-card:-webkit-full-screen .cf-queue-rail,
+.cf-map-card.cf-fullscreen-fallback .cf-queue-rail {
+  height: 100%;
+  min-height: 0;
 }
 
 .cf-map-card:fullscreen .cf-stats-grid,
@@ -486,23 +487,74 @@ body:has(.cf-dashboard-page) .md-main__inner {
   background: var(--cf-surface);
   border: 1px solid var(--cf-border);
   border-radius: var(--cf-radius);
-  padding: 20px 22px 16px;
+  padding: 14px 18px;
   box-shadow: var(--cf-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cf-resposta-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px 20px;
 }
 
 .cf-resposta-rotulo {
-  margin: 0 0 4px;
-  font-size: 0.78rem;
+  margin: 0 0 2px;
+  font-size: 0.74rem;
   font-weight: 500;
   color: var(--cf-muted);
 }
 
 .cf-resposta-pergunta {
-  margin: 0 0 18px;
-  max-width: 62rem;
-  font-size: 1.02rem;
-  font-weight: 500;
-  line-height: 1.5;
+  margin: 0;
+  max-width: 48rem;
+  font-size: 0.96rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--cf-text);
+}
+
+.cf-resposta-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 0.78rem;
+}
+
+.cf-gold-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+
+.cf-gold-inline-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.cf-gold-inline-item strong {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--cf-text);
+}
+
+.cf-gold-inline-item--accent strong {
+  color: var(--cf-car);
+}
+
+.cf-narrative {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--cf-border);
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: var(--cf-text);
 }
 
@@ -703,9 +755,36 @@ body:has(.cf-dashboard-page) .md-main__inner {
 }
 
 .cf-kpi-sub {
-  font-size: 0.76rem;
-  line-height: 1.4;
+  font-size: 0.75rem;
+  line-height: 1.35;
   color: var(--cf-muted);
+}
+
+.cf-kpi-cmp {
+  margin-top: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--cf-border);
+  background: var(--cf-surface-alt);
+  color: var(--cf-muted);
+  align-self: flex-start;
+}
+
+.cf-kpi-cmp.is-crit {
+  border-color: var(--cf-ref);
+  color: var(--cf-ref);
+}
+
+.cf-kpi-cmp.is-warn {
+  border-color: var(--cf-accent);
+  color: var(--cf-accent-fg);
+}
+
+.cf-kpi-cmp.is-good {
+  border-color: var(--cf-uc);
+  color: var(--cf-uc);
 }
 
 /* --------------------------------------------------------------------------
@@ -723,25 +802,38 @@ body:has(.cf-dashboard-page) .md-main__inner {
   gap: 10px;
 }
 
-/* Grade fixa: linha do tempo inteira na 1a linha; os quatro filtros com a mesma
-   largura e o botao Limpar na 2a. Nada muda de lugar quando um valor muda. */
-.cf-dock-row {
+.cf-dock-row-compact {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(160px, 1.3fr) minmax(140px, 1.1fr) auto;
   align-items: end;
-  gap: 12px 14px;
+  gap: 10px 12px;
 }
 
-.cf-dock-row > .cf-field {
+.cf-dock-row-compact > .cf-field {
   min-width: 0;
 }
 
-.cf-timeline-group {
-  grid-column: 1 / -1;
+.cf-dock-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.cf-adv-drawer {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.6fr) minmax(150px, 1fr) minmax(150px, 1fr);
+  gap: 10px 12px;
+  align-items: end;
+  padding-top: 10px;
+  border-top: 1px solid var(--cf-border);
+}
+
+.cf-timeline-group {
+  display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .cf-timeline-group > .cf-field {
@@ -1004,11 +1096,37 @@ body:has(.cf-dashboard-page) .md-main__inner {
   accent-color: var(--cf-accent);
 }
 
+.cf-layer-menu-wrap {
+  position: relative;
+}
+
+.cf-layer-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 25;
+  min-width: 245px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--cf-border-strong);
+  background: var(--cf-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--cf-text);
+}
+
 .cf-stage-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
+  grid-template-columns: minmax(0, 1fr) 390px;
   gap: 12px;
   align-items: stretch;
+}
+
+.cf-stage-maps {
+  min-width: 0;
 }
 
 .cf-d3-viewport {
@@ -1129,18 +1247,242 @@ body:has(.cf-dashboard-page) .md-main__inner {
   font-size: 1rem;
 }
 
-/* Inspetor ao lado do mapa */
-.cf-inspector {
-  background: var(--cf-surface);
+/* Trilho operacional lateral: Inspetor contextual + Fila de Vistoria (50) */
+.cf-queue-rail {
+  background: var(--cf-surface-alt);
   border: 1px solid var(--cf-border);
   border-radius: 10px;
-  padding: 14px;
-  font-size: 0.74rem;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  height: 600px;
+  min-width: 0;
+}
+
+.cf-inspector-box {
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-border-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.74rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 215px;
   overflow-y: auto;
-  max-height: 600px;
+  flex-shrink: 0;
+}
+
+.cf-inspector-box h4 {
+  margin: 4px 0 0;
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.cf-queue-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.cf-queue-head h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cf-queue-sub {
+  margin: 1px 0 0;
+  font-size: 0.72rem;
+  color: var(--cf-muted);
+}
+
+.cf-queue-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 6px;
+}
+
+.cf-queue-search-field,
+.cf-queue-sort-field {
+  min-width: 0;
+}
+
+.cf-queue-master-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  padding: 2px 2px 4px;
+  border-bottom: 1px solid var(--cf-border);
+}
+
+.cf-queue-master-lbl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  min-height: 24px;
+  font-weight: 500;
+}
+
+.cf-queue-list-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--cf-border);
+  border-radius: 8px;
+  background: var(--cf-surface);
+}
+
+.cf-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cf-queue-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--cf-border);
+  align-items: start;
+}
+
+.cf-queue-item:last-child {
+  border-bottom: 0;
+}
+
+.cf-queue-item:hover {
+  background: var(--cf-surface-alt);
+}
+
+.cf-queue-item.is-checked {
+  background: color-mix(in srgb, var(--cf-accent) 7%, transparent);
+}
+
+.cf-queue-item.is-selected {
+  background: var(--cf-car-bg);
+  box-shadow: inset 3px 0 0 var(--cf-car);
+}
+
+.cf-queue-chk-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+}
+
+.cf-queue-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cf-queue-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.cf-queue-focus-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  margin: 0;
+  font: inherit;
+  color: var(--cf-text);
+  cursor: pointer;
+  text-align: left;
+  min-height: 24px;
+}
+
+.cf-queue-focus-btn:hover .cf-queue-ra {
+  color: var(--cf-car);
+  text-decoration: underline;
+}
+
+.cf-queue-rank {
+  font-weight: 700;
+  font-size: 0.76rem;
+  color: var(--cf-muted);
+  flex-shrink: 0;
+}
+
+.cf-queue-ra {
+  font-weight: 600;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 0.71rem;
+  color: var(--cf-muted);
+}
+
+.cf-queue-meta code {
+  font-size: 0.69rem;
+  padding: 0;
+  background: none;
+  color: var(--cf-muted);
+}
+
+.cf-subtoolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 4px;
+}
+
+.cf-scope-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--cf-border);
+  background: var(--cf-surface-alt);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cf-muted);
+}
+
+.cf-deep-section {
+  background: var(--cf-surface);
+  border: 1px solid var(--cf-border);
+  border-radius: var(--cf-radius);
+  box-shadow: var(--cf-shadow);
+  padding: 10px 14px;
+}
+
+.cf-deep-summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--cf-text);
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cf-deep-grid {
+  margin-top: 12px;
 }
 
 .cf-inspector-empty strong {
@@ -1487,14 +1829,18 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 }
 
 /* Responsividade e movimento reduzido */
-@media (max-width: 980px) {
-  .cf-dock-row {
+@media (max-width: 1080px) {
+  .cf-dock-row-compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .cf-dock-row > #cf-btn-reset-filters {
+  .cf-dock-actions {
     grid-column: 1 / -1;
-    justify-self: end;
+    justify-content: flex-end;
+  }
+
+  .cf-adv-drawer {
+    grid-template-columns: 1fr;
   }
 
   .cf-timeline-group {
@@ -1505,14 +1851,14 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
     grid-template-columns: 1fr;
   }
 
+  .cf-queue-rail {
+    height: 440px;
+  }
+
   .cf-d3-viewport,
   #panel-leaflet #corta-fogo-map {
     height: 440px;
     min-height: 440px;
-  }
-
-  .cf-inspector {
-    max-height: none;
   }
 
   .cf-col-7,
@@ -1523,22 +1869,12 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 }
 
 @media (max-width: 700px) {
-  .cf-dock-row {
+  .cf-dock-row-compact {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .cf-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .cf-hero-stat + .cf-hero-stat {
-    padding-left: 0;
-    border-left: 0;
-    border-top: 1px solid var(--cf-border);
-  }
-
-  .cf-hero-num {
-    font-size: 1.7rem;
+  .cf-queue-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -60,6 +60,7 @@
     choroTarget: 'ra',
     choroMetric: 'total',
     anualMode: 'estacao',
+    temporalTab: 'anual',
     sensorTab: 'evolucao',
     ucMetric: 'absoluto',
     carSubTab: 'situacao',
@@ -373,6 +374,22 @@
       (resumo.car_top50 || []).forEach((c) => carByCod.set(c.cod_imovel, c));
 
       const focosList = focosRaw.focos || [];
+      let baseSeca = 0;
+      let baseUc = 0;
+      let baseRef = 0;
+      for (let i = 0; i < focosList.length; i += 1) {
+        const fl = focosList[i];
+        if (fl[6] === 1) baseSeca += 1;
+        if (fl[5] === 1) baseRef += 1;
+        if ((fl[12] & 4) || (fl[12] & 8)) baseUc += 1;
+      }
+      const baseN = Math.max(1, focosList.length);
+      const baselines = {
+        secaPct: (baseSeca / baseN) * 100,
+        ucPct: (baseUc / baseN) * 100,
+        refPct: (baseRef / baseN) * 100
+      };
+
       const focoCars = buildFocoCarsIndex(focosList, resumo.car_top50, geometrias.car_top50_geoms);
       state.defaultTop5Cods = (resumo.car_top50 || [])
         .slice()
@@ -392,6 +409,7 @@
         ucsGeo: ucsGeo,
         buffersGeo: buffersGeo,
         focos: focosList,
+        baselines: baselines,
         focoCars: focoCars,
         extraMap: extraMap,
         ucsByIdx: ucsByIdx,
@@ -650,32 +668,49 @@
     };
   }
 
+  function setComparator(elId, text, tone) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.className = 'cf-kpi-cmp' + (tone ? ' is-' + tone : '');
+    el.textContent = text;
+  }
+
   function updateKPIs() {
     if (!loadedData || !currentAgg) return;
     const total = currentAgg.total;
     const totalGlobal = loadedData.resumo.escopo.total_focos || 38945;
+    const base = loadedData.baselines || { secaPct: 84.3, ucPct: 47.0, refPct: 6.0 };
 
     const kpiFocos = document.getElementById('cf-kpi-focos');
     const kpiFocosSub = document.getElementById('cf-kpi-focos-sub');
     if (kpiFocos) kpiFocos.textContent = formatInt(total);
+    const pctGlobal = totalGlobal > 0 ? (total / totalGlobal) * 100 : 0;
     if (kpiFocosSub) {
-      const pct = totalGlobal > 0 ? (total / totalGlobal) * 100 : 0;
       kpiFocosSub.textContent = state.checkedCars.size > 0
-        ? `${formatDec(pct, 1)}% do DF (${state.checkedCars.size} imóveis marcados)`
-        : `${formatDec(pct, 1)}% da série 2015–2025`;
+        ? `nos ${state.checkedCars.size} imóveis marcados da fila`
+        : 'em todo o Distrito Federal';
     }
+    setComparator(
+      'cf-kpi-focos-cmp',
+      state.checkedCars.size > 0 || total < totalGlobal
+        ? `${formatDec(pctGlobal, 1)}% do total DF (${formatInt(totalGlobal)})`
+        : '100% da série histórica DF',
+      ''
+    );
 
     const kpiSeca = document.getElementById('cf-kpi-seca');
     const kpiSecaSub = document.getElementById('cf-kpi-seca-sub');
     const pctSeca = total > 0 ? (currentAgg.totalSeca / total) * 100 : 0;
     if (kpiSeca) kpiSeca.textContent = `${formatDec(pctSeca, 1)}%`;
     if (kpiSecaSub) kpiSecaSub.textContent = `${formatInt(currentAgg.totalSeca)} focos entre mai e set`;
-
-    const kpiRef = document.getElementById('cf-kpi-ref');
-    const kpiRefSub = document.getElementById('cf-kpi-ref-sub');
-    const pctRef = total > 0 ? (currentAgg.totalRef / total) * 100 : 0;
-    if (kpiRef) kpiRef.textContent = `${formatDec(pctRef, 1)}%`;
-    if (kpiRefSub) kpiRefSub.textContent = `${formatInt(currentAgg.totalRef)} detecções AQUA_M-T`;
+    if (total === 0) {
+      setComparator('cf-kpi-seca-cmp', 'Sem focos no recorte', '');
+    } else {
+      const diffSeca = pctSeca - base.secaPct;
+      const arrow = diffSeca >= 0 ? '▲' : '▼';
+      const tone = diffSeca > 2 ? 'crit' : (diffSeca < -2 ? 'good' : '');
+      setComparator('cf-kpi-seca-cmp', `${arrow} ${diffSeca >= 0 ? '+' : ''}${formatDec(diffSeca, 1)} p.p. vs DF (${formatDec(base.secaPct, 1)}%)`, tone);
+    }
 
     const kpiUcs = document.getElementById('cf-kpi-ucs');
     const kpiUcsSub = document.getElementById('cf-kpi-ucs-sub');
@@ -683,31 +718,56 @@
     for (let i = 0; i < currentAgg.ucInTotals.length; i += 1) {
       if (currentAgg.ucInTotals[i] > 0 || currentAgg.ucBufTotals[i] > 0) ucsAtingidas += 1;
     }
+    const pctUc = total > 0 ? (currentAgg.totalUcArea / total) * 100 : 0;
     if (kpiUcs) kpiUcs.textContent = formatInt(currentAgg.totalUcArea);
-    if (kpiUcsSub) kpiUcsSub.textContent = `em ${ucsAtingidas} de 84 UCs (interior ou 1 km)`;
-
-    const kpiCar = document.getElementById('cf-kpi-car');
-    const kpiCarSub = document.getElementById('cf-kpi-car-sub');
-    const imoveisTop = loadedData.resumo.car_top50 || [];
-    const situacaoFiltro = state.situacao !== 'todos' ? state.situacao : null;
-    const ativosTop = imoveisTop.filter((im) => {
-      if (situacaoFiltro && im.situacao !== situacaoFiltro) return false;
-      if (!imovelNoPeriodo(im)) return false;
-      return true;
-    }).length;
-    const cruz = loadedData.resumo.car_cruzamento || {};
-    const criticos = (cruz.por_classificacao && cruz.por_classificacao['PRIORIDADE CRITICA']) || { imoveis: 0 };
-    if (kpiCar) kpiCar.textContent = formatInt(loadedData.resumo.gold_referencia.imoveis_reincidentes);
-    if (kpiCarSub) {
-      const filtroFila = state.ano !== 'todos' || situacaoFiltro;
-      if (state.checkedCars.size > 0) {
-        kpiCarSub.textContent = `${state.checkedCars.size} marcados filtrando o painel`;
-      } else {
-        kpiCarSub.textContent = filtroFila
-          ? `${ativosTop} dos ${imoveisTop.length} primeiros da fila no recorte`
-          : `${formatInt(criticos.imoveis)} em prioridade crítica`;
-      }
+    if (kpiUcsSub) kpiUcsSub.textContent = `${formatDec(pctUc, 1)}% do recorte em ${ucsAtingidas} de 84 UCs`;
+    if (total === 0) {
+      setComparator('cf-kpi-ucs-cmp', 'Sem focos no recorte', '');
+    } else {
+      const diffUc = pctUc - base.ucPct;
+      const arrow = diffUc >= 0 ? '▲' : '▼';
+      const tone = diffUc > 5 ? 'crit' : (diffUc > 0 ? 'warn' : 'good');
+      setComparator('cf-kpi-ucs-cmp', `${arrow} ${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} p.p. vs DF (${formatDec(base.ucPct, 1)}%)`, tone);
     }
+
+    const kpiRef = document.getElementById('cf-kpi-ref');
+    const kpiRefSub = document.getElementById('cf-kpi-ref-sub');
+    const pctRef = total > 0 ? (currentAgg.totalRef / total) * 100 : 0;
+    if (kpiRef) kpiRef.textContent = `${formatDec(pctRef, 1)}%`;
+    if (kpiRefSub) kpiRefSub.textContent = `${formatInt(currentAgg.totalRef)} detecções do satélite de referência`;
+    if (total === 0) {
+      setComparator('cf-kpi-ref-cmp', 'Sem focos no recorte', '');
+    } else {
+      const diffRef = pctRef - base.refPct;
+      setComparator('cf-kpi-ref-cmp', `Base DF: ${formatDec(base.refPct, 1)}% (${diffRef >= 0 ? '+' : ''}${formatDec(diffRef, 1)} p.p.)`, '');
+    }
+
+    updateNarrative(total, pctSeca, pctUc, ucsAtingidas, base);
+  }
+
+  function updateNarrative(total, pctSeca, pctUc, ucsAtingidas, base) {
+    const el = document.getElementById('cf-narrative');
+    if (!el || !loadedData) return;
+
+    if (total === 0) {
+      el.textContent = 'Nenhum foco encontrado para os filtros atuais. Remova algum filtro ou desmarque imóveis para ampliar o recorte.';
+      return;
+    }
+
+    const escopoDesc = state.checkedCars.size > 0
+      ? (isTop5Selection()
+        ? 'nos 5 primeiros imóveis da fila de vistoria (padrão)'
+        : `nos ${state.checkedCars.size} imóveis marcados da fila`)
+      : 'em todo o Distrito Federal';
+
+    const diffSeca = pctSeca - base.secaPct;
+    const diffUc = pctUc - base.ucPct;
+    const secaTxt = Math.abs(diffSeca) < 1
+      ? `${formatDec(pctSeca, 1)}% na estiagem (próximo à média do DF)`
+      : `${formatDec(pctSeca, 1)}% na estiagem (${diffSeca > 0 ? '+' : ''}${formatDec(diffSeca, 1)} p.p. vs média DF)`;
+    const ucTxt = `${formatDec(pctUc, 1)}% dentro ou a até 1 km de ${ucsAtingidas} UCs (${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} p.p. vs DF)`;
+
+    el.innerHTML = `Recorte ativo: <b>${formatInt(total)}</b> focos ${escopoDesc}, sendo ${secaTxt} e ${ucTxt}.`;
   }
 
   const CLASSIFICACAO_LABELS = {
@@ -717,98 +777,22 @@
     'PRIORIDADE BAIXA': 'Baixa'
   };
 
-  function formatDataHoraUtc(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '-';
-    const p = (n) => String(n).padStart(2, '0');
-    return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} UTC`;
-  }
-
-  // Bloco de abertura: a pergunta de gestao, a resposta e os primeiros da fila de
-  // vistoria, lidos de gold.json. Independe dos filtros do painel.
+  // Bloco de abertura compacto: resumo dos imóveis reincidentes (a fila acionável fica ao lado do mapa).
   function renderResposta() {
     const box = document.getElementById('cf-resposta-corpo');
     if (!box || !loadedData) return;
 
     const ref = loadedData.resumo.gold_referencia;
     const cruz = loadedData.resumo.car_cruzamento || {};
-    const meta = loadedData.resumo.gold_meta || {};
-    const fila = loadedData.resumo.car_top50 || [];
     const porClasse = cruz.por_classificacao || {};
     const criticos = porClasse['PRIORIDADE CRITICA'] || { imoveis: 0, cadastro_ativo: 0 };
-    const primeiros = fila.slice(0, 5);
-
-    const linhas = primeiros.map((im) => `
-      <tr>
-        <td class="cf-num cf-fila-pos">${im.rank}</td>
-        <td>
-          <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
-            <span class="cf-fila-ra">${escapeHtml(im.ra || '-')}</span>
-            <code>${escapeHtml(shortCod(im.cod_imovel))}</code>
-          </button>
-        </td>
-        <td>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</td>
-        <td class="cf-num">${formatDec(im.area_ha, 1)} ha</td>
-        <td class="cf-num">${im.anos_qtd} anos <span class="cf-muted">· último ${im.ultimo_ano}</span></td>
-        <td class="cf-num">
-          <span class="cf-indice">
-            <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
-            <b>${formatDec(im.indice, 1)}</b>
-          </span>
-        </td>
-      </tr>`).join('');
-
-    let frescor = '';
-    if (meta.gerado_em) {
-      const horas = (Date.now() - new Date(meta.gerado_em).getTime()) / 3600000;
-      const sla = Number(meta.sla_frescor_horas) || 30;
-      const idade = horas < 48 ? `${formatDec(horas, 1)} h` : `${formatInt(Math.floor(horas / 24))} dias`;
-      frescor = horas <= sla
-        ? `Gold gerada em ${formatDataHoraUtc(meta.gerado_em)}, dentro do SLA de frescor de ${formatInt(sla)} h.`
-        : `Retrato da Gold gerado em ${formatDataHoraUtc(meta.gerado_em)} (há ${idade}). O SLA de ${formatInt(sla)} h vale para a tabela no ambiente do pipeline; esta página estática mostra o último retrato exportado.`;
-    }
-
-    const pctReinc = ref.imoveis_total_car > 0 ? (ref.imoveis_reincidentes / ref.imoveis_total_car) * 100 : 0;
 
     box.innerHTML = `
-      <div class="cf-hero">
-        <div class="cf-hero-stat">
-          <span class="cf-hero-num">${formatInt(ref.imoveis_reincidentes)}</span>
-          <span class="cf-hero-lbl">imóveis reincidentes</span>
-          <span class="cf-hero-sub">${formatDec(pctReinc, 1)}% dos ${formatInt(ref.imoveis_total_car)} imóveis do cadastro, com foco em área protegida em 2 anos ou mais</span>
-        </div>
-        <div class="cf-hero-stat cf-hero-stat--destaque">
-          <span class="cf-hero-num">${formatInt(criticos.imoveis)}</span>
-          <span class="cf-hero-lbl">em prioridade crítica</span>
-          <span class="cf-hero-sub">quartil mais alto do Índice de Prioridade de Vistoria</span>
-        </div>
-        <div class="cf-hero-stat">
-          <span class="cf-hero-num">${formatInt(criticos.cadastro_ativo)}</span>
-          <span class="cf-hero-lbl">críticos com cadastro ativo</span>
-          <span class="cf-hero-sub">os demais estão pendentes, suspensos ou cancelados no SICAR</span>
-        </div>
-      </div>
-      <div class="cf-fila">
-        <p class="cf-fila-titulo">Primeiros da fila de vistoria <span class="cf-muted">· clique para ver no mapa</span></p>
-        <div class="cf-fila-wrap">
-          <table class="cf-fila-tab">
-            <thead><tr>
-              <th scope="col" class="cf-num">#</th><th scope="col">Imóvel</th><th scope="col">Situação</th>
-              <th scope="col" class="cf-num">Área</th><th scope="col" class="cf-num">Reincidência</th><th scope="col" class="cf-num">Índice</th>
-            </tr></thead>
-            <tbody>${linhas}</tbody>
-          </table>
-        </div>
-      </div>
-      <p class="cf-resposta-fonte">
-        Fonte: <code>${escapeHtml(meta.fonte || 'gold.painel_imoveis_prioritarios')}</code>. ${escapeHtml(frescor)}
-      </p>`;
-
-    box.querySelectorAll('.cf-car-select-btn').forEach((btn) => {
-      btn.addEventListener('click', function () {
-        selectCAR(this.getAttribute('data-select-car'), true);
-      });
-    });
+      <div class="cf-gold-inline">
+        <span class="cf-gold-inline-item"><strong>${formatInt(ref.imoveis_reincidentes)}</strong><span>reincidentes</span></span>
+        <span class="cf-gold-inline-item cf-gold-inline-item--accent"><strong>${formatInt(criticos.imoveis)}</strong><span>prioridade crítica</span></span>
+        <span class="cf-gold-inline-item"><strong>${formatInt(criticos.cadastro_ativo)}</strong><span>críticos ativos</span></span>
+      </div>`;
   }
 
   function renderFilterChips() {
@@ -826,11 +810,11 @@
       chips.push({ key: 'estacao', label: state.estacao === 'seca' ? 'Estação: Estiagem (Mai-Set)' : 'Estação: Chuvoso' });
     }
     if (state.sensor !== 'todos') {
-      const sLabel = state.sensor === 'ref' ? 'AQUA_M-T (Referência)' : SENSOR_NOMES[state.sensor];
+      const sLabel = state.sensor === 'ref' ? 'Satélite de referência' : SENSOR_NOMES[state.sensor];
       chips.push({ key: 'sensor', label: `Sensor: ${sLabel}` });
     }
     if (state.situacao !== 'todos') {
-      chips.push({ key: 'situacao', label: `CAR: ${state.situacao} (${SITUACAO_LABELS[state.situacao] || ''})` });
+      chips.push({ key: 'situacao', label: `Cadastro: ${SITUACAO_LABELS[state.situacao] || state.situacao}` });
     }
     if (state.raIdx !== null) {
       const ra = loadedData.rasByIdx.get(state.raIdx);
@@ -841,7 +825,7 @@
       chips.push({ key: 'ucIdx', label: `UC: ${uc ? (uc.sigla || uc.nome) : state.ucIdx}` });
     }
     if (state.selectedCar) {
-      chips.push({ key: 'selectedCar', label: `Imóvel CAR: ${state.selectedCar.slice(0, 18)}...` });
+      chips.push({ key: 'selectedCar', label: `Imóvel selecionado: ${state.selectedCar.slice(0, 18)}...` });
     }
     if (state.checkedCars.size > 0) {
       let chkLabel = `Imóveis marcados: ${state.checkedCars.size}`;
@@ -929,6 +913,21 @@
     if (choroTarget) choroTarget.value = state.choroTarget;
     const choroMetric = document.getElementById('cf-choro-metric');
     if (choroMetric) choroMetric.value = state.choroMetric;
+
+    const advBtn = document.getElementById('cf-btn-adv-filters');
+    if (advBtn) {
+      let advCount = 0;
+      if (state.sensor !== 'todos') advCount += 1;
+      if (state.situacao !== 'todos') advCount += 1;
+      if (isPlaying || anoUnico() !== null) advCount += 1;
+      advBtn.textContent = advCount > 0 ? `Filtros avançados (${advCount})` : 'Filtros avançados';
+    }
+
+    const layersBtn = document.getElementById('cf-btn-layers');
+    if (layersBtn) {
+      const ativos = Object.values(state.layers).filter(Boolean).length;
+      layersBtn.textContent = `Camadas (${ativos}/6)`;
+    }
   }
 
   // Um ano so (anoFimVal omitido) ou um periodo. De ANO_MIN a ANO_MAX equivale a 'todos'.
@@ -959,36 +958,32 @@
     if (!info) {
       if (state.selectedCar && loadedData.carByCod.has(state.selectedCar)) {
         const im = loadedData.carByCod.get(state.selectedCar);
+        box.hidden = false;
         box.innerHTML = renderCarInspectorHtml(im);
         bindInspectorClear(box);
         return;
       }
       if (state.ucIdx !== null && loadedData.ucsByIdx.has(state.ucIdx)) {
         const uc = loadedData.ucsByIdx.get(state.ucIdx);
+        box.hidden = false;
         box.innerHTML = renderUcInspectorHtml(uc);
         bindInspectorClear(box);
         return;
       }
       if (state.raIdx !== null && loadedData.rasByIdx.has(state.raIdx)) {
         const ra = loadedData.rasByIdx.get(state.raIdx);
+        box.hidden = false;
         box.innerHTML = renderRaInspectorHtml(ra);
         bindInspectorClear(box);
         return;
       }
 
-      const selResumo = state.checkedCars.size > 0
-        ? `Filtrando <b>${state.checkedCars.size}</b> imóveis marcados da fila · `
-        : 'DF completo · ';
-      box.innerHTML = `
-        <div class="cf-inspector-empty">
-          <strong>Inspetor territorial</strong>
-          <p>Passe o cursor sobre focos, polígonos de Regiões Administrativas ou Unidades de Conservação para ver detalhes instantâneos, ou clique para filtrar e aproximar.</p>
-          <p class="cf-inspector-hint">${selResumo}<b>${formatInt(currentAgg ? currentAgg.total : 0)}</b> focos visíveis.</p>
-        </div>
-      `;
+      box.hidden = true;
+      box.innerHTML = '';
       return;
     }
 
+    box.hidden = false;
     box.innerHTML = info;
     bindInspectorClear(box);
   }
@@ -1059,7 +1054,7 @@
         <dl class="cf-kv-list">
           <div><dt>Índice de prioridade</dt><dd>${formatDec(im.indice, 1)}</dd></div>
           <div><dt>Classificação</dt><dd>${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</dd></div>
-          <div><dt>Situação no CAR</dt><dd>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</dd></div>
+          <div><dt>Situação cadastral</dt><dd>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</dd></div>
           <div><dt>Área cadastrada</dt><dd>${formatDec(im.area_ha, 1)} ha</dd></div>
           <div><dt>Focos no imóvel</dt><dd>${formatInt(im.focos_total)}</dd></div>
           <div><dt>Focos em área protegida</dt><dd>${formatInt(im.focos_prot)}</dd></div>
@@ -1067,7 +1062,7 @@
           <div><dt>Anos com foco</dt><dd>${im.anos_qtd}</dd></div>
         </dl>
         <p class="cf-anos-lista">${(im.anos || []).map((a) => `<span>${a}</span>`).join('')}</p>
-        ${im.condicao ? `<p class="cf-inspector-hint">Condição no SICAR: ${escapeHtml(im.condicao)}</p>` : ''}
+        ${im.condicao ? `<p class="cf-inspector-hint">Condição cadastral: ${escapeHtml(im.condicao)}</p>` : ''}
       </div>
     `;
   }
@@ -1684,8 +1679,8 @@
         const uc = f[10] >= 0 ? loadedData.ucsByIdx.get(f[10]) : null;
 
         showTooltip(
-          `<strong>Foco de Calor · ${mesNome}/${f[2]} (${String(f[4]).padStart(2, '0')}h BRT)</strong><br/>` +
-          `${f[5] === 1 ? 'Satélite Referência (AQUA_M-T)' : sensorNome} · Risco: ${riscoStr}<br/>` +
+          `<strong>Foco de Calor · ${mesNome}/${f[2]} (${String(f[4]).padStart(2, '0')}h)</strong><br/>` +
+          `${f[5] === 1 ? 'Satélite de referência' : sensorNome} · Risco: ${riscoStr}<br/>` +
           `${ra ? 'RA: ' + escapeHtml(ra.nome) + '<br/>' : ''}` +
           `${uc ? 'Dentro da UC: ' + escapeHtml(uc.nome) : (f[11] >= 0 ? 'Faixa 1 km de UC' : 'Fora de UC')}`,
           event.clientX,
@@ -1777,7 +1772,7 @@
       ? { ref: tokens.ref, secSensor: tokens.otherSensor }
       : { seca: tokens.seca, chuvoso: tokens.chuvoso };
     const labels = state.anualMode === 'referencia'
-      ? { ref: 'AQUA_M-T', secSensor: 'Demais sensores' }
+      ? { ref: 'Satélite de referência', secSensor: 'Demais sensores' }
       : { seca: 'Estiagem (Mai-Set)', chuvoso: 'Chuvoso (Out-Abr)' };
 
     const stackGen = d3.stack().keys(keys);
@@ -1992,7 +1987,7 @@
         showTooltip(
           `<strong>${d.nome}</strong> (${d.seca ? 'Estiagem' : 'Chuvoso'})<br/>` +
           `Total: <b>${formatInt(d.total)}</b> focos<br/>` +
-          `AQUA_M-T: ${formatInt(d.ref)}`,
+          `Referência: ${formatInt(d.ref)}`,
           event.clientX,
           event.clientY
         );
@@ -2130,8 +2125,8 @@
         .attr('height', 0)
         .on('mousemove', function (event, d) {
           showTooltip(
-            `<strong>${String(d.hora).padStart(2, '0')}h00–${String(d.hora).padStart(2, '0')}h59 (BRT)</strong><br/>` +
-            `Detecções: <b>${formatInt(d.total)}</b> (AQUA_M-T: ${formatInt(d.ref)})`,
+            `<strong>${String(d.hora).padStart(2, '0')}h00–${String(d.hora).padStart(2, '0')}h59 (horário local)</strong><br/>` +
+            `Detecções: <b>${formatInt(d.total)}</b> (Referência: ${formatInt(d.ref)})`,
             event.clientX,
             event.clientY
           );
@@ -2459,7 +2454,7 @@
         .on('mousemove', function (event, d) {
           showTooltip(
             `<strong>${d.anosNum} anos distintos com foco</strong><br/>` +
-            `<b>${formatInt(d.gold)}</b> imóveis reincidentes (camada Gold)`,
+            `<b>${formatInt(d.gold)}</b> imóveis reincidentes`,
             event.clientX,
             event.clientY
           );
@@ -2516,20 +2511,21 @@
       .text('Os critérios se sobrepõem: um imóvel pode atender a mais de um.');
   }
 
-  // Tabela da fila de vistoria: inicializa linhas <tr> uma unica vez e reordena via DOM
+  // Lista operacional da fila de vistoria: cria <li> uma vez e reordena via DOM
   function buildCarTableRows() {
-    const tbody = document.getElementById('cf-car-tbody');
-    if (!tbody || !loadedData) return;
+    const listEl = document.getElementById('cf-car-tbody');
+    if (!listEl || !loadedData) return;
 
     const list = loadedData.resumo.car_top50 || [];
-    tbody.innerHTML = list.map((im) => {
+    listEl.innerHTML = list.map((im) => {
       const layersBadges = [];
       if (im.atinge_rl) layersBadges.push('<span class="cf-tbl-tag cf-tag-rl">RL</span>');
       if (im.atinge_app) layersBadges.push('<span class="cf-tbl-tag cf-tag-app">APP</span>');
-      if (im.atinge_uc1km) layersBadges.push('<span class="cf-tbl-tag cf-tag-uc">UC 1 km</span>');
+      if (im.atinge_uc1km) layersBadges.push('<span class="cf-tbl-tag cf-tag-uc">UC 1km</span>');
 
       return `
-        <tr data-cod="${escapeHtml(im.cod_imovel)}"
+        <li class="cf-queue-item"
+            data-cod="${escapeHtml(im.cod_imovel)}"
             data-rank="${im.rank}"
             data-ra="${escapeHtml(im.ra || '')}"
             data-situacao="${escapeHtml(im.situacao)}"
@@ -2539,39 +2535,39 @@
             data-focos_total="${im.focos_total}"
             data-focos_prot="${im.focos_prot}"
             data-search="${escapeHtml((im.cod_imovel + ' ' + im.situacao + ' ' + (im.condicao || '') + ' ' + (im.ra || '')).toLowerCase())}">
-          <td class="cf-chk-col">
+          <div class="cf-queue-chk-cell">
             <input type="checkbox" class="cf-car-chk-input" data-check-car="${escapeHtml(im.cod_imovel)}" aria-label="Selecionar imóvel #${im.rank} (${escapeHtml(im.ra || im.cod_imovel)})"/>
-          </td>
-          <td class="cf-num">${im.rank}</td>
-          <td>
-            <button type="button" class="cf-car-select-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
+          </div>
+          <div class="cf-queue-main">
+            <div class="cf-queue-top">
+              <button type="button" class="cf-queue-focus-btn" data-select-car="${escapeHtml(im.cod_imovel)}" title="${escapeHtml(im.cod_imovel)}">
+                <span class="cf-queue-rank">#${im.rank}</span>
+                <span class="cf-queue-ra">${escapeHtml(im.ra || 'DF')}</span>
+              </button>
+              <span class="cf-indice" title="Índice de prioridade">
+                <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
+                <b>${formatDec(im.indice, 1)}</b>
+              </span>
+            </div>
+            <div class="cf-queue-meta">
+              <span class="cf-sit-pill cf-sit-${escapeHtml(im.situacao)}">${escapeHtml(im.situacao)}</span>
+              <span>${formatDec(im.area_ha, 0)} ha</span>
+              <span>${im.anos_qtd}a · ${formatInt(im.focos_prot)} prot.</span>
               <code>${escapeHtml(shortCod(im.cod_imovel))}</code>
-            </button>
-          </td>
-          <td>${escapeHtml(im.ra || '-')}</td>
-          <td><span class="cf-sit-pill cf-sit-${escapeHtml(im.situacao)}">${escapeHtml(im.situacao)}</span></td>
-          <td class="cf-num">
-            <span class="cf-indice">
-              <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
-              <b>${formatDec(im.indice, 1)}</b>
-            </span>
-          </td>
-          <td class="cf-num">${im.anos_qtd}</td>
-          <td class="cf-num">${formatDec(im.area_ha, 1)}</td>
-          <td class="cf-num">${formatInt(im.focos_total)}</td>
-          <td class="cf-num">${formatInt(im.focos_prot)}</td>
-          <td>${layersBadges.join(' ') || '-'}</td>
-        </tr>
+              ${layersBadges.join('')}
+            </div>
+          </div>
+        </li>
       `;
     }).join('');
 
-    tbody.querySelectorAll('.cf-car-select-btn').forEach((btn) => {
+    listEl.querySelectorAll('.cf-queue-focus-btn').forEach((btn) => {
       btn.addEventListener('click', function () {
         selectCAR(this.getAttribute('data-select-car'), true);
       });
     });
 
-    tbody.querySelectorAll('.cf-car-chk-input').forEach((chk) => {
+    listEl.querySelectorAll('.cf-car-chk-input').forEach((chk) => {
       chk.addEventListener('change', function () {
         const cod = this.getAttribute('data-check-car');
         if (this.checked) state.checkedCars.add(cod);
@@ -2584,40 +2580,26 @@
   }
 
   function setupTableSorting() {
-    const headers = document.querySelectorAll('#cf-car-table th[data-sort]');
-    headers.forEach((th) => {
-      const btn = th.querySelector('button.cf-sort-btn');
-      if (!btn || btn.dataset.bound === 'true') return;
-      btn.dataset.bound = 'true';
-      btn.addEventListener('click', function () {
-        const col = th.getAttribute('data-sort');
-        if (state.sortCol === col) {
-          state.sortDir = (state.sortDir === 'asc') ? 'desc' : 'asc';
-        } else {
-          state.sortCol = col;
-          state.sortDir = (th.getAttribute('data-type') === 'number') ? 'desc' : 'asc';
-        }
+    const sel = document.getElementById('cf-car-sort-select');
+    if (sel && sel.dataset.bound !== 'true') {
+      sel.dataset.bound = 'true';
+      sel.addEventListener('change', function () {
+        const parts = String(this.value || 'rank:asc').split(':');
+        state.sortCol = parts[0] || 'rank';
+        state.sortDir = parts[1] || 'asc';
         updateCarTable();
       });
-    });
+    }
   }
 
   function updateCarTable() {
-    const tbody = document.getElementById('cf-car-tbody');
-    if (!tbody || !loadedData) return;
+    const listEl = document.getElementById('cf-car-tbody');
+    if (!listEl || !loadedData) return;
 
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-    const thActive = document.querySelector(`#cf-car-table th[data-sort="${state.sortCol}"]`);
-    const dataType = thActive ? thActive.getAttribute('data-type') : 'number';
+    const rows = Array.from(listEl.querySelectorAll('li.cf-queue-item'));
+    const numericCols = new Set(['rank', 'indice', 'anos_qtd', 'area_ha', 'focos_total', 'focos_prot']);
+    const dataType = numericCols.has(state.sortCol) ? 'number' : 'string';
     const mult = (state.sortDir === 'asc') ? 1 : -1;
-
-    document.querySelectorAll('#cf-car-table th[data-sort]').forEach((th) => {
-      if (th.getAttribute('data-sort') === state.sortCol) {
-        th.setAttribute('aria-sort', state.sortDir === 'asc' ? 'ascending' : 'descending');
-      } else {
-        th.removeAttribute('aria-sort');
-      }
-    });
 
     rows.sort((a, b) => {
       const av = a.getAttribute('data-' + state.sortCol) || '';
@@ -2628,7 +2610,7 @@
       return av.localeCompare(bv, 'pt-BR') * mult;
     });
 
-    // Reordena nos <tr> existentes sem reconstruir o DOM via innerHTML
+    // Reordena nos <li> existentes sem reconstruir o DOM via innerHTML
     const searchTerm = state.carSearch.trim().toLowerCase();
     const sitFilter = state.situacao !== 'todos' ? state.situacao : null;
     let visibleCount = 0;
@@ -2650,10 +2632,10 @@
         if (isChecked) checkedVisibleCount += 1;
       }
 
-      if (typeof tbody.moveBefore === 'function') {
-        tbody.moveBefore(row, null);
+      if (typeof listEl.moveBefore === 'function') {
+        listEl.moveBefore(row, null);
       } else {
-        tbody.appendChild(row);
+        listEl.appendChild(row);
       }
     });
 
@@ -2673,9 +2655,21 @@
     if (btnNone) btnNone.classList.toggle('is-active', state.checkedCars.size === 0);
     if (btnFit) btnFit.disabled = (state.checkedCars.size === 0);
 
+    const selSummary = document.getElementById('cf-queue-sel-summary');
+    if (selSummary) {
+      selSummary.textContent = state.checkedCars.size > 0
+        ? `${state.checkedCars.size} marcados filtrando o painel`
+        : 'Nenhum marcado · DF completo (38.945 focos)';
+    }
+
+    const visCountEl = document.getElementById('cf-queue-vis-count');
+    if (visCountEl) {
+      visCountEl.textContent = `${visibleCount} de ${rows.length} exibidos`;
+    }
+
     const stEl = document.getElementById('cf-table-status');
     if (stEl) {
-      stEl.textContent = `${visibleCount} de ${rows.length} imóveis exibidos; ${state.checkedCars.size} marcados filtrando o painel; ordenado por ${state.sortCol} (${state.sortDir}).`;
+      stEl.textContent = `${visibleCount} de ${rows.length} imóveis exibidos; ${state.checkedCars.size} marcados filtrando o painel.`;
     }
   }
 
@@ -2743,6 +2737,20 @@
     });
   }
 
+  function renderActiveTemporalChart() {
+    if (state.temporalTab === 'mensal') renderMensalChart();
+    else if (state.temporalTab === 'heatmap') renderHeatmapChart();
+    else renderAnualChart();
+  }
+
+  function renderDeepChartsIfOpen() {
+    const deep = document.getElementById('cf-deep-details');
+    if (!deep || deep.open) {
+      renderSensorOrSubdailyChart();
+      renderCarAnalyticsChart();
+    }
+  }
+
   function refreshAll(refitProjection) {
     if (!loadedData) return;
     filterAndAggregate();
@@ -2750,12 +2758,9 @@
     renderFilterChips();
     updateInspector(null);
     renderD3Map(Boolean(refitProjection));
-    renderAnualChart();
-    renderHeatmapChart();
-    renderMensalChart();
-    renderSensorOrSubdailyChart();
+    renderActiveTemporalChart();
     renderUcsRankingChart();
-    renderCarAnalyticsChart();
+    renderDeepChartsIfOpen();
     updateCarTable();
     syncLeafletBridge();
     announceStatus(`${formatInt(currentAgg.total)} focos correspondem aos filtros ativos.`);
@@ -3055,11 +3060,84 @@
       if (cb) {
         cb.addEventListener('change', function () {
           state.layers[key] = this.checked;
+          syncControlsFromState();
           renderD3Map(false);
           if (window.CFLeafletBridge) window.CFLeafletBridge.setLayersVisible(state.layers);
         });
       }
     });
+
+    const btnAdv = document.getElementById('cf-btn-adv-filters');
+    const advDrawer = document.getElementById('cf-adv-drawer');
+    if (btnAdv && advDrawer) {
+      btnAdv.addEventListener('click', function () {
+        const nextOpen = advDrawer.hidden;
+        advDrawer.hidden = !nextOpen;
+        btnAdv.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+      });
+    }
+
+    const btnLayers = document.getElementById('cf-btn-layers');
+    const layerPopover = document.getElementById('cf-layer-popover');
+    if (btnLayers && layerPopover) {
+      btnLayers.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const nextOpen = layerPopover.hidden;
+        layerPopover.hidden = !nextOpen;
+        btnLayers.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+      });
+      document.addEventListener('click', function (e) {
+        if (!layerPopover.hidden && !layerPopover.contains(e.target) && e.target !== btnLayers) {
+          layerPopover.hidden = true;
+          btnLayers.setAttribute('aria-expanded', 'false');
+        }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !layerPopover.hidden) {
+          layerPopover.hidden = true;
+          btnLayers.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    const tempTablist = document.getElementById('cf-temporal-tablist');
+    if (tempTablist) {
+      const tempTabs = Array.from(tempTablist.querySelectorAll('[role="tab"]'));
+      const activateTempTab = (tabKey) => {
+        state.temporalTab = tabKey;
+        tempTabs.forEach((b) => {
+          const active = b.getAttribute('data-temporal-tab') === tabKey;
+          b.classList.toggle('is-active', active);
+          b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        ['anual', 'mensal', 'heatmap'].forEach((k) => {
+          const p = document.getElementById('panel-temp-' + k);
+          if (p) p.hidden = (k !== tabKey);
+        });
+        renderActiveTemporalChart();
+      };
+      tempTabs.forEach((tab, idx) => {
+        tab.addEventListener('click', () => activateTempTab(tab.getAttribute('data-temporal-tab')));
+        tab.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const next = e.key === 'ArrowRight' ? tempTabs[(idx + 1) % tempTabs.length] : tempTabs[(idx - 1 + tempTabs.length) % tempTabs.length];
+            next.focus();
+            next.click();
+          }
+        });
+      });
+    }
+
+    const deepDetails = document.getElementById('cf-deep-details');
+    if (deepDetails) {
+      deepDetails.addEventListener('toggle', function () {
+        if (this.open) {
+          renderSensorOrSubdailyChart();
+          renderCarAnalyticsChart();
+        }
+      });
+    }
 
     // Alternadores internos dos cards de graficos
     document.querySelectorAll('[data-anual-mode]').forEach((btn) => {
@@ -3113,9 +3191,9 @@
     const masterChk = document.getElementById('cf-car-check-all');
     if (masterChk) {
       masterChk.addEventListener('change', function () {
-        const tbody = document.getElementById('cf-car-tbody');
-        if (!tbody) return;
-        const rows = tbody.querySelectorAll('tr');
+        const listEl = document.getElementById('cf-car-tbody');
+        if (!listEl) return;
+        const rows = listEl.querySelectorAll('li.cf-queue-item');
         rows.forEach((row) => {
           if (row.hidden) return;
           const cod = row.getAttribute('data-cod');
@@ -3229,12 +3307,9 @@
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
               renderD3Map(true);
-              renderAnualChart();
-              renderHeatmapChart();
-              renderMensalChart();
-              renderSensorOrSubdailyChart();
+              renderActiveTemporalChart();
               renderUcsRankingChart();
-              renderCarAnalyticsChart();
+              renderDeepChartsIfOpen();
             }, 90);
           });
           resizeObserver.observe(root);
