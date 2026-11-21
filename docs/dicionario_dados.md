@@ -190,6 +190,76 @@ Visão materializada relacional na camada Gold do banco PostgreSQL (migração `
 
 ---
 
+### 1.8 `dim_regiao_administrativa`
+
+Dimensão territorial oficial das Regiões Administrativas do Distrito Federal carregada da IDE-DF / SEDUH.
+
+- **Granularidade:** uma linha por Região Administrativa do DF (`37` linhas).
+- **Tipo de Objeto:** Tabela física dbt (`gold.dim_regiao_administrativa`).
+
+| Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
+| :--- | :--- | :--- | :--- | :--- |
+| `sk_regiao_administrativa` | `VARCHAR(32)` | PK / NOT NULL | Chave substituta determinística (`md5(codigo)`). | `stg_regioes_administrativas` |
+| `codigo` | `VARCHAR` | Chave Natural / UNIQUE / NOT NULL | Código oficial no padrão `RA-<algarismos romanos>` (ex.: `RA-VI`). | IDE-DF / SEDUH |
+| `nome` | `VARCHAR` | Atributo / NOT NULL | Nome oficial da Região Administrativa. | IDE-DF / SEDUH |
+| `area_km2` | `DOUBLE` | Métrica | Área territorial em km² calculada sobre geometria em `EPSG:31983`. | `ST_Area(geom) / 1000000` |
+| `data_download` | `DATE` | Metadado | Data de obtenção do recorte na IDE-DF. | Metadado de extração |
+| `geom` | `GEOMETRY` | Espacial / NOT NULL | Polígono `MultiPolygon` em `EPSG:31983`. | `stg_regioes_administrativas.geom` |
+
+---
+
+### 1.9 `fct_reincidencia_imovel`
+
+Tabela fato da pergunta de gestão no grão do imóvel rural, reunindo contagens e componentes do Índice de Prioridade de Vistoria ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)). Reconciliada com a visão materializada do PostGIS por `tests/reconcilia_fato_imovel_com_mv_postgis.sql`.
+
+- **Granularidade:** uma linha por imóvel rural (`cod_imovel`) com ao menos um foco em área protegida (`4.068` imóveis no total; `1.593` reincidentes com `>= 2` anos).
+- **Tipo de Objeto:** Tabela física dbt (`gold.fct_reincidencia_imovel`).
+
+| Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
+| :--- | :--- | :--- | :--- | :--- |
+| `sk_imovel` | `VARCHAR(32)` | FK / NOT NULL | Versão SCD2 do imóvel vigente na data do foco mais recente. | `dim_imovel_car.sk_imovel` |
+| `cod_imovel` | `VARCHAR(60)` | PK / UNIQUE / NOT NULL | Código identificador do imóvel no SICAR. | `int_metricas_imovel.cod_imovel` |
+| `sk_regiao_administrativa` | `VARCHAR(32)` | FK / NOT NULL | Região Administrativa de um ponto interno do imóvel. | `dim_regiao_administrativa` |
+| `area_ha` | `DOUBLE` | Métrica | Área declarada do imóvel na versão `sk_imovel`, em hectares. | `dim_imovel_car.area_ha` |
+| `anos_com_foco` | `INTEGER` | Métrica / NOT NULL | Quantidade de anos civis UTC distintos (2015 a 2025) com foco protegido. | `int_metricas_imovel` |
+| `primeiro_ano_com_foco`, `ultimo_ano_com_foco` | `INTEGER` | Métrica / NOT NULL | Primeiro e último ano civil UTC com foco protegido no imóvel. | `int_metricas_imovel` |
+| `lista_anos` | `INTEGER[]` | Métrica / NOT NULL | Vetor ordenado dos anos distintos com foco em área protegida. | `int_metricas_imovel` |
+| `total_focos`, `dias_com_foco` | `INTEGER` | Métrica / NOT NULL | Detecções distintas e dias locais distintos com foco em área protegida. | `int_metricas_imovel` |
+| `focos_satelite_referencia`, `focos_estacao_seca` | `INTEGER` | Métrica / NOT NULL | Contagem no sensor de referência (`AQUA_M-T`) e na seca (maio a setembro). | `int_metricas_imovel` |
+| `focos_reserva_legal`, `focos_app`, `focos_uc_1km` | `INTEGER` | Métrica / NOT NULL | Contagens por critério territorial protegido. | `int_metricas_imovel` |
+| `atinge_reserva_legal`, `atinge_app`, `atinge_uc_1km` | `BOOLEAN` | Flag / NOT NULL | Marcas booleanas para cada um dos três critérios da pergunta. | `int_metricas_imovel` |
+| `imovel_reincidente` | `BOOLEAN` | Regra / NOT NULL | Verdadeiro quando `anos_com_foco >= 2`. | `dbt_project.yml` (`anos_minimos_reincidencia`) |
+| `dias_com_foco_por_100ha` | `DOUBLE` | Métrica | `dias_com_foco / max(area_ha, 14.1) * 100` (nulo fora dos reincidentes). | `int_indice_prioridade_imovel` |
+| `componente_recorrencia`, `componente_recencia`, `componente_intensidade` | `DOUBLE` | Métrica (0 a 1) | Parcelas normalizadas do IPV para reincidentes. | `int_indice_prioridade_imovel` |
+| `indice_prioridade` | `DOUBLE` | Métrica (0 a 100) | Índice composto de vistoria (`0,4 * rec + 0,3 * recent + 0,3 * int`). | `int_indice_prioridade_imovel` |
+| `classificacao_prioridade` | `VARCHAR` | Categoria / NOT NULL | Quartil do IPV (`PRIORIDADE CRITICA`, `ALTA`, `MEDIA`, `BAIXA`) ou `NAO REINCIDENTE`. | `int_indice_prioridade_imovel` |
+
+---
+
+### 1.10 `painel_imoveis_prioritarios` e retrato `gold.json`
+
+Tabela de consumo com contrato de esquema aplicado no dbt (`contract: enforced: true`) e origem única do retrato estático `docs/assets/dados_dashboard/gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
+
+- **Granularidade:** uma linha por imóvel rural reincidente presente no cadastro atual (`1.593` linhas), ordenada por `posicao`.
+- **Tipo de Objeto:** Tabela física dbt (`gold.painel_imoveis_prioritarios`) exportada para JSON (`187,0 KB`, top 50 com geometrias simplificadas a 60 m + agregados).
+
+| Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
+| :--- | :--- | :--- | :--- | :--- |
+| `posicao` | `INTEGER` | PK / UNIQUE / NOT NULL | Posição na fila de vistoria (`1` = maior prioridade), com desempate determinístico. | `row_number() over (order by indice_prioridade desc, ...)` |
+| `cod_imovel` | `VARCHAR` | PK / UNIQUE / FK / NOT NULL | Código do imóvel no SICAR vinculado a `fct_reincidencia_imovel`. | `fct_reincidencia_imovel.cod_imovel` |
+| `codigo_regiao_administrativa`, `regiao_administrativa` | `VARCHAR` | Atributo / NOT NULL (nome) | Código `RA-...` e nome da Região Administrativa do imóvel. | `dim_regiao_administrativa` |
+| `situacao`, `cadastro_ativo`, `condicao` | `VARCHAR` / `BOOLEAN` | Atributo / NOT NULL (`cadastro_ativo`) | Situação cadastral (`AT`, `PE`, `SU`, `CA`), indicador `situacao = 'AT'` e condição SICAR. | `dim_imovel_car` |
+| `area_ha` | `DOUBLE` | Métrica | Área declarada do imóvel em hectares. | `fct_reincidencia_imovel.area_ha` |
+| `classificacao_prioridade`, `indice_prioridade` | `VARCHAR` / `DOUBLE` | Categoria / Métrica / NOT NULL | Quartil de prioridade e pontuação IPV (0 a 100). | `fct_reincidencia_imovel` |
+| `componente_recorrencia`, `componente_recencia`, `componente_intensidade` | `DOUBLE` | Métrica | Parcelas individuais do IPV (0 a 1). | `fct_reincidencia_imovel` |
+| `anos_com_foco`, `primeiro_ano_com_foco`, `ultimo_ano_com_foco`, `lista_anos` | `INTEGER` / `INTEGER[]` | Métrica | Quantidade, limites e vetor cronológico de anos com foco protegido. | `fct_reincidencia_imovel` |
+| `total_focos`, `dias_com_foco`, `dias_com_foco_por_100ha` | `INTEGER` / `DOUBLE` | Métrica | Contagens e densidade normalizada por 100 ha (piso 14,1 ha). | `fct_reincidencia_imovel` |
+| `focos_satelite_referencia`, `focos_estacao_seca`, `focos_reserva_legal`, `focos_app`, `focos_uc_1km` | `INTEGER` | Métrica | Recortes por sensor de referência, estação seca e área protegida. | `fct_reincidencia_imovel` |
+| `atinge_reserva_legal`, `atinge_app`, `atinge_uc_1km` | `BOOLEAN` | Flag | Indicadores por critério espacial. | `fct_reincidencia_imovel` |
+| `gerado_em` | `TIMESTAMPTZ` | SLA / NOT NULL | Instante UTC do `dbt build` monitorado pelo *asset check* `frescor_sla` (`<= 30 h`). | `now()` no momento da build |
+
+---
+
 ## 2. Camada Silver (Armazenamento Aberto em Formato Delta Lake)
 
 A camada Silver consolida os dados na arquitetura Lakehouse aberta sob formato Delta Lake (`data/delta/`), desacoplando o armazenamento analítico do processamento transacional. Suas estruturas são regidas pelo contrato declarativo versionado [`contrato_tabela_aberta.yaml`](modelagem/contrato_tabela_aberta.yaml).
@@ -394,11 +464,11 @@ Catálogo dos sensores orbitais suportados na ingestão do BDQueimadas.
 
 A tabela a seguir resume o ciclo de transformação de cada dado entre os sistemas da plataforma:
 
-| Dado / Conceito | Camada Bronze (PostgreSQL) | Camada Silver (Delta Lake) | Camada Gold (dbt / Dimensional) |
-| :--- | :--- | :--- | :--- |
-| **Focos de Calor** | `public.foco_calor` (somente inserção) | `foco_calor_analitico` (partição ano/mês) | `fato_foco_calor` (grão atômico com SKs) |
-| **Imóveis Rurais** | `public.imovel_car` (snapshot fundiário) | `imovel_car_analitico` (CDC com LSN) | `dim_imovel_car` (SCD Tipo 2 com vigência) |
-| **Áreas Protegidas** | `unidade_conservacao`, `reserva_legal`, `app` | Consultas federadas ao PostGIS / Delta | `dim_territorio` (UC, APP e RL unificadas) |
-| **Tempo e Calendário** | `data_hora_evento` nas tabelas | `ano`, `mes` particionados em UTC | `dim_tempo` (grão diário com `is_estacao_seca`) |
-| **Satélites** | `public.satelite` (com índice parcial) | Colunas `satelite`, `is_satelite_referencia` | `dim_satelite` (MD5 estável e flag) |
-| **Resposta de Gestão** | `gold.mv_imoveis_reincidentes_areas_protegidas` | - | `mart_reincidencia_imovel_ano` (imóvel × ano) |
+| Dado / Conceito | Camada Bronze (PostgreSQL) | Camada Silver (Delta Lake) | Camada Gold (dbt / Dimensional) | Consumo e Entrega |
+| :--- | :--- | :--- | :--- | :--- |
+| **Focos de Calor** | `public.foco_calor` (somente inserção) | `foco_calor_analitico` (partição ano/mês) | `fato_foco_calor` (grão atômico com SKs) | `focos.json` e `resumo.json` |
+| **Imóveis Rurais** | `public.imovel_car` (snapshot fundiário) | `imovel_car_analitico` (CDC com LSN) | `dim_imovel_car` (SCD Tipo 2 com vigência) | `car_top50_geoms` em `gold.json` |
+| **Áreas Protegidas e RAs** | `unidade_conservacao`, `reserva_legal`, `app`, `regiao_administrativa` | Camadas padronizadas e `ST_Subdivide` / `stg_*` | `dim_territorio` e `dim_regiao_administrativa` | `geometrias.json` e filtro RA no painel |
+| **Tempo e Calendário** | `data_hora_evento` nas tabelas | `ano`, `mes` particionados em UTC | `dim_tempo` (grão diário com `is_estacao_seca`) | Séries anuais/mensais no painel |
+| **Satélites** | `public.satelite` (com índice parcial) | Colunas `satelite`, `is_satelite_referencia` | `dim_satelite` (MD5 estável e flag) | Comparação de sensores e `AQUA_M-T` |
+| **Resposta de Gestão e Fila** | `gold.mv_imoveis_reincidentes_areas_protegidas` | Integrações `int_focos_protegidos_imovel`, `int_metricas` e `int_indice` | `fct_reincidencia_imovel`, `mart_reincidencia_imovel_ano` e `painel_imoveis_prioritarios` | `gold.json` (`187,0 KB`, SLA `30 h`) e `analyses/` SQL |

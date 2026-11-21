@@ -8,7 +8,28 @@ Registro cronológico reverso das atividades, decisões técnicas, entregas e ma
 
 ---
 
-## 1. Entrega 3: Modelagem Dimensional, Transformação e Orquestração
+## 1. Entrega 4: Disponibilização, Arquitetura, Metodologia e Painel Operacional
+
+A etapa final consolidou a arquitetura de consumo estático ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)), a visualização interativa de linhagem de dados, a documentação metodológica e a revisão de usabilidade do dashboard operacional ([`docs/entrega/04/README.md`](entrega/04/README.md)).
+
+### Semanas 15 e 16 (14/11 a 21/11/2026): Contrato de Consumo, Usabilidade do Painel e Fechamento
+
+- **Arquitetura e Linhagem (`Gabriel Souza` e `Manoel Felipe`):** substituição do diagrama Mermaid estático por componente interativo em colunas com rastreamento upstream/downstream e busca de modelos (`docs/javascripts/arquitetura_diagrama.js`), compartilhado via snippet entre Entrega 3, Entrega 4, Metodologia e Esquema Gold.
+- **Metodologia (`Elias F.` e `Gabriel Fernando`):** reorganização da nota metodológica para página dedicada ([Metodologia](metodologia.md)), separando explicações conceituais e fontes da interface operacional do painel.
+- **Dashboard Operacional e ADR 0004 (`João V. Farias` e `Samuel Ribeiro`):**
+  - Renumeração do Índice de Prioridade de Vistoria para [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md) e fechamento do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) com medições em `scripts/benchmark/benchmark_disponibilizacao.py`.
+  - Redesenho do [Dashboard](dashboard.md) para abrir diretamente com a pergunta, resposta e mapas, filtros abaixo do palco espacial, remoção de termos de infraestrutura da tela, seletores por checkbox na fila de vistoria (5 primeiros marcados por padrão) e correções de interação/zoom no Leaflet e no filtro de camadas.
+  - Atualização do [Dicionário de Dados](dicionario_dados.md) incluindo `dim_regiao_administrativa`, `fct_reincidencia_imovel`, `painel_imoveis_prioritarios` e `gold.json`.
+
+### Retrospectiva do Ciclo de Vida (E1 a E4)
+
+- **Gatilho de revisão acionado:** na E1, o [ADR 0001](adr/01-adotar-postgresql-com-postgis-camada-gold.md) previu revisão caso consultas analíticas passassem de `5 s`. O join espacial bruto em `41,8 s` (e `4,6 s` na MV `V7`) disparou a transição planejada para Delta Lake + DuckDB (`5,0 ms` na tabela de consumo Gold e `187,0 KB` em `gold.json`).
+- **O que sustentou a reprodutibilidade:** pipeline conteinerizado em perfis do `docker-compose.yml`, chaves substitutas determinísticas em MD5/SHA-256 sem dependência de sequência, 189 nós aprovados no `dbt build` (incluindo testes sazonais/espaciais contra erros silenciosos e reconciliação contra a MV do PostGIS) e verificação horária de frescor no Dagster.
+- **Limites assumidos ao fim da E4:** não foram implementadas gravação reversa automatizada em tabela transacional do PostgreSQL nem políticas de controle de acesso `ROLE`/RLS no warehouse, e o recorte de polígonos do mapa estático cobre os 50 primeiros imóveis priorizados pelo IPV. Esses pontos estão documentados com limiares claros nos gatilhos do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md).
+
+---
+
+## 2. Entrega 3: Modelagem Dimensional, Transformação e Orquestração
 
 O ciclo da Entrega 3 (Semanas 11 a 14) transformou a plataforma em uma estrutura analítica de consumo com modelo dimensional em estrela, histórico cadastral em SCD Tipo 2, transformações declarativas no dbt-duckdb, testes de dados focados em erros silenciosos, orquestração com Dagster e exploração geoespacial interativa.
 
@@ -101,7 +122,7 @@ Fase inicial da Entrega 3, focada em desenhar o esquema analítico, configurar o
 
 ---
 
-## 2. Entrega 2: Ingestão em Formato Aberto, Lakehouse e CDC
+## 3. Entrega 2: Ingestão em Formato Aberto, Lakehouse e CDC
 
 O ciclo da Entrega 2 (Semanas 7 a 10) estabeleceu o armazenamento analítico em Delta Lake desacoplado do banco de dados relacional, implementou a ingestão em lote idempotente de dados climáticos e construiu o consumidor de Change Data Capture para dados cadastrais mutáveis.
 
@@ -145,16 +166,16 @@ Ciclo de transição dedicado a incorporar os apontamentos da banca da Entrega 1
 
 ---
 
-## 3. Matriz de Contribuições por Integrante
+## 4. Matriz de Contribuições por Integrante
 
-Resumo das frentes de liderança técnica assumidas por cada membro da equipe nas Entregas 2 e 3:
+Resumo das frentes de liderança técnica assumidas por cada membro da equipe nas Entregas 2, 3 e 4:
 
-| Integrante | Entrega 2 (Lakehouse e CDC) | Entrega 3 (Dimensional, dbt e Dagster) | Issue E3 |
-| :--- | :--- | :--- | :---: |
-| **Gabriel Souza** | Coordenação e Arquitetura | Coordenação, Pergunta de Gestão e Checklist | [#17](https://github.com/BeyondMagic/corta-fogo-df/issues/17) |
-| **Manoel Felipe** | Modelagem da Tabela Aberta (Delta) | Modelagem Dimensional Gold e Granularidades | [#18](https://github.com/BeyondMagic/corta-fogo-df/issues/18) |
-| **Samuel Ribeiro** | Mutações OLTP e Artefatos de Teste | Dimensão SCD Tipo 2 e Snapshot Cadastral | [#19](https://github.com/BeyondMagic/corta-fogo-df/issues/19) |
-| **Gabriel Fernando** | Consumidor CDC e Replicação Lógica | Projeto dbt-duckdb, Staging e Intermediate | [#20](https://github.com/BeyondMagic/corta-fogo-df/issues/20) |
-| **Elias F.** | Benchmarks e Semântica de Entrega | Testes de Dados e Detecção de Erros Silenciosos | [#21](https://github.com/BeyondMagic/corta-fogo-df/issues/21) |
-| **Cláudio Henrique** | Infraestrutura e Suporte ao Lakehouse | Orquestração com Dagster, Retry e Backfill | [#22](https://github.com/BeyondMagic/corta-fogo-df/issues/22) |
-| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Dashboard e Dicionário de Dados | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |
+| Integrante | Entrega 2 (Lakehouse e CDC) | Entrega 3 (Dimensional, dbt e Dagster) | Entrega 4 (Arquitetura, Metodologia e Painel) | Issue E3 |
+| :--- | :--- | :--- | :--- | :---: |
+| **Gabriel Souza** | Coordenação e Arquitetura | Coordenação, Pergunta de Gestão e Checklist | Arquitetura em Camadas | [#17](https://github.com/BeyondMagic/corta-fogo-df/issues/17) |
+| **Manoel Felipe** | Modelagem da Tabela Aberta (Delta) | Modelagem Dimensional Gold e Granularidades | Arquitetura em Camadas | [#18](https://github.com/BeyondMagic/corta-fogo-df/issues/18) |
+| **Samuel Ribeiro** | Mutações OLTP e Artefatos de Teste | Dimensão SCD Tipo 2 e Snapshot Cadastral | Dashboard Operacional | [#19](https://github.com/BeyondMagic/corta-fogo-df/issues/19) |
+| **Gabriel Fernando** | Consumidor CDC e Replicação Lógica | Projeto dbt-duckdb, Staging e Intermediate | Metodologia | [#20](https://github.com/BeyondMagic/corta-fogo-df/issues/20) |
+| **Elias F.** | Benchmarks e Semântica de Entrega | Testes de Dados e Detecção de Erros Silenciosos | Metodologia | [#21](https://github.com/BeyondMagic/corta-fogo-df/issues/21) |
+| **Cláudio Henrique** | Infraestrutura e Suporte ao Lakehouse | Orquestração com Dagster, Retry e Backfill | - | [#22](https://github.com/BeyondMagic/corta-fogo-df/issues/22) |
+| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Dashboard e Dicionário de Dados | Dashboard Operacional e ADR 0004 | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |

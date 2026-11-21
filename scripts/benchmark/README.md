@@ -38,3 +38,11 @@ Para executar o benchmark do MongoDB via Docker:
 ```bash
 docker compose -f scripts/benchmark/mongodb/docker-compose.mongo.yml up --build
 ```
+
+## Disponibilização e retrato de consumo (ADR 0004)
+
+`benchmark_disponibilizacao.py` compara sobre os arquivos versionados do repositório (e contra DuckDB/PostgreSQL ao vivo quando ativos) o tamanho entregue, a contagem de vértices e a latência de leitura/serialização entre a opção nula em CSV + MV PostGIS (`docs/explain/`), consulta direta ao DuckDB e o retrato estático `docs/assets/dados_dashboard/gold.json`.
+
+```bash
+python3 scripts/benchmark/benchmark_disponibilizacao.py --iteracoes 30
+```
