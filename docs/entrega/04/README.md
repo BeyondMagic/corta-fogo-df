@@ -69,15 +69,23 @@ O [Dashboard](../../dashboard.md) foi redesenhado para reduzir densidade visual 
 
 <p class="apresentador"><em>Apresentação: João V. Farias</em></p>
 
-Consolidação das cinco decisões estruturais do projeto ao longo das entregas E1 a E4:
+**ADR 0004 (Disponibilização):** publicar `painel_imoveis_prioritarios` via retrato estático `gold.json` (`187,0 KB`, top 50 simplificado) sob SLA de `30 h`, sem backend em produção.
 
-| ADR | Decisão | Gatilho de revisão definido | Situação na E4 |
+| Alternativa | Entrega | Latência medida | Limite |
 | :--- | :--- | :--- | :--- |
-| [**0001**](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md) | PostgreSQL 16 com PostGIS em `EPSG:31983` como banco principal | Carga `> 1 h` ou consulta analítica `> 5 s` | **Gatilho disparado na E1** (`41,8 s` no join espacial bruto e `4,6 s` na MV `V7`): motivou o descarregamento analítico para Lakehouse + DuckDB na E2/E3. |
-| [**0002**](../../adr/02-mecanismo-de-ingestao-e-formato-aberto.md) | Ingestão híbrida (Lote para focos + CDC WAL para CAR) em Delta Lake (`ZSTD`) | INPE subminuto, catálogo multi-motor ou WAL próximo de `2 GB` | Ativo dentro dos limites; partições `ano/mes` com `ZSTD` a `0,09 MB` na partição de referência. |
-| [**0003**](../../adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md) | Esquema estrela (`fato_foco_calor` + SCD2) em `dbt-duckdb` com Dagster | Volume `> 50 GB`, mais de 10 domínios ou stream `< 10 s` | Ativo (`1,8 MB` na fato atômica em Parquet, `5,0 ms` na consulta SQL Gold). |
-| [**0004**](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) | Contrato dbt (`painel_imoveis_prioritarios`) + retrato JSON estático (`gold.json`) | `gold.json > 2 MB`, SLA `< 6 h` ou consumidor transacional externo | **Aceito na E4** (`187,0 KB`, parse em `2,29 ms`, SLA monitorado de `30 h`). |
-| [**0005**](../../adr/05-indice-de-prioridade-de-vistoria.md) | Índice de Prioridade de Vistoria (`0,4 / 0,3 / 0,3`, piso `14,1 ha`) | Mudança de pesos pela fiscalização ou entrada de dado de cicatriz de fogo | Ativo e versionado em `transformacao/dbt_project.yml`. |
+| **A. Opção nula** (PostGIS `V9` / CSV) | `6,6 KB` (CSV) | `2.481,7 ms` (`V9`) / `0,17 ms` (CSV) | Sem geometrias no CSV; exige PostGIS |
+| **B. API / Federação DuckDB** | Sob demanda | `5,0 ms` (tabular SQL) | Servidor ativo; lock na carga diária |
+| **C. Contrato dbt + `gold.json`** | **187,0 KB** (`35,9 KB` gzip) | **2,29 ms** (parse JSON) | Fila no mapa limitada ao top 50 |
+
+### Gatilhos de revisão dos 5 ADRs
+
+| ADR | Decisão | Gatilho de revisão | Estado |
+| :--- | :--- | :--- | :--- |
+| [**0001**](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md) | PostGIS (`EPSG:31983`) | Carga `> 1 h` ou consulta `> 5 s` | **Disparado na E1** (`41,8 s` -> DuckDB) |
+| [**0002**](../../adr/02-mecanismo-de-ingestao-e-formato-aberto.md) | Lote + CDC em Delta (`ZSTD`) | INPE `< 1 min` ou WAL `> 2 GB` | Nos limites (`0,09 MB`/partição) |
+| [**0003**](../../adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md) | Estrela + SCD2 (`dbt-duckdb`) | Volume `> 50 GB` ou `> 10` domínios | Nos limites (`5,0 ms` na Gold) |
+| [**0004**](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) | Contrato dbt + `gold.json` | `gold.json > 2 MB` ou SLA `< 6 h` | **Aceito na E4** (`187,0 KB`, `2,29 ms`) |
+| [**0005**](../../adr/05-indice-de-prioridade-de-vistoria.md) | IPV (`0,4 / 0,3 / 0,3`, piso `14,1 ha`) | Novos pesos ou dado de cicatriz | Ativo em `dbt_project.yml` |
 
 ---
 
@@ -85,11 +93,10 @@ Consolidação das cinco decisões estruturais do projeto ao longo das entregas 
 
 <p class="apresentador"><em>Apresentação: Cláudio Henrique</em></p>
 
-Alinhamento objetivo aos critérios de reprodutibilidade e governança da E4 com base estrita no que existe no repositório:
-
-- **Reprodutibilidade e SLA de frescor (`30 h`):** o ambiente sobe integralmente em máquina limpa via `docker compose up` e perfis `transformacao` e `orquestracao`, com agendamento diário às `03:00` BRT e monitoramento horário no Dagster pelo *asset check* `frescor_sla` (`orquestracao/corta_fogo_dagster/frescor.py` e `src/pipeline/frescor.py`).
-- **Métrica única e consumo duplo:** todas as regras do índice e cortes temporais residem em `transformacao/dbt_project.yml` e no contrato enforçado de `painel_imoveis_prioritarios` (`_marts.yml`), alimentando tanto o painel web (`gold.json`) quanto as análises SQL (`consulta_pergunta_gestao.sql` e `resumo_pergunta_gestao.sql`), sem divergência frente ao PostGIS.
-- **Catálogo e linhagem:** documentação completa das camadas Bronze, Silver, Gold e consumo no [Dicionário de Dados](../../dicionario_dados.md) e no diagrama interativo da Seção 1.
-- **LGPD e dados públicos:** o esquema operacional (`migrations/V2__cadastros_base.sql`) e os scripts de carga (`src/pipeline/load_camadas.py`) descartam CPF, nome e dados de contato do proprietário presentes em formulários originais do SICAR, persistindo apenas o identificador público do imóvel (`cod_imovel` no padrão `DF-...`), `situacao`, `condicao`, `area_ha` e geometrias, cruzados com detecções orbitais sem pessoas do INPE. Mantém-se como cautela documental o risco de reidentificação indireta caso terceiros cruzem o `cod_imovel` ou o perímetro com consultas públicas externas no SICAR.
-- **Retorno operacional e controle de acesso (limites em aberto):** hoje a métrica tratada retorna à operação via `gold.json` consumido no [Dashboard](../../dashboard.md) para seleção de vistorias de campo. O projeto **não** grava uma tabela de fila de volta no PostgreSQL operacional (ETL reverso em banco) nem cria perfis `ROLE` ou *Row-Level Security* no warehouse; ambos estão registrados como limites assumidos e gatilhos de evolução no [ADR 0004](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md).
-- **Retrospectiva do ciclo:** consolidada em [Diário de Bordo](../../diario_de_bordo.md).
+| Critério | Implementação | Evidência / Limite |
+| :--- | :--- | :--- |
+| **Reprodutibilidade e SLA** | Ambiente sobe via `docker compose up` com *asset check* horário `frescor_sla` no Dagster | Ciclo diário `03:00` BRT; limite de `30 h` ([`frescor.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/frescor.py)) |
+| **Métrica única** | Regras em `dbt_project.yml` + contrato `painel_imoveis_prioritarios` | Reconciliado com MV PostGIS; alimenta `gold.json` e `analyses/` |
+| **Catálogo e linhagem** | Bronze, Silver, Gold e consumo documentados ponta a ponta | [Dicionário de Dados](../../dicionario_dados.md) e diagrama da Seção 1 |
+| **LGPD (dados públicos)** | Carga descarta CPF, nome e contato do SICAR; persiste só `cod_imovel` e geometria | Cautela de reidentificação indireta via portal público do SICAR |
+| **Limites assumidos** | Retorno à operação via `gold.json` no painel ([Diário de Bordo](../../diario_de_bordo.md)) | Sem gravação reversa no PostgreSQL nem `ROLE` / RLS no warehouse |
