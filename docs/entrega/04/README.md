@@ -23,7 +23,9 @@ Para alinhar a defesa final (8 a 12 minutos) entre decisão de fiscalização e 
 | :--- | :--- | :--- |
 | **Arquitetura (Bronze, Silver e Gold)** | Gabriel Souza, Manoel Felipe | Linhagem interativa ponta a ponta da fonte ao consumo e papel de cada camada |
 | **Metodologia** | Elias F., Gabriel Fernando | Fontes, padronização `EPSG:31983`, definição única de reincidência, testes e validação contra o PostGIS |
-| **Dashboard Operacional e ADR 0004** | João V. Farias, Samuel Ribeiro | Novo fluxo do painel (mapa + fila selecionável + comparadores), fechamento do [ADR 0004](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) e portfólio de ADRs |
+| **Dashboard Operacional** | Samuel Ribeiro | Novo fluxo do painel (mapa + fila selecionável + comparadores) para priorização em campo |
+| **ADRs (0001 a 0005)** | João V. Farias | Fechamento do [ADR 0004](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md), medições de consumo e revisão dos gatilhos do ciclo |
+| **Governança, SLA e Reprodutibilidade** | Cláudio Henrique | Execução via Docker Compose, monitoramento de frescor no Dagster (`<= 30 h`), catálogo, dados públicos e limites assumidos |
 
 ---
 
@@ -53,7 +55,7 @@ Texto completo em [Metodologia](../../metodologia.md).
 
 ## 3. Dashboard Interativo
 
-<p class="apresentador"><em>Apresentação: João V. Farias e Samuel Ribeiro</em></p>
+<p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
 O [Dashboard](../../dashboard.md) foi redesenhado para reduzir densidade visual e acelerar a triagem de vistorias:
 
@@ -64,6 +66,8 @@ O [Dashboard](../../dashboard.md) foi redesenhado para reduzir densidade visual 
 ---
 
 ## 4. Portfólio de ADRs e Gatilhos de Revisão
+
+<p class="apresentador"><em>Apresentação: João V. Farias</em></p>
 
 Consolidação das cinco decisões estruturais do projeto ao longo das entregas E1 a E4:
 
@@ -77,10 +81,13 @@ Consolidação das cinco decisões estruturais do projeto ao longo das entregas 
 
 ---
 
-## 5. Governança, Escopo de Dados (LGPD) e Limites Assumidos
+## 5. Governança, SLA de Frescor e Limites Assumidos
 
-Alinhamento objetivo aos critérios de governança da E4 com base estrita no que existe no repositório:
+<p class="apresentador"><em>Apresentação: Cláudio Henrique</em></p>
 
+Alinhamento objetivo aos critérios de reprodutibilidade e governança da E4 com base estrita no que existe no repositório:
+
+- **Reprodutibilidade e SLA de frescor (`30 h`):** o ambiente sobe integralmente em máquina limpa via `docker compose up` e perfis `transformacao` e `orquestracao`, com agendamento diário às `03:00` BRT e monitoramento horário no Dagster pelo *asset check* `frescor_sla` (`orquestracao/corta_fogo_dagster/frescor.py` e `src/pipeline/frescor.py`).
 - **Métrica única e consumo duplo:** todas as regras do índice e cortes temporais residem em `transformacao/dbt_project.yml` e no contrato enforçado de `painel_imoveis_prioritarios` (`_marts.yml`), alimentando tanto o painel web (`gold.json`) quanto as análises SQL (`consulta_pergunta_gestao.sql` e `resumo_pergunta_gestao.sql`), sem divergência frente ao PostGIS.
 - **Catálogo e linhagem:** documentação completa das camadas Bronze, Silver, Gold e consumo no [Dicionário de Dados](../../dicionario_dados.md) e no diagrama interativo da Seção 1.
 - **LGPD e dados públicos:** o esquema operacional (`migrations/V2__cadastros_base.sql`) e os scripts de carga (`src/pipeline/load_camadas.py`) descartam CPF, nome e dados de contato do proprietário presentes em formulários originais do SICAR, persistindo apenas o identificador público do imóvel (`cod_imovel` no padrão `DF-...`), `situacao`, `condicao`, `area_ha` e geometrias, cruzados com detecções orbitais sem pessoas do INPE. Mantém-se como cautela documental o risco de reidentificação indireta caso terceiros cruzem o `cod_imovel` ou o perímetro com consultas públicas externas no SICAR.

@@ -16,10 +16,9 @@ A etapa final consolidou a arquitetura de consumo estático ([ADR 0004](adr/04-d
 
 - **Arquitetura e Linhagem (`Gabriel Souza` e `Manoel Felipe`):** substituição do diagrama Mermaid estático por componente interativo em colunas com rastreamento upstream/downstream e busca de modelos (`docs/javascripts/arquitetura_diagrama.js`), compartilhado via snippet entre Entrega 3, Entrega 4, Metodologia e Esquema Gold.
 - **Metodologia (`Elias F.` e `Gabriel Fernando`):** reorganização da nota metodológica para página dedicada ([Metodologia](metodologia.md)), separando explicações conceituais e fontes da interface operacional do painel.
-- **Dashboard Operacional e ADR 0004 (`João V. Farias` e `Samuel Ribeiro`):**
-  - Renumeração do Índice de Prioridade de Vistoria para [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md) e fechamento do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) com medições em `scripts/benchmark/benchmark_disponibilizacao.py`.
-  - Redesenho do [Dashboard](dashboard.md) para abrir diretamente com a pergunta, resposta e mapas, filtros abaixo do palco espacial, remoção de termos de infraestrutura da tela, seletores por checkbox na fila de vistoria (5 primeiros marcados por padrão) e correções de interação/zoom no Leaflet e no filtro de camadas.
-  - Atualização do [Dicionário de Dados](dicionario_dados.md) incluindo `dim_regiao_administrativa`, `fct_reincidencia_imovel`, `painel_imoveis_prioritarios` e `gold.json`.
+- **Dashboard Operacional (`Samuel Ribeiro` e `João V. Farias`):** redesenho do [Dashboard](dashboard.md) para abrir diretamente com a pergunta, resposta e mapas, filtros abaixo do palco espacial, remoção de termos de infraestrutura da tela, seletores por checkbox na fila de vistoria (5 primeiros marcados por padrão) e correções de interação/zoom no Leaflet e no filtro de camadas.
+- **ADRs e Fechamento do Portfólio (`João V. Farias`):** renumeração do Índice de Prioridade de Vistoria para [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md), fechamento do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) com medições reproduzíveis em `scripts/benchmark/benchmark_disponibilizacao.py` e atualização do [Dicionário de Dados](dicionario_dados.md) com `dim_regiao_administrativa`, `fct_reincidencia_imovel`, `painel_imoveis_prioritarios` e `gold.json`.
+- **Governança, SLA de Frescor e Reprodutibilidade (`Cláudio Henrique`):** consolidação da checagem horária do SLA de `30 h` no Dagster (`frescor_sla`), reprodutibilidade do ambiente conteinerizado em máquina limpa e registro dos limites em aberto da E4.
 
 ### Retrospectiva do Ciclo de Vida (E1 a E4)
 
@@ -177,5 +176,5 @@ Resumo das frentes de liderança técnica assumidas por cada membro da equipe na
 | **Samuel Ribeiro** | Mutações OLTP e Artefatos de Teste | Dimensão SCD Tipo 2 e Snapshot Cadastral | Dashboard Operacional | [#19](https://github.com/BeyondMagic/corta-fogo-df/issues/19) |
 | **Gabriel Fernando** | Consumidor CDC e Replicação Lógica | Projeto dbt-duckdb, Staging e Intermediate | Metodologia | [#20](https://github.com/BeyondMagic/corta-fogo-df/issues/20) |
 | **Elias F.** | Benchmarks e Semântica de Entrega | Testes de Dados e Detecção de Erros Silenciosos | Metodologia | [#21](https://github.com/BeyondMagic/corta-fogo-df/issues/21) |
-| **Cláudio Henrique** | Infraestrutura e Suporte ao Lakehouse | Orquestração com Dagster, Retry e Backfill | - | [#22](https://github.com/BeyondMagic/corta-fogo-df/issues/22) |
-| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Dashboard e Dicionário de Dados | Dashboard Operacional e ADR 0004 | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |
+| **Cláudio Henrique** | Infraestrutura e Suporte ao Lakehouse | Orquestração com Dagster, Retry e Backfill | Governança, SLA de Frescor e Reprodutibilidade | [#22](https://github.com/BeyondMagic/corta-fogo-df/issues/22) |
+| **João V. Farias** | Ingestão em Lote e ADR 0002 | ADR 0003, Dashboard e Dicionário de Dados | Portfólio de ADRs (ADR 0004) e Dicionário | [#23](https://github.com/BeyondMagic/corta-fogo-df/issues/23) |
