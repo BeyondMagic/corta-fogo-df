@@ -20,6 +20,7 @@ extra_javascript = [
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "javascripts/mapa_corta_fogo.js",
   "javascripts/dashboard_corta_fogo.js",
+  "javascripts/arquitetura_diagrama.js",
 ]
 
 nav = [
@@ -28,7 +29,8 @@ nav = [
   { "Entregas" = [
     { "Entrega 1" = "entrega/01/README.md" },
     { "Entrega 2" = "entrega/02/README.md" },
-    { "Entrega 3" = "entrega/03/README.md" }
+    { "Entrega 3" = "entrega/03/README.md" },
+    { "Entrega 4" = "entrega/04/README.md" }
   ]},
   { "Decisões de Arquitetura" = [
       { "Visão Geral" = "adr/README.md" },

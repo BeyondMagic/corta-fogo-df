@@ -16,6 +16,12 @@ Camada `gold` no dbt-duckdb (`transformacao/models/marts/`). Estrela em torno da
 | SCD2 no cruzamento | O foco cruza com a **geometria** da versão do imóvel vigente na data do evento (`dbt_valid_from <= data_hora_evento < dbt_valid_to`). Geometria e atributos vêm da mesma versão. |
 | Reincidência | Imóvel com foco em área protegida em pelo menos 2 anos distintos entre 2015 e 2025. |
 
+## Arquitetura em camadas (Bronze, Silver e Gold)
+
+<p class="apresentador"><em>Responsáveis: Gabriel Souza e Manoel Felipe</em></p>
+
+--8<-- "docs/snippets/arquitetura_camadas.md"
+
 ## Diagrama lógico
 
 ```text

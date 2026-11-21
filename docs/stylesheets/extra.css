@@ -1904,3 +1904,345 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Diagrama Interativo de Arquitetura em Camadas (Bronze / Silver / Gold)
+   ========================================================================== */
+.cf-arch-widget {
+  --arch-surface: #ffffff;
+  --arch-surface-alt: #f8fafc;
+  --arch-border: #d0d7de;
+  --arch-border-strong: #94a3b8;
+  --arch-text: #0f172a;
+  --arch-muted: #475569;
+  --arch-bronze: #b45309;
+  --arch-bronze-bg: #fffbeb;
+  --arch-silver: #1d4ed8;
+  --arch-silver-bg: #eff6ff;
+  --arch-gold: #a16207;
+  --arch-gold-bg: #fefce8;
+  --arch-ops: #0f766e;
+  --arch-ops-bg: #f0fdfa;
+  --arch-edge: rgba(100, 116, 139, 0.36);
+
+  margin: 1rem 0 1.4rem;
+  border: 1px solid var(--arch-border);
+  border-radius: 12px;
+  background: var(--arch-surface);
+  color: var(--arch-text);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+}
+
+[data-md-color-scheme="slate"] .cf-arch-widget {
+  --arch-surface: #161b22;
+  --arch-surface-alt: #1c232d;
+  --arch-border: #30363d;
+  --arch-border-strong: #64748b;
+  --arch-text: #e6edf3;
+  --arch-muted: #8b949e;
+  --arch-bronze: #fbbf24;
+  --arch-bronze-bg: rgba(180, 83, 9, 0.16);
+  --arch-silver: #60a5fa;
+  --arch-silver-bg: rgba(29, 78, 216, 0.16);
+  --arch-gold: #facc15;
+  --arch-gold-bg: rgba(161, 98, 7, 0.18);
+  --arch-ops: #2dd4bf;
+  --arch-ops-bg: rgba(15, 118, 110, 0.18);
+  --arch-edge: rgba(148, 163, 184, 0.32);
+}
+
+.cf-arch-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cf-arch-filters,
+.cf-arch-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cf-arch-pill,
+.cf-arch-clear-btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--arch-border-strong);
+  background: var(--arch-surface-alt);
+  color: var(--arch-text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cf-arch-pill.is-active {
+  background: var(--arch-text);
+  color: var(--arch-surface);
+  border-color: var(--arch-text);
+  font-weight: 600;
+}
+
+.cf-arch-search {
+  min-height: 30px;
+  min-width: 210px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--arch-border-strong);
+  background: var(--arch-surface);
+  color: var(--arch-text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.cf-arch-detail {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--arch-border);
+  background: var(--arch-surface-alt);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--arch-muted);
+}
+
+.cf-arch-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--arch-text);
+}
+
+.cf-arch-detail-papel {
+  margin: 4px 0;
+  color: var(--arch-text);
+}
+
+.cf-arch-detail-lin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 0.74rem;
+}
+
+.cf-arch-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+
+.cf-arch-badge--bronze { color: var(--arch-bronze); background: var(--arch-bronze-bg); }
+.cf-arch-badge--silver { color: var(--arch-silver); background: var(--arch-silver-bg); }
+.cf-arch-badge--gold { color: var(--arch-gold); background: var(--arch-gold-bg); }
+.cf-arch-badge--ops { color: var(--arch-ops); background: var(--arch-ops-bg); }
+
+.cf-arch-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.cf-arch-stage {
+  position: relative;
+  min-width: 960px;
+}
+
+.cf-arch-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cf-arch-edge {
+  fill: none;
+  stroke: var(--arch-edge);
+  stroke-width: 1.5;
+  transition: opacity 0.12s ease, stroke-width 0.12s ease;
+}
+
+.cf-arch-edge.is-upstream {
+  stroke: var(--arch-silver);
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.cf-arch-edge.is-downstream {
+  stroke: var(--arch-ops);
+  stroke-width: 2.5;
+  opacity: 1;
+}
+
+.cf-arch-edge.is-dimmed {
+  opacity: 0.12;
+}
+
+.cf-arch-columns {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(175px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.cf-arch-col {
+  border: 1px solid var(--arch-border);
+  border-radius: 10px;
+  background: var(--arch-surface-alt);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.cf-arch-col.is-layer-muted {
+  opacity: 0.35;
+}
+
+.cf-arch-col-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--arch-border);
+}
+
+.cf-arch-col-head strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.cf-arch-col--bronze .cf-arch-col-head strong { color: var(--arch-bronze); }
+.cf-arch-col--silver .cf-arch-col-head strong { color: var(--arch-silver); }
+.cf-arch-col--gold .cf-arch-col-head strong { color: var(--arch-gold); }
+.cf-arch-col--ops .cf-arch-col-head strong { color: var(--arch-ops); }
+
+.cf-arch-col-head span {
+  font-size: 0.7rem;
+  color: var(--arch-muted);
+}
+
+.cf-arch-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cf-arch-node {
+  width: 100%;
+  text-align: left;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--arch-border);
+  border-left-width: 3px;
+  background: var(--arch-surface);
+  color: var(--arch-text);
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: opacity 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.cf-arch-node--bronze { border-left-color: var(--arch-bronze); }
+.cf-arch-node--silver { border-left-color: var(--arch-silver); }
+.cf-arch-node--gold { border-left-color: var(--arch-gold); }
+.cf-arch-node--ops { border-left-color: var(--arch-ops); }
+
+.cf-arch-node:hover {
+  border-color: var(--arch-border-strong);
+}
+
+.cf-arch-node.is-focus {
+  border-color: var(--arch-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--arch-text) 25%, transparent);
+}
+
+.cf-arch-node.is-upstream {
+  border-color: var(--arch-silver);
+}
+
+.cf-arch-node.is-downstream {
+  border-color: var(--arch-ops);
+}
+
+.cf-arch-node.is-search-hit {
+  box-shadow: 0 0 0 2px var(--arch-bronze);
+}
+
+.cf-arch-node.is-dimmed {
+  opacity: 0.25;
+}
+
+.cf-arch-node-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cf-arch-node-name {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0;
+  background: none;
+  color: var(--arch-text);
+  word-break: break-word;
+}
+
+.cf-arch-node-rows {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--arch-muted);
+  white-space: nowrap;
+}
+
+.cf-arch-node-meta {
+  font-size: 0.69rem;
+  font-weight: 600;
+  color: var(--arch-muted);
+}
+
+.cf-arch-node-desc {
+  font-size: 0.71rem;
+  line-height: 1.35;
+  color: var(--arch-muted);
+}
+
+.cf-arch-pill:focus-visible,
+.cf-arch-clear-btn:focus-visible,
+.cf-arch-node:focus-visible,
+.cf-arch-search:focus-visible {
+  outline: 2px solid var(--arch-silver);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .cf-arch-node.is-focus,
+  .cf-arch-pill.is-active {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cf-arch-edge,
+  .cf-arch-col,
+  .cf-arch-node {
+    transition: none;
+  }
+}

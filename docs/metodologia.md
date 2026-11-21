@@ -4,8 +4,16 @@ icon: material/compass-outline
 
 # :material-compass-outline: Metodologia
 
+<p class="apresentador"><em>Responsáveis: Elias F. e Gabriel Fernando</em></p>
+
 !!! info "Em construção"
     Esta página reunirá a descrição metodológica completa do projeto Corta-Fogo DF. Enquanto o conteúdo definitivo é consolidado, os detalhes técnicos parciais podem ser consultados no [Dashboard](dashboard.md), no [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md) e no documento de [Frescor e SLA](frescor_sla.md).
+
+## Arquitetura em Camadas (Bronze, Silver e Gold)
+
+<p class="apresentador"><em>Arquitetura: Gabriel Souza e Manoel Felipe</em></p>
+
+--8<-- "docs/snippets/arquitetura_camadas.md"
 
 ## Tópicos previstos
 
