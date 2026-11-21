@@ -2,13 +2,13 @@
 icon: material/numeric-4-box
 ---
 
-# :material-numeric-4-box: Entrega 4: Arquitetura, Metodologia e Painel Operacional (25/11)
+<!-- slides: level=3 -->
+
+# :material-numeric-4-box: Entrega 4: Visualização e Metodologia
 
 > Consolidação da arquitetura em camadas (Bronze, Silver e Gold), definição única de métricas com contrato dbt, revisão do painel para decisão de vistoria e fechamento do portfólio de ADRs.
 
 ## O que a plataforma resolve na prática
-
-Para alinhar a defesa final (8 a 12 minutos) entre decisão de fiscalização e engenharia de dados:
 
 | Perspectiva | Antes (listas sem ordenação / consulta bruta) | Agora (Entrega 4 consolidada) |
 | :--- | :--- | :--- |
@@ -17,7 +17,7 @@ Para alinhar a defesa final (8 a 12 minutos) entre decisão de fiscalização e 
 
 ---
 
-## Divisão de Responsabilidades (25/11)
+## Divisão de Responsabilidades
 
 | Frente | Responsáveis | Escopo na apresentação |
 | :--- | :--- | :--- |
@@ -33,23 +33,17 @@ Para alinhar a defesa final (8 a 12 minutos) entre decisão de fiscalização e 
 
 <p class="apresentador"><em>Apresentação: Gabriel Souza e Manoel Felipe</em></p>
 
-O diagrama abaixo substitui o fluxograma anterior por uma visão em colunas com linhagem interativa. Passe o cursor ou clique em qualquer tabela para inspecionar sua origem (*upstream*), destino (*downstream*), tipo de materialização e volume de linhas da fonte ao consumo:
-
 --8<-- "docs/snippets/arquitetura_camadas.md"
 
 ---
 
-## 2. Metodologia
+## 2. [Metodologia](../../metodologia.md)
 
 <p class="apresentador"><em>Apresentação: Elias F. e Gabriel Fernando</em></p>
-
-A documentação metodológica detalha como cada número do painel é construído sem ambiguidade:
 
 - **Base territorial única:** conversão obrigatória para `EPSG:31983`, definição de área protegida (Reserva Legal do próprio imóvel, APP ou faixa de `1.000 m` de UC) e preservação do perímetro vigente na data do foco por SCD Tipo 2 (`dim_imovel_car`).
 - **Série histórica e viés de sensores:** distinção entre volume total de focos (`38.945`, 20 satélites) e tendência temporal no satélite de referência (`AQUA_M-T`), além de contagem por dias com foco na densidade do IPV para neutralizar satélites recentes de `375 m`.
 - **Reconciliação dupla:** o teste `reconcilia_fato_imovel_com_mv_postgis` confere os 1.593 imóveis reincidentes e os 37.693 focos entre a camada Gold no DuckDB e a visão materializada no PostGIS.
-
-Texto completo em [Metodologia](../../metodologia.md).
 
 ---
 
@@ -57,7 +51,7 @@ Texto completo em [Metodologia](../../metodologia.md).
 
 <p class="apresentador"><em>Apresentação: Samuel Ribeiro</em></p>
 
-O [Dashboard](../../dashboard.md) foi redesenhado para reduzir densidade visual e acelerar a triagem de vistorias:
+<!-- O [Dashboard](../../dashboard.md) foi redesenhado para reduzir densidade visual e acelerar a triagem de vistorias: -->
 
 - **Pergunta e mapa no topo:** abertura direta com a pergunta de gestão, resposta consolidada e alternância entre `Mapa Analítico` e `Mapa Satélite / Ruas` logo abaixo, com filtros compactos reposicionados sob o mapa.
 - **Fila de Vistoria (50) acoplada ao mapa:** seleção por checkbox por imóvel com os **5 primeiros marcados por padrão**, recalculando mapas, contadores e séries para os imóveis selecionados em vez de sobrecarregar a leitura com tudo ao mesmo tempo.
