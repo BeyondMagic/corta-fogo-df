@@ -61,7 +61,7 @@ icon: material/numeric-4-box
 
 <p class="apresentador"><em>Apresentação: João V. Farias</em></p>
 
-Decisão do [ADR 0004](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md): publicar `painel_imoveis_prioritarios` no retrato estático `gold.json` (`187,0 KB`, top 50 simplificado) com SLA de `30 h` e sem backend.
+<!--Decisão do [ADR 0004](../../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md): publicar `painel_imoveis_prioritarios` no retrato estático `gold.json` (`187,0 KB`, top 50 simplificado) com SLA de `30 h` e sem backend. -->
 
 | Alternativa | Entrega | Latência medida | Limite |
 | :--- | :--- | :--- | :--- |
