@@ -2497,3 +2497,41 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
 .cf-tbl-tag {
   cursor: help;
 }
+
+/* Codigo CAR no cartao + botao de copiar o codigo completo */
+.cf-car-card-code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cf-car-card-code code {
+  min-width: 0;
+}
+
+.cf-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--cf-border);
+  background: transparent;
+  color: var(--cf-muted);
+  font: inherit;
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+.cf-copy-btn:hover {
+  color: var(--cf-text);
+  background: var(--cf-surface-alt);
+}
+
+.cf-copy-btn.is-done {
+  color: var(--cf-car);
+  border-color: var(--cf-car);
+}

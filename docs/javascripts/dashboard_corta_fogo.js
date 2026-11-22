@@ -990,7 +990,48 @@
     bindInspectorClear(box);
   }
 
+  // Copia o codigo CAR completo (o cartao mostra a versao encurtada).
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy') ? resolve() : reject(new Error('copy')); } catch (e) { reject(e); }
+      document.body.removeChild(ta);
+    });
+  }
+
+  function bindInspectorCopy(box) {
+    box.querySelectorAll('[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        const label = this.querySelector('span');
+        copyText(this.getAttribute('data-copy'))
+          .then(() => {
+            this.classList.add('is-done');
+            if (label) label.textContent = 'Copiado';
+          })
+          .catch(() => {
+            if (label) label.textContent = 'Erro';
+          })
+          .finally(() => {
+            setTimeout(() => {
+              this.classList.remove('is-done');
+              if (label) label.textContent = 'Copiar';
+            }, 1600);
+          });
+      });
+    });
+  }
+
   function bindInspectorClear(box) {
+    bindInspectorCopy(box);
     const btn = box.querySelector('[data-action="clear-selection"]');
     if (btn) {
       btn.addEventListener('click', function () {
@@ -1070,7 +1111,13 @@
           <span class="cf-car-card-rank">#${im.rank}</span>
           <div class="cf-car-card-title">
             <h4>${escapeHtml(im.ra || 'Imóvel rural')}</h4>
-            <code title="${escapeHtml(im.cod_imovel)}">${escapeHtml(shortCod(im.cod_imovel))}</code>
+            <div class="cf-car-card-code">
+              <code title="${escapeHtml(im.cod_imovel)}">${escapeHtml(shortCod(im.cod_imovel))}</code>
+              <button type="button" class="cf-copy-btn" data-copy="${escapeHtml(im.cod_imovel)}" title="Copiar código CAR completo" aria-label="Copiar código CAR completo">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span>Copiar</span>
+              </button>
+            </div>
           </div>
           <button type="button" class="cf-car-card-close" data-action="clear-selection" title="Limpar seleção" aria-label="Limpar seleção">×</button>
         </div>
