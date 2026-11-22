@@ -1042,6 +1042,25 @@
     `;
   }
 
+  // Faixa 2015-2025: cada ano e uma celula, acesa quando houve foco no imovel.
+  function renderAnosStrip(anos) {
+    const set = new Set((anos || []).map(Number));
+    const cells = ANOS.map((a) => `<span class="${set.has(a) ? 'is-on' : ''}" title="${a}: ${set.has(a) ? 'com foco' : 'sem foco'}"></span>`).join('');
+    return `
+      <div class="cf-anos-strip">
+        <div class="cf-anos-strip-head"><span>Anos com foco</span><b>${set.size} de ${ANOS.length}</b></div>
+        <div class="cf-anos-strip-cells">${cells}</div>
+        <div class="cf-anos-strip-axis"><span>${ANOS[0]}</span><span>${ANOS[ANOS.length - 1]}</span></div>
+      </div>`;
+  }
+
+  function carTooltipHtml(d) {
+    return `<strong>#${d.rank} na fila · ${escapeHtml(d.ra || 'Imóvel rural')}</strong><br/>` +
+      `Índice ${formatDec(d.indice, 1)} · ${escapeHtml(SITUACAO_LABELS[d.situacao] || d.situacao)} · ${formatDec(d.area_ha, 1)} ha<br/>` +
+      `${formatInt(d.focos_prot)} focos em área protegida em ${d.anos_qtd} anos<br/>` +
+      `<code>${escapeHtml(shortCod(d.cod_imovel))}</code>`;
+  }
+
   function renderCarInspectorHtml(im) {
     return `
       <div class="cf-inspector-card cf-car-card">
@@ -1060,13 +1079,13 @@
           <span class="cf-badge">${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</span>
         </div>
         <div class="cf-car-card-stats">
-          <div><b>${formatInt(im.focos_total)}</b><span>focos</span></div>
-          <div><b>${formatInt(im.focos_prot)}</b><span>protegidos</span></div>
-          <div><b>${formatInt(im.dias_com_foco)}</b><span>dias</span></div>
-          <div><b>${formatDec(im.area_ha, 0)}</b><span>ha</span></div>
+          <div><span>Focos no imóvel</span><b>${formatInt(im.focos_total)}</b></div>
+          <div><span>Em área protegida</span><b>${formatInt(im.focos_prot)}<small>${im.focos_total > 0 ? ` ${formatDec((im.focos_prot / im.focos_total) * 100, 0)}%` : ''}</small></b></div>
+          <div><span>Dias com foco</span><b>${formatInt(im.dias_com_foco)}</b></div>
+          <div><span>Área do imóvel</span><b>${formatDec(im.area_ha, 0)}<small> ha</small></b></div>
         </div>
-        <p class="cf-anos-lista" title="Anos com foco">${(im.anos || []).map((a) => `<span>${a}</span>`).join('')}</p>
-        ${im.condicao ? `<p class="cf-inspector-hint">${escapeHtml(im.condicao)}</p>` : ''}
+        ${renderAnosStrip(im.anos)}
+        ${im.condicao ? `<p class="cf-inspector-hint"><span>Condição cadastral</span> ${escapeHtml(im.condicao)}</p>` : ''}
       </div>
     `;
   }
@@ -1348,7 +1367,17 @@
               : (tokens.dark ? 'rgba(249, 115, 22, 0.14)' : 'rgba(194, 65, 12, 0.10)'))
             .attr('stroke', isFocused ? tokens.carSel : tokens.car)
             .attr('stroke-width', isFocused ? 2.6 : 1.8)
-            .attr('vector-effect', 'non-scaling-stroke');
+            .attr('vector-effect', 'non-scaling-stroke')
+            .style('cursor', 'pointer')
+            .on('mousemove', function (event) {
+              const im = loadedData.carByCod.get(cod);
+              if (im) showTooltip(carTooltipHtml(im), event.clientX, event.clientY);
+            })
+            .on('mouseleave', hideTooltip)
+            .on('click', function (event) {
+              event.stopPropagation();
+              if (state.selectedCar !== cod) selectCAR(cod, false);
+            });
         }
       }
       if (state.layers.rl && Array.isArray(gObj.reserva_legal)) {
@@ -1362,7 +1391,8 @@
             .attr('stroke', tokens.rl)
             .attr('stroke-width', 1.4)
             .attr('stroke-dasharray', '4,2')
-            .attr('vector-effect', 'non-scaling-stroke');
+            .attr('vector-effect', 'non-scaling-stroke')
+            .style('pointer-events', 'none');
         });
       }
     });
@@ -1382,14 +1412,7 @@
       .style('pointer-events', 'all')
       .style('cursor', 'pointer')
       .on('mousemove', function (event, d) {
-        showTooltip(
-          `<strong>#${d.rank} na fila · ${escapeHtml(d.ra || 'Imóvel rural')}</strong><br/>` +
-          `Índice ${formatDec(d.indice, 1)} · ${escapeHtml(SITUACAO_LABELS[d.situacao] || d.situacao)} · ${formatDec(d.area_ha, 1)} ha<br/>` +
-          `${formatInt(d.focos_prot)} focos em área protegida em ${d.anos_qtd} anos<br/>` +
-          `<code>${escapeHtml(shortCod(d.cod_imovel))}</code>`,
-          event.clientX,
-          event.clientY
-        );
+        showTooltip(carTooltipHtml(d), event.clientX, event.clientY);
       })
       .on('mouseleave', hideTooltip)
       .on('click', function (event, d) {
