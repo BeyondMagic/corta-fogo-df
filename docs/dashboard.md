@@ -18,6 +18,101 @@ icon: material/view-dashboard
     </div>
     <p class="cf-narrative" id="cf-narrative"></p>
   </section>
+  <section class="cf-filter-dock" aria-label="Filtros operacionais">
+    <div class="cf-dock-row-compact">
+      <div class="cf-field cf-field-ano">
+        <label for="cf-ano-de">De</label>
+        <select id="cf-ano-de" class="cf-select">
+          <option value="2015" selected>2015</option>
+          <option value="2016">2016</option>
+          <option value="2017">2017</option>
+          <option value="2018">2018</option>
+          <option value="2019">2019</option>
+          <option value="2020">2020</option>
+          <option value="2021">2021</option>
+          <option value="2022">2022</option>
+          <option value="2023">2023</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+      <div class="cf-field cf-field-ano">
+        <label for="cf-ano-ate">Até</label>
+        <select id="cf-ano-ate" class="cf-select">
+          <option value="2015">2015</option>
+          <option value="2016">2016</option>
+          <option value="2017">2017</option>
+          <option value="2018">2018</option>
+          <option value="2019">2019</option>
+          <option value="2020">2020</option>
+          <option value="2021">2021</option>
+          <option value="2022">2022</option>
+          <option value="2023">2023</option>
+          <option value="2024">2024</option>
+          <option value="2025" selected>2025</option>
+        </select>
+      </div>
+      <div class="cf-field">
+        <label for="cf-filter-ra">Região Administrativa</label>
+        <select id="cf-filter-ra" class="cf-select">
+          <option value="todos">Todas as RAs</option>
+        </select>
+      </div>
+      <div class="cf-field">
+        <label for="cf-filter-estacao">Estação</label>
+        <select id="cf-filter-estacao" class="cf-select">
+          <option value="todos">Todas</option>
+          <option value="seca">Estiagem (Mai–Set)</option>
+          <option value="chuvoso">Chuvoso (Out–Abr)</option>
+        </select>
+      </div>
+      <div class="cf-dock-actions">
+        <button type="button" id="cf-btn-adv-filters" class="cf-btn" aria-expanded="false" aria-controls="cf-adv-drawer">Filtros avançados</button>
+        <button type="button" id="cf-btn-reset-filters" class="cf-btn">Limpar tudo</button>
+      </div>
+    </div>
+    <div id="cf-adv-drawer" class="cf-adv-drawer" hidden>
+      <div class="cf-timeline-group">
+        <button type="button" id="cf-play-btn" class="cf-btn cf-btn-primary">Reproduzir</button>
+        <div class="cf-field" style="min-width:96px;">
+          <label for="cf-speed-select">Velocidade</label>
+          <select id="cf-speed-select" class="cf-select">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
+        <div class="cf-slider-wrap">
+          <label for="cf-ano-slider" class="cf-sr-only">Ano da linha do tempo</label>
+          <input type="range" id="cf-ano-slider" min="2015" max="2026" step="1" value="2026"/>
+          <span class="cf-year-pill" id="cf-ano-badge">2015 a 2025 (Todos)</span>
+        </div>
+        <button type="button" id="cf-btn-todos" class="cf-btn">Todos (2015–2025)</button>
+      </div>
+      <div class="cf-field">
+        <label for="cf-filter-sensor">Sensor / Satélite</label>
+        <select id="cf-filter-sensor" class="cf-select">
+          <option value="todos">Todos os sensores</option>
+          <option value="ref">Satélite de referência</option>
+          <option value="0">Alta resolução (375 m)</option>
+          <option value="1">Moderada (1.000 m)</option>
+          <option value="2">Geoestacionário (2.000 m)</option>
+          <option value="3">Varredura clássica (1.100 m)</option>
+        </select>
+      </div>
+      <div class="cf-field">
+        <label for="cf-filter-situacao">Situação do cadastro</label>
+        <select id="cf-filter-situacao" class="cf-select">
+          <option value="todos">Todas</option>
+          <option value="AT">Ativo</option>
+          <option value="PE">Pendente</option>
+          <option value="SU">Suspenso</option>
+          <option value="CA">Cancelado</option>
+        </select>
+      </div>
+    </div>
+    <div class="cf-chips-row" id="cf-active-chips" role="region" aria-label="Filtros ativos"></div>
+  </section>
   <section class="cf-stage-card cf-map-card" id="cf-stage-card" aria-label="Mapa operacional e fila de vistoria">
     <div class="cf-stage-header">
       <div class="cf-tablist" id="cf-stage-tablist" role="tablist" aria-label="Modo de exibição do mapa">
@@ -128,101 +223,6 @@ icon: material/view-dashboard
         </div>
       </aside>
     </div>
-  </section>
-  <section class="cf-filter-dock" aria-label="Filtros operacionais">
-    <div class="cf-dock-row-compact">
-      <div class="cf-field cf-field-ano">
-        <label for="cf-ano-de">De</label>
-        <select id="cf-ano-de" class="cf-select">
-          <option value="2015" selected>2015</option>
-          <option value="2016">2016</option>
-          <option value="2017">2017</option>
-          <option value="2018">2018</option>
-          <option value="2019">2019</option>
-          <option value="2020">2020</option>
-          <option value="2021">2021</option>
-          <option value="2022">2022</option>
-          <option value="2023">2023</option>
-          <option value="2024">2024</option>
-          <option value="2025">2025</option>
-        </select>
-      </div>
-      <div class="cf-field cf-field-ano">
-        <label for="cf-ano-ate">Até</label>
-        <select id="cf-ano-ate" class="cf-select">
-          <option value="2015">2015</option>
-          <option value="2016">2016</option>
-          <option value="2017">2017</option>
-          <option value="2018">2018</option>
-          <option value="2019">2019</option>
-          <option value="2020">2020</option>
-          <option value="2021">2021</option>
-          <option value="2022">2022</option>
-          <option value="2023">2023</option>
-          <option value="2024">2024</option>
-          <option value="2025" selected>2025</option>
-        </select>
-      </div>
-      <div class="cf-field">
-        <label for="cf-filter-ra">Região Administrativa</label>
-        <select id="cf-filter-ra" class="cf-select">
-          <option value="todos">Todas as RAs</option>
-        </select>
-      </div>
-      <div class="cf-field">
-        <label for="cf-filter-estacao">Estação</label>
-        <select id="cf-filter-estacao" class="cf-select">
-          <option value="todos">Todas</option>
-          <option value="seca">Estiagem (Mai–Set)</option>
-          <option value="chuvoso">Chuvoso (Out–Abr)</option>
-        </select>
-      </div>
-      <div class="cf-dock-actions">
-        <button type="button" id="cf-btn-adv-filters" class="cf-btn" aria-expanded="false" aria-controls="cf-adv-drawer">Filtros avançados</button>
-        <button type="button" id="cf-btn-reset-filters" class="cf-btn">Limpar tudo</button>
-      </div>
-    </div>
-    <div id="cf-adv-drawer" class="cf-adv-drawer" hidden>
-      <div class="cf-timeline-group">
-        <button type="button" id="cf-play-btn" class="cf-btn cf-btn-primary">Reproduzir</button>
-        <div class="cf-field" style="min-width:96px;">
-          <label for="cf-speed-select">Velocidade</label>
-          <select id="cf-speed-select" class="cf-select">
-            <option value="0.5">0.5x</option>
-            <option value="1" selected>1x</option>
-            <option value="2">2x</option>
-          </select>
-        </div>
-        <div class="cf-slider-wrap">
-          <label for="cf-ano-slider" class="cf-sr-only">Ano da linha do tempo</label>
-          <input type="range" id="cf-ano-slider" min="2015" max="2026" step="1" value="2026"/>
-          <span class="cf-year-pill" id="cf-ano-badge">2015 a 2025 (Todos)</span>
-        </div>
-        <button type="button" id="cf-btn-todos" class="cf-btn">Todos (2015–2025)</button>
-      </div>
-      <div class="cf-field">
-        <label for="cf-filter-sensor">Sensor / Satélite</label>
-        <select id="cf-filter-sensor" class="cf-select">
-          <option value="todos">Todos os sensores</option>
-          <option value="ref">Satélite de referência</option>
-          <option value="0">Alta resolução (375 m)</option>
-          <option value="1">Moderada (1.000 m)</option>
-          <option value="2">Geoestacionário (2.000 m)</option>
-          <option value="3">Varredura clássica (1.100 m)</option>
-        </select>
-      </div>
-      <div class="cf-field">
-        <label for="cf-filter-situacao">Situação do cadastro</label>
-        <select id="cf-filter-situacao" class="cf-select">
-          <option value="todos">Todas</option>
-          <option value="AT">Ativo</option>
-          <option value="PE">Pendente</option>
-          <option value="SU">Suspenso</option>
-          <option value="CA">Cancelado</option>
-        </select>
-      </div>
-    </div>
-    <div class="cf-chips-row" id="cf-active-chips" role="region" aria-label="Filtros ativos"></div>
   </section>
   <section class="cf-kpi-strip" aria-label="Indicadores do recorte selecionado">
     <article class="cf-kpi-card">
