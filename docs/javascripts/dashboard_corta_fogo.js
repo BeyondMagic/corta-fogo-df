@@ -1184,6 +1184,7 @@
       zoomGroup.append('g').attr('class', 'cf-layer-buffers');
       zoomGroup.append('g').attr('class', 'cf-layer-ucs');
       zoomGroup.append('g').attr('class', 'cf-layer-car-sel');
+      zoomGroup.append('g').attr('class', 'cf-layer-ra-labels').style('pointer-events', 'none');
       zoomGroup.append('g').attr('class', 'cf-layer-car-pins');
       d3CurrentTransform = d3.zoomIdentity;
 
@@ -1282,6 +1283,26 @@
         refreshAll(true);
       });
     rasSel.order();
+
+    // 2b. Nomes das RAs: referencia de localizacao no mapa sem fundo.
+    zoomGroup.select('g.cf-layer-ra-labels')
+      .attr('display', state.layers.ras ? null : 'none')
+      .selectAll('text')
+      .data(loadedData.rasGeo.features, (d) => d.properties.idx)
+      .join('text')
+      .attr('x', (d) => d3Path.centroid(d)[0])
+      .attr('y', (d) => d3Path.centroid(d)[1])
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', tokens.muted)
+      .attr('stroke', tokens.surfaceAlt)
+      .attr('paint-order', 'stroke')
+      .attr('font-weight', 500)
+      .each(function (d) { this.__cfArea = d3Path.area(d); })
+      .text((d) => {
+        const ra = loadedData.rasByIdx.get(d.properties.idx);
+        return ra ? ra.nome : '';
+      });
 
     // 3. Faixas de amortecimento 1 km
     zoomGroup.select('g.cf-layer-buffers')
@@ -1520,6 +1541,12 @@
 
   function updateD3StrokeWeights() {
     const k = d3CurrentTransform ? d3CurrentTransform.k : 1;
+    // Nomes das RAs mantem o mesmo tamanho na tela em qualquer zoom.
+    d3.select('#cf-d3-svg').selectAll('.cf-layer-ra-labels text')
+      .attr('font-size', 10.5 / k)
+      .attr('stroke-width', 3 / k)
+      // RA pequena so ganha nome quando o zoom a deixa grande na tela.
+      .attr('display', function () { return ((this.__cfArea || 0) * k * k > 2600) ? null : 'none'; });
     // Os circulos SVG so recebem o mouse; o desenho visivel e o do canvas.
     d3.select('#cf-d3-svg').selectAll('.cf-layer-car-pins circle')
       .attr('r', (d) => ((state.selectedCar === d.cod_imovel ? 9.5 : (d.rank <= 10 ? 8 : 4.5)) / Math.pow(k, 0.55)) + 2 / k);
@@ -2242,8 +2269,21 @@
       .slice(0, 14);
 
     const width = Math.max(300, box.clientWidth || 500);
-    const height = Math.max(240, rows.length * 24 + 54);
-    const margin = { top: 24, right: 20, bottom: 26, left: 168 };
+    // Margem esquerda proporcional; nome longo quebra em duas linhas.
+    const labelW = Math.round(Math.min(260, Math.max(150, width * 0.4)));
+    const maxChars = Math.floor((labelW - 12) / 6.2);
+    const splitLabel = (name) => {
+      if (name.length <= maxChars) return [name];
+      let cut = name.lastIndexOf(' ', maxChars);
+      if (cut < maxChars * 0.5) cut = maxChars;
+      const l1 = name.slice(0, cut).trim();
+      let l2 = name.slice(cut).trim();
+      if (l2.length > maxChars) l2 = l2.slice(0, maxChars - 1) + '…';
+      return [l1, l2];
+    };
+    const anyWrap = rows.some((r) => r.nome.length > maxChars);
+    const height = Math.max(240, rows.length * (anyWrap ? 30 : 24) + 54);
+    const margin = { top: 24, right: 20, bottom: 26, left: labelW };
     const iw = Math.max(80, width - margin.left - margin.right);
     const ih = height - margin.top - margin.bottom;
     const tokens = getTokens();
@@ -2286,8 +2326,23 @@
           const item = rows.find((r) => r.nome === name);
           return (item && state.ucIdx === item.idx) ? tokens.car : tokens.text;
         })
-        .attr('font-size', '11px')
-        .text((name) => (name.length > 23 ? name.slice(0, 22) + '...' : name)));
+        .attr('font-size', '12px')
+        .text(null)
+        .attr('dy', null)
+        .each(function (name) {
+          const lines = splitLabel(name);
+          const t = d3.select(this);
+          lines.forEach((ln, i) => {
+            t.append('tspan')
+              .attr('x', -9)
+              .attr('dy', i === 0 ? (lines.length > 1 ? '-0.25em' : '0.32em') : '1.15em')
+              .text(ln);
+          });
+        })
+        .append('title').text((name) => {
+          const item = rows.find((r) => r.nome === name);
+          return item ? item.nomeCompleto : name;
+        }));
 
     const stack = d3.stack().keys(['dentro', 'buf'])(rows);
     const colorMap = { dentro: tokens.uc, buf: tokens.ucClaro };
