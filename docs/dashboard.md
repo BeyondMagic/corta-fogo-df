@@ -142,8 +142,8 @@ icon: material/view-dashboard
         <div id="cf-leaflet-toolbar-opts" class="cf-seg-group" hidden>
           <label for="cf-select-basemap" class="cf-sr-only">Mapa base</label>
           <select id="cf-select-basemap" class="cf-select">
-            <option value="esri" selected>ESRI Light Gray (Neutro)</option>
-            <option value="osm">OpenStreetMap (Ruas)</option>
+            <option value="osm" selected>OpenStreetMap (Ruas)</option>
+            <option value="esri">ESRI Light Gray (Neutro)</option>
           </select>
         </div>
         <div class="cf-layer-menu-wrap">

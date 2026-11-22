@@ -474,7 +474,8 @@
     });
 
     const isDark = document.body.getAttribute('data-md-color-scheme') === 'slate';
-    currentBaseLayer = esriLayer;
+    // Ruas por padrao: e o mapa em que quem abre o painel se localiza.
+    currentBaseLayer = osmLayer;
     currentBaseLayer.addTo(mapInstance);
     if (isDark) {
       // Leve atenuacao de brilho controlada por CSS no modo escuro
