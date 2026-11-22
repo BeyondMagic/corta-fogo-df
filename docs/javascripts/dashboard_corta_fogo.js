@@ -1044,25 +1044,29 @@
 
   function renderCarInspectorHtml(im) {
     return `
-      <div class="cf-inspector-card">
-        <div class="cf-inspector-head">
-          <span class="cf-badge cf-badge-car">#${im.rank} na fila</span>
-          <button type="button" class="cf-btn-mini" data-action="clear-selection">Limpar seleção</button>
+      <div class="cf-inspector-card cf-car-card">
+        <div class="cf-car-card-head">
+          <span class="cf-car-card-rank">#${im.rank}</span>
+          <div class="cf-car-card-title">
+            <h4>${escapeHtml(im.ra || 'Imóvel rural')}</h4>
+            <code title="${escapeHtml(im.cod_imovel)}">${escapeHtml(shortCod(im.cod_imovel))}</code>
+          </div>
+          <button type="button" class="cf-car-card-close" data-action="clear-selection" title="Limpar seleção" aria-label="Limpar seleção">×</button>
         </div>
-        <h4>${escapeHtml(im.ra || 'Imóvel rural')}</h4>
-        <p class="cf-code-line" title="${escapeHtml(im.cod_imovel)}"><code>${escapeHtml(im.cod_imovel)}</code></p>
-        <dl class="cf-kv-list">
-          <div><dt>Índice de prioridade</dt><dd>${formatDec(im.indice, 1)}</dd></div>
-          <div><dt>Classificação</dt><dd>${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</dd></div>
-          <div><dt>Situação cadastral</dt><dd>${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</dd></div>
-          <div><dt>Área cadastrada</dt><dd>${formatDec(im.area_ha, 1)} ha</dd></div>
-          <div><dt>Focos no imóvel</dt><dd>${formatInt(im.focos_total)}</dd></div>
-          <div><dt>Focos em área protegida</dt><dd>${formatInt(im.focos_prot)}</dd></div>
-          <div><dt>Dias com foco</dt><dd>${formatInt(im.dias_com_foco)}</dd></div>
-          <div><dt>Anos com foco</dt><dd>${im.anos_qtd}</dd></div>
-        </dl>
-        <p class="cf-anos-lista">${(im.anos || []).map((a) => `<span>${a}</span>`).join('')}</p>
-        ${im.condicao ? `<p class="cf-inspector-hint">Condição cadastral: ${escapeHtml(im.condicao)}</p>` : ''}
+        <div class="cf-car-card-score">
+          <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
+          <b>${formatDec(im.indice, 1)}</b>
+          <span class="cf-badge cf-badge-car">${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</span>
+          <span class="cf-badge">${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</span>
+        </div>
+        <div class="cf-car-card-stats">
+          <div><b>${formatInt(im.focos_total)}</b><span>focos</span></div>
+          <div><b>${formatInt(im.focos_prot)}</b><span>protegidos</span></div>
+          <div><b>${formatInt(im.dias_com_foco)}</b><span>dias</span></div>
+          <div><b>${formatDec(im.area_ha, 0)}</b><span>ha</span></div>
+        </div>
+        <p class="cf-anos-lista" title="Anos com foco">${(im.anos || []).map((a) => `<span>${a}</span>`).join('')}</p>
+        ${im.condicao ? `<p class="cf-inspector-hint">${escapeHtml(im.condicao)}</p>` : ''}
       </div>
     `;
   }
@@ -2550,11 +2554,8 @@
               </span>
             </div>
             <div class="cf-queue-meta">
-              <span class="cf-sit-pill cf-sit-${escapeHtml(im.situacao)}">${escapeHtml(im.situacao)}</span>
-              <span>${formatDec(im.area_ha, 0)} ha</span>
-              <span>${im.anos_qtd}a · ${formatInt(im.focos_prot)} prot.</span>
-              <code>${escapeHtml(shortCod(im.cod_imovel))}</code>
-              ${layersBadges.join('')}
+              <span title="${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao)} · ${formatDec(im.area_ha, 0)} ha · ${im.anos_qtd} anos com foco · ${formatInt(im.focos_prot)} focos em área protegida">${formatDec(im.area_ha, 0)} ha · ${im.anos_qtd} anos · ${formatInt(im.focos_prot)} prot.</span>
+              <span class="cf-queue-tags">${layersBadges.join('')}</span>
             </div>
           </div>
         </li>

@@ -100,12 +100,12 @@ icon: material/view-dashboard
         <div class="cf-queue-controls">
           <div class="cf-field cf-queue-search-field">
             <label for="cf-car-search" class="cf-sr-only">Buscar imóvel por código, região administrativa ou situação</label>
-            <input type="search" id="cf-car-search" class="cf-input" placeholder="Buscar código, região, situação..."/>
+            <input type="search" id="cf-car-search" class="cf-input" placeholder="Buscar imóvel ou RA"/>
           </div>
           <div class="cf-field cf-queue-sort-field">
             <label for="cf-car-sort-select" class="cf-sr-only">Ordenar fila de vistoria</label>
             <select id="cf-car-sort-select" class="cf-select">
-              <option value="rank:asc" selected>Prioridade (#)</option>
+              <option value="rank:asc" selected>Ordem da fila</option>
               <option value="indice:desc">Maior prioridade</option>
               <option value="focos_prot:desc">Focos área protegida</option>
               <option value="focos_total:desc">Focos totais</option>

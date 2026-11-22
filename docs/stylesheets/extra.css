@@ -1269,8 +1269,6 @@ body:has(.cf-dashboard-page) .md-main__inner {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 215px;
-  overflow-y: auto;
   flex-shrink: 0;
 }
 
@@ -1303,7 +1301,7 @@ body:has(.cf-dashboard-page) .md-main__inner {
 
 .cf-queue-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) 150px;
   gap: 6px;
 }
 
@@ -1342,15 +1340,21 @@ body:has(.cf-dashboard-page) .md-main__inner {
 
 .cf-queue-list {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* O tema aplica recuo e margem em li dentro de .md-typeset; a fila nao usa. */
+.cf-queue-list > li.cf-queue-item {
+  margin: 0 !important;
+  list-style: none;
 }
 
 .cf-queue-item {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  gap: 6px;
-  padding: 8px 10px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--cf-border);
   align-items: start;
 }
@@ -1382,7 +1386,7 @@ body:has(.cf-dashboard-page) .md-main__inner {
 .cf-queue-main {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -1431,11 +1435,163 @@ body:has(.cf-dashboard-page) .md-main__inner {
 
 .cf-queue-meta {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: 4px 8px;
+  gap: 8px;
   font-size: 0.71rem;
   color: var(--cf-muted);
+  white-space: nowrap;
+}
+
+.cf-queue-meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cf-queue-tags {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.cf-queue-tags .cf-tbl-tag {
+  padding: 0 5px;
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+/* Cartao do imovel selecionado: compacto, sem rolagem propria */
+.cf-car-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cf-car-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.cf-car-card-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--cf-car-bg);
+  color: var(--cf-car);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.cf-car-card-title {
+  min-width: 0;
+}
+
+.cf-inspector-box .cf-car-card-title h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-car-card-title code {
+  display: block;
+  padding: 0;
+  background: none;
+  font-size: 0.66rem;
+  color: var(--cf-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-car-card-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--cf-border);
+  background: transparent;
+  color: var(--cf-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cf-car-card-close:hover {
+  color: var(--cf-text);
+  background: var(--cf-surface-alt);
+}
+
+.cf-car-card-score {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cf-car-card-score .cf-indice-bar {
+  width: 72px;
+}
+
+.cf-car-card-score b {
+  font-size: 0.86rem;
+  margin-right: 4px;
+}
+
+.cf-car-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cf-car-card-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: var(--cf-surface-alt);
+  min-width: 0;
+}
+
+.cf-car-card-stats b {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cf-car-card-stats span {
+  font-size: 0.64rem;
+  color: var(--cf-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.cf-car-card .cf-anos-lista {
+  margin: 0;
+  gap: 3px;
+}
+
+.cf-car-card .cf-anos-lista span {
+  padding: 0 5px;
+  font-size: 0.66rem;
+}
+
+.cf-queue-sort-field .cf-select {
+  font-size: 0.8rem;
+}
+
+.cf-car-card .cf-inspector-hint {
+  margin: 0;
+  font-size: 0.7rem;
 }
 
 .cf-queue-meta code {
