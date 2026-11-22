@@ -2805,6 +2805,10 @@
     }
 
     refreshAll(true);
+    // O cartao do imovel fica no topo da coluna lateral: volta ate ele
+    // (depois do refresh, que reordena a lista).
+    const rail = document.querySelector('.cf-queue-rail');
+    if (rail && state.selectedCar) rail.scrollTop = 0;
   }
 
   function syncLeafletBridge() {

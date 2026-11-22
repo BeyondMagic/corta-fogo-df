@@ -1258,6 +1258,8 @@ body:has(.cf-dashboard-page) .md-main__inner {
   gap: 8px;
   height: 600px;
   min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .cf-inspector-box {
@@ -1330,9 +1332,9 @@ body:has(.cf-dashboard-page) .md-main__inner {
 }
 
 .cf-queue-list-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+  /* A coluna lateral rola inteira (uma rolagem so): cartao do imovel em
+     cima e a fila logo abaixo, sem rolagem dentro de rolagem. */
+  flex: none;
   border: 1px solid var(--cf-border);
   border-radius: 8px;
   background: var(--cf-surface);
