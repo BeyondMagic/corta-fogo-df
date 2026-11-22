@@ -990,6 +990,295 @@
     bindInspectorClear(box);
   }
 
+  // ---------------------------------------------------------------------------
+  // Perfil completo do imovel (modal): tudo o que o painel tem sobre um imovel
+  // da fila. Dados da Gold (gold.json) + focos que caem dentro do contorno.
+  // ---------------------------------------------------------------------------
+  let profileDialog = null;
+
+  function getProfileDialog() {
+    if (profileDialog) return profileDialog;
+    const root = document.getElementById('cf-dashboard-root') || document.body;
+    profileDialog = document.createElement('dialog');
+    profileDialog.className = 'cf-profile-dialog';
+    profileDialog.setAttribute('aria-labelledby', 'cf-profile-title');
+    root.appendChild(profileDialog);
+    // Clique no fundo escurecido (fora do conteudo) fecha.
+    profileDialog.addEventListener('click', function (event) {
+      if (event.target === profileDialog) profileDialog.close();
+    });
+    profileDialog.addEventListener('close', function () {
+      hideTooltip();
+      profileDialog.innerHTML = '';
+    });
+    return profileDialog;
+  }
+
+  function getCarFocos(cod) {
+    const out = [];
+    const focos = loadedData.focos;
+    const idx = loadedData.focoCars;
+    for (let i = 0; i < focos.length; i += 1) {
+      const cars = idx[i];
+      if (cars && cars.indexOf(cod) !== -1) out.push(focos[i]);
+    }
+    return out;
+  }
+
+  function simNao(v) {
+    return v ? '<span class="cf-yes">Sim</span>' : '<span class="cf-no">Não</span>';
+  }
+
+  function openCarProfile(cod) {
+    if (!loadedData) return;
+    const im = loadedData.carByCod.get(cod);
+    if (!im) return;
+    const dlg = getProfileDialog();
+    const focos = getCarFocos(cod);
+    const meta = loadedData.resumo.gold_meta || {};
+    const params = (meta.indice && meta.indice.parametros) || {};
+    const pR = params.peso_recorrencia != null ? params.peso_recorrencia : 0.4;
+    const pC = params.peso_recencia != null ? params.peso_recencia : 0.3;
+    const pI = params.peso_intensidade != null ? params.peso_intensidade : 0.3;
+    const comp = [
+      { nome: 'Recorrência', peso: pR, v: im.comp_recorrencia, txt: `foco em ${im.anos_qtd} dos ${ANOS.length} anos` },
+      { nome: 'Recência', peso: pC, v: im.comp_recencia, txt: `último foco em ${im.ultimo_ano}` },
+      { nome: 'Intensidade', peso: pI, v: im.comp_intensidade, txt: `${formatDec(im.dias_por_100ha, 2)} dias com foco por 100 ha` }
+    ];
+
+    const nSeca = focos.filter((f) => f[6] === 1).length;
+    const nRl = focos.filter((f) => f[12] & 2).length;
+    const nUcIn = focos.filter((f) => f[10] >= 0).length;
+    const nUcBuf = focos.filter((f) => f[10] < 0 && f[11] >= 0).length;
+    const ucsTocadas = new Map();
+    focos.forEach((f) => {
+      const u = f[10] >= 0 ? f[10] : f[11];
+      if (u >= 0) ucsTocadas.set(u, (ucsTocadas.get(u) || 0) + 1);
+    });
+    const ucsHtml = Array.from(ucsTocadas.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([idx, n]) => {
+        const uc = loadedData.ucsByIdx.get(idx);
+        return uc ? `<li><span>${escapeHtml(uc.nome)}</span><b>${formatInt(n)}</b></li>` : '';
+      }).join('');
+
+    const ordenados = focos.slice().sort((a, b) => (b[2] - a[2]) || (b[3] - a[3]) || (b[4] - a[4]));
+    const linhas = ordenados.map((f) => {
+      const uc = f[10] >= 0 ? loadedData.ucsByIdx.get(f[10]) : null;
+      const local = [];
+      if (f[12] & 2) local.push('RL');
+      if (uc) local.push('Dentro de UC');
+      else if (f[11] >= 0) local.push('Faixa 1 km de UC');
+      return `<tr>
+        <td>${MESES[(f[3] - 1) % 12] || f[3]}/${f[2]}</td>
+        <td class="cf-num">${String(f[4]).padStart(2, '0')}h</td>
+        <td>${f[6] === 1 ? 'Estiagem' : 'Chuvoso'}</td>
+        <td>${escapeHtml(SENSOR_NOMES[String(f[7])] || 'Outro')}${f[5] === 1 ? ' · ref.' : ''}</td>
+        <td class="cf-num">${f[8] >= 0 ? f[8] + '%' : 'N/D'}</td>
+        <td>${local.join(', ') || '-'}</td>
+      </tr>`;
+    }).join('');
+
+    const gmaps = `https://www.google.com/maps?q=${im.lat},${im.lon}`;
+    const copyIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+
+    dlg.innerHTML = `
+      <div class="cf-profile">
+        <header class="cf-profile-head">
+          <span class="cf-car-card-rank">#${im.rank}</span>
+          <div class="cf-profile-title">
+            <h2 id="cf-profile-title">${escapeHtml(im.ra || 'Imóvel rural')} <small>${escapeHtml(im.ra_codigo || '')}</small></h2>
+            <div class="cf-car-card-code">
+              <code>${escapeHtml(im.cod_imovel)}</code>
+              <button type="button" class="cf-copy-btn" data-copy="${escapeHtml(im.cod_imovel)}" title="Copiar código CAR completo">${copyIcon}<span>Copiar</span></button>
+            </div>
+          </div>
+          <button type="button" class="cf-car-card-close" data-close-profile aria-label="Fechar perfil">×</button>
+        </header>
+
+        <div class="cf-profile-body">
+          <div class="cf-profile-badges cf-profile-span">
+            <span class="cf-badge cf-badge-car">Prioridade ${escapeHtml((CLASSIFICACAO_LABELS[im.classificacao] || '-').toLowerCase())}</span>
+            <span class="cf-badge">Cadastro ${escapeHtml((SITUACAO_LABELS[im.situacao] || im.situacao || '-').toLowerCase())}</span>
+            ${im.condicao ? `<span class="cf-badge">${escapeHtml(im.condicao)}</span>` : ''}
+            ${im.municipio ? `<span class="cf-badge">${escapeHtml(im.municipio)}</span>` : ''}
+          </div>
+
+          <section class="cf-profile-sec">
+            <h3>Índice de prioridade de vistoria</h3>
+            <p class="cf-profile-ipv"><b>${formatDec(im.indice, 1)}</b> de 100</p>
+            <ul class="cf-profile-comp">
+              ${comp.map((c) => `
+                <li>
+                  <div class="cf-profile-comp-top"><span>${c.nome} <small>peso ${formatDec(c.peso * 100, 0)}%</small></span><b>${formatDec((c.v || 0) * 100, 0)}%</b></div>
+                  <span class="cf-profile-bar"><span style="width:${Math.max(0, Math.min(100, (c.v || 0) * 100))}%"></span></span>
+                  <small>${escapeHtml(c.txt)} · soma ${formatDec((c.v || 0) * c.peso * 100, 1)} pontos</small>
+                </li>`).join('')}
+            </ul>
+          </section>
+
+          <section class="cf-profile-sec">
+            <h3>Localização</h3>
+            <div id="cf-profile-map" class="cf-profile-map"></div>
+            <p class="cf-profile-legend">
+              <span><i class="cf-sw cf-sw-car"></i>Imóvel</span>
+              <span><i class="cf-sw cf-sw-rl"></i>Reserva Legal</span>
+              <span><i class="cf-sw cf-sw-foco"></i>Foco de calor</span>
+            </p>
+            <p class="cf-profile-coords">${formatDec(im.lat, 4)}, ${formatDec(im.lon, 4)} · <a href="${gmaps}" target="_blank" rel="noopener">Abrir no Google Maps</a></p>
+          </section>
+
+          <section class="cf-profile-sec cf-profile-span">
+            <h3>Números do imóvel</h3>
+            <div class="cf-profile-stats">
+              <div><span>Área cadastrada</span><b>${formatDec(im.area_ha, 1)} <small>ha</small></b></div>
+              <div><span>Focos no imóvel</span><b>${formatInt(im.focos_total)}</b></div>
+              <div><span>Em área protegida</span><b>${formatInt(im.focos_prot)}</b></div>
+              <div><span>Dias com foco</span><b>${formatInt(im.dias_com_foco)}</b></div>
+              <div><span>Dias com foco / 100 ha</span><b>${formatDec(im.dias_por_100ha, 2)}</b></div>
+              <div><span>Anos com foco</span><b>${im.anos_qtd} <small>de ${ANOS.length}</small></b></div>
+              <div><span>Último ano com foco</span><b>${im.ultimo_ano}</b></div>
+              <div><span>Satélite de referência</span><b>${formatInt(im.focos_ref)} <small>focos</small></b></div>
+            </div>
+          </section>
+
+          <section class="cf-profile-sec">
+            <h3>Focos por ano</h3>
+            <div id="cf-profile-anos" class="cf-profile-chart"></div>
+          </section>
+
+          <section class="cf-profile-sec">
+            <h3>Focos por mês <small>soma de 2015 a 2025</small></h3>
+            <div id="cf-profile-meses" class="cf-profile-chart"></div>
+          </section>
+
+          <section class="cf-profile-sec">
+            <h3>Áreas protegidas atingidas</h3>
+            <dl class="cf-kv-list">
+              <div><dt>Reserva Legal do imóvel</dt><dd>${simNao(im.atinge_rl)}</dd></div>
+              <div><dt>Área de Preservação Permanente (APP)</dt><dd>${simNao(im.atinge_app)}</dd></div>
+              <div><dt>Unidade de Conservação ou até 1 km</dt><dd>${simNao(im.atinge_uc1km)}</dd></div>
+            </dl>
+            ${ucsHtml ? `<h4>Unidades de Conservação próximas <small>focos</small></h4><ul class="cf-profile-ucs">${ucsHtml}</ul>` : ''}
+          </section>
+
+          <section class="cf-profile-sec">
+            <h3>Perfil dos focos <small>dentro do contorno</small></h3>
+            <dl class="cf-kv-list">
+              <div><dt>Focos dentro do contorno</dt><dd>${formatInt(focos.length)}</dd></div>
+              <div><dt>Na estiagem (mai a set)</dt><dd>${formatInt(nSeca)} <small>${focos.length ? formatDec((nSeca / focos.length) * 100, 0) : 0}%</small></dd></div>
+              <div><dt>Na Reserva Legal</dt><dd>${formatInt(nRl)}</dd></div>
+              <div><dt>Dentro de UC</dt><dd>${formatInt(nUcIn)}</dd></div>
+              <div><dt>Na faixa de 1 km de UC</dt><dd>${formatInt(nUcBuf)}</dd></div>
+            </dl>
+          </section>
+
+          <section class="cf-profile-sec cf-profile-span">
+            <h3>Lista de focos <small>${formatInt(focos.length)}, do mais recente ao mais antigo</small></h3>
+            <div class="cf-profile-table-wrap">
+              <table class="cf-profile-table">
+                <thead><tr><th>Mês/ano</th><th class="cf-num">Hora</th><th>Estação</th><th>Sensor</th><th class="cf-num">Risco de fogo</th><th>Onde</th></tr></thead>
+                <tbody>${linhas || '<tr><td colspan="6">Nenhum foco dentro do contorno.</td></tr>'}</tbody>
+              </table>
+            </div>
+            <p class="cf-profile-note">Os números do topo vêm da camada Gold. A lista e o perfil dos focos usam os pontos que caem dentro do contorno do imóvel no painel, por isso podem diferir um pouco.</p>
+          </section>
+        </div>
+
+        <footer class="cf-profile-foot">
+          <button type="button" class="cf-btn" data-profile-zoom>Ver no mapa</button>
+          <button type="button" class="cf-btn" data-close-profile>Fechar</button>
+        </footer>
+      </div>`;
+
+    dlg.querySelectorAll('[data-close-profile]').forEach((b) => b.addEventListener('click', () => dlg.close()));
+    const zoomBtn = dlg.querySelector('[data-profile-zoom]');
+    if (zoomBtn) {
+      zoomBtn.addEventListener('click', () => {
+        dlg.close();
+        selectCAR(cod, true);
+        const stage = document.getElementById('cf-stage-card');
+        if (stage) stage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+    bindInspectorCopy(dlg);
+
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+
+    renderProfileMap(im, focos);
+    renderProfileBars('cf-profile-anos', ANOS.map((a) => ({ k: String(a), v: (im.por_ano && im.por_ano[String(a)]) || 0 })), 'focos');
+    renderProfileBars('cf-profile-meses', MESES.map((m, i) => ({ k: m, v: focos.filter((f) => f[3] === i + 1).length })), 'focos');
+  }
+
+  function renderProfileMap(im, focos) {
+    const box = document.getElementById('cf-profile-map');
+    const gObj = loadedData.geometrias.car_top50_geoms[im.cod_imovel];
+    if (!box || !gObj || !gObj.imovel) return;
+    const tokens = getTokens();
+    const w = box.clientWidth || 320;
+    const h = 220;
+    const feat = rewindFeature({ type: 'Feature', geometry: gObj.imovel, properties: {} });
+    if (!feat) return;
+    const proj = d3.geoMercator().fitExtent([[12, 12], [w - 12, h - 12]], feat);
+    const path = d3.geoPath(proj);
+    const svg = d3.select(box).append('svg').attr('width', w).attr('height', h).attr('role', 'img')
+      .attr('aria-label', 'Contorno do imóvel, reserva legal e focos de calor');
+    svg.append('path').datum(feat).attr('d', path)
+      .attr('fill', tokens.dark ? 'rgba(144, 133, 233, 0.16)' : 'rgba(98, 80, 214, 0.12)')
+      .attr('stroke', tokens.car).attr('stroke-width', 2);
+    (gObj.reserva_legal || []).forEach((g) => {
+      const rl = rewindFeature({ type: 'Feature', geometry: g, properties: {} });
+      if (rl) {
+        svg.append('path').datum(rl).attr('d', path)
+          .attr('fill', 'rgba(5, 150, 105, 0.25)').attr('stroke', tokens.rl)
+          .attr('stroke-width', 1.2).attr('stroke-dasharray', '4,2');
+      }
+    });
+    svg.append('g').selectAll('circle').data(focos).join('circle')
+      .attr('cx', (f) => proj([f[1], f[0]])[0])
+      .attr('cy', (f) => proj([f[1], f[0]])[1])
+      .attr('r', 3)
+      .attr('fill', tokens.foco)
+      .attr('fill-opacity', 0.75)
+      .on('mousemove', function (event, f) {
+        showTooltip(`<strong>${MESES[(f[3] - 1) % 12]}/${f[2]} · ${String(f[4]).padStart(2, '0')}h</strong><br/>${escapeHtml(SENSOR_NOMES[String(f[7])] || '')}`, event.clientX, event.clientY);
+      })
+      .on('mouseleave', hideTooltip);
+  }
+
+  function renderProfileBars(id, data, unit) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    const tokens = getTokens();
+    const w = box.clientWidth || 320;
+    const h = 150;
+    const m = { top: 16, right: 6, bottom: 22, left: 30 };
+    const x = d3.scaleBand().domain(data.map((d) => d.k)).range([m.left, w - m.right]).padding(0.22);
+    const yMax = Math.max(1, d3.max(data, (d) => d.v));
+    const y = d3.scaleLinear().domain([0, yMax]).nice().range([h - m.bottom, m.top]);
+    const svg = d3.select(box).append('svg').attr('width', w).attr('height', h);
+    svg.append('g').attr('transform', `translate(0,${h - m.bottom})`)
+      .call(d3.axisBottom(x).tickSize(0).tickPadding(6).tickFormat((k) => (k.length === 4 ? '\'' + k.slice(2) : k)))
+      .call((a) => a.select('.domain').attr('stroke', tokens.border))
+      .call((a) => a.selectAll('text').attr('fill', tokens.muted).attr('font-size', '10px'));
+    svg.append('g').attr('transform', `translate(${m.left},0)`)
+      .call(d3.axisLeft(y).ticks(4).tickSize(-(w - m.left - m.right)).tickFormat(d3.format('d')))
+      .call((a) => a.select('.domain').remove())
+      .call((a) => a.selectAll('line').attr('stroke', tokens.grid))
+      .call((a) => a.selectAll('text').attr('fill', tokens.muted).attr('font-size', '10px'));
+    svg.append('g').selectAll('rect').data(data).join('rect')
+      .attr('x', (d) => x(d.k)).attr('width', x.bandwidth())
+      .attr('y', (d) => y(d.v)).attr('height', (d) => y(0) - y(d.v))
+      .attr('rx', 2).attr('fill', tokens.car)
+      .on('mousemove', function (event, d) { showTooltip(`<strong>${d.k}</strong><br/>${formatInt(d.v)} ${unit}`, event.clientX, event.clientY); })
+      .on('mouseleave', hideTooltip);
+    svg.append('g').selectAll('text').data(data.filter((d) => d.v > 0)).join('text')
+      .attr('x', (d) => x(d.k) + x.bandwidth() / 2).attr('y', (d) => y(d.v) - 3)
+      .attr('text-anchor', 'middle').attr('font-size', '9.5px').attr('fill', tokens.muted)
+      .text((d) => formatInt(d.v));
+  }
+
   // Copia o codigo CAR completo (o cartao mostra a versao encurtada).
   function copyText(text) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -1032,6 +1321,11 @@
 
   function bindInspectorClear(box) {
     bindInspectorCopy(box);
+    box.querySelectorAll('[data-open-profile]').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        openCarProfile(this.getAttribute('data-open-profile'));
+      });
+    });
     const btn = box.querySelector('[data-action="clear-selection"]');
     if (btn) {
       btn.addEventListener('click', function () {
@@ -1135,6 +1429,7 @@
         </div>
         ${renderAnosStrip(im.anos)}
         ${im.condicao ? `<p class="cf-inspector-hint"><span>Condição cadastral</span> ${escapeHtml(im.condicao)}</p>` : ''}
+        <button type="button" class="cf-btn cf-profile-btn" data-open-profile="${escapeHtml(im.cod_imovel)}">Ver perfil completo do imóvel</button>
       </div>
     `;
   }
