@@ -2464,3 +2464,34 @@ th[aria-sort="descending"] .cf-sort-indicator::after {
     transition: none;
   }
 }
+
+/* Orientacao para quem abre o painel pela primeira vez */
+.cf-stage-hint {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+  color: var(--cf-muted);
+}
+
+.cf-queue-legend {
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--cf-muted);
+}
+
+.cf-queue-legend b {
+  color: var(--cf-text);
+  font-weight: 600;
+}
+
+.cf-car-card-score b small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--cf-muted);
+}
+
+.cf-indice,
+.cf-car-card-score b,
+.cf-tbl-tag {
+  cursor: help;
+}

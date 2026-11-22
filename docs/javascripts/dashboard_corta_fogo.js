@@ -15,6 +15,8 @@
     '2': 'GOES (2.000 m)',
     '3': 'AVHRR / Outros (1.100 m)'
   };
+  const IPV_TIP = 'Índice de prioridade de vistoria (0 a 100). Quanto maior, mais urgente. Combina recorrência (40%: em quantos anos houve foco), recência (30%: quão recente foi o último foco) e intensidade (30%: dias com foco em área protegida por hectare).';
+
   const SITUACAO_LABELS = {
     AT: 'Ativo',
     PE: 'Pendente',
@@ -709,7 +711,7 @@
       const diffSeca = pctSeca - base.secaPct;
       const arrow = diffSeca >= 0 ? '▲' : '▼';
       const tone = diffSeca > 2 ? 'crit' : (diffSeca < -2 ? 'good' : '');
-      setComparator('cf-kpi-seca-cmp', `${arrow} ${diffSeca >= 0 ? '+' : ''}${formatDec(diffSeca, 1)} p.p. vs DF (${formatDec(base.secaPct, 1)}%)`, tone);
+      setComparator('cf-kpi-seca-cmp', `${arrow} ${diffSeca >= 0 ? '+' : ''}${formatDec(diffSeca, 1)} pontos vs DF (${formatDec(base.secaPct, 1)}%)`, tone);
     }
 
     const kpiUcs = document.getElementById('cf-kpi-ucs');
@@ -727,7 +729,7 @@
       const diffUc = pctUc - base.ucPct;
       const arrow = diffUc >= 0 ? '▲' : '▼';
       const tone = diffUc > 5 ? 'crit' : (diffUc > 0 ? 'warn' : 'good');
-      setComparator('cf-kpi-ucs-cmp', `${arrow} ${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} p.p. vs DF (${formatDec(base.ucPct, 1)}%)`, tone);
+      setComparator('cf-kpi-ucs-cmp', `${arrow} ${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} pontos vs DF (${formatDec(base.ucPct, 1)}%)`, tone);
     }
 
     const kpiRef = document.getElementById('cf-kpi-ref');
@@ -739,7 +741,7 @@
       setComparator('cf-kpi-ref-cmp', 'Sem focos no recorte', '');
     } else {
       const diffRef = pctRef - base.refPct;
-      setComparator('cf-kpi-ref-cmp', `Base DF: ${formatDec(base.refPct, 1)}% (${diffRef >= 0 ? '+' : ''}${formatDec(diffRef, 1)} p.p.)`, '');
+      setComparator('cf-kpi-ref-cmp', `Base DF: ${formatDec(base.refPct, 1)}% (${diffRef >= 0 ? '+' : ''}${formatDec(diffRef, 1)} pontos)`, '');
     }
 
     updateNarrative(total, pctSeca, pctUc, ucsAtingidas, base);
@@ -764,8 +766,8 @@
     const diffUc = pctUc - base.ucPct;
     const secaTxt = Math.abs(diffSeca) < 1
       ? `${formatDec(pctSeca, 1)}% na estiagem (próximo à média do DF)`
-      : `${formatDec(pctSeca, 1)}% na estiagem (${diffSeca > 0 ? '+' : ''}${formatDec(diffSeca, 1)} p.p. vs média DF)`;
-    const ucTxt = `${formatDec(pctUc, 1)}% dentro ou a até 1 km de ${ucsAtingidas} UCs (${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} p.p. vs DF)`;
+      : `${formatDec(pctSeca, 1)}% na estiagem (${diffSeca > 0 ? '+' : ''}${formatDec(diffSeca, 1)} pontos vs média DF)`;
+    const ucTxt = `${formatDec(pctUc, 1)}% dentro ou a até 1 km de ${ucsAtingidas} UCs (${diffUc >= 0 ? '+' : ''}${formatDec(diffUc, 1)} pontos vs DF)`;
 
     el.innerHTML = `Recorte ativo: <b>${formatInt(total)}</b> focos ${escopoDesc}, sendo ${secaTxt} e ${ucTxt}.`;
   }
@@ -1056,7 +1058,7 @@
 
   function carTooltipHtml(d) {
     return `<strong>#${d.rank} na fila · ${escapeHtml(d.ra || 'Imóvel rural')}</strong><br/>` +
-      `Índice ${formatDec(d.indice, 1)} · ${escapeHtml(SITUACAO_LABELS[d.situacao] || d.situacao)} · ${formatDec(d.area_ha, 1)} ha<br/>` +
+      `Índice ${formatDec(d.indice, 1)} de 100 · ${escapeHtml(SITUACAO_LABELS[d.situacao] || d.situacao)} · ${formatDec(d.area_ha, 1)} ha<br/>` +
       `${formatInt(d.focos_prot)} focos em área protegida em ${d.anos_qtd} anos<br/>` +
       `<code>${escapeHtml(shortCod(d.cod_imovel))}</code>`;
   }
@@ -1074,13 +1076,13 @@
         </div>
         <div class="cf-car-card-score">
           <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
-          <b>${formatDec(im.indice, 1)}</b>
-          <span class="cf-badge cf-badge-car">${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</span>
-          <span class="cf-badge">${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</span>
+          <b title="${IPV_TIP}">${formatDec(im.indice, 1)}<small> de 100</small></b>
+          <span class="cf-badge cf-badge-car" title="Faixa do índice entre os 1.593 imóveis reincidentes">${escapeHtml(CLASSIFICACAO_LABELS[im.classificacao] || '-')}</span>
+          <span class="cf-badge" title="Situação do cadastro no CAR">${escapeHtml(SITUACAO_LABELS[im.situacao] || im.situacao || '-')}</span>
         </div>
         <div class="cf-car-card-stats">
           <div><span>Focos no imóvel</span><b>${formatInt(im.focos_total)}</b></div>
-          <div><span>Em área protegida</span><b>${formatInt(im.focos_prot)}<small>${im.focos_total > 0 ? ` ${formatDec((im.focos_prot / im.focos_total) * 100, 0)}%` : ''}</small></b></div>
+          <div title="Focos na Reserva Legal, em APP ou a até 1 km de Unidade de Conservação"><span>Em área protegida</span><b>${formatInt(im.focos_prot)}<small>${im.focos_total > 0 ? ` ${formatDec((im.focos_prot / im.focos_total) * 100, 0)}%` : ''}</small></b></div>
           <div><span>Dias com foco</span><b>${formatInt(im.dias_com_foco)}</b></div>
           <div><span>Área do imóvel</span><b>${formatDec(im.area_ha, 0)}<small> ha</small></b></div>
         </div>
@@ -2546,9 +2548,9 @@
     const list = loadedData.resumo.car_top50 || [];
     listEl.innerHTML = list.map((im) => {
       const layersBadges = [];
-      if (im.atinge_rl) layersBadges.push('<span class="cf-tbl-tag cf-tag-rl">RL</span>');
-      if (im.atinge_app) layersBadges.push('<span class="cf-tbl-tag cf-tag-app">APP</span>');
-      if (im.atinge_uc1km) layersBadges.push('<span class="cf-tbl-tag cf-tag-uc">UC 1km</span>');
+      if (im.atinge_rl) layersBadges.push('<span class="cf-tbl-tag cf-tag-rl" title="Teve foco na Reserva Legal do imóvel">RL</span>');
+      if (im.atinge_app) layersBadges.push('<span class="cf-tbl-tag cf-tag-app" title="Teve foco em Área de Preservação Permanente (beira de rio, nascente, encosta)">APP</span>');
+      if (im.atinge_uc1km) layersBadges.push('<span class="cf-tbl-tag cf-tag-uc" title="Teve foco dentro ou a até 1 km de uma Unidade de Conservação">UC 1km</span>');
 
       return `
         <li class="cf-queue-item"
@@ -2571,7 +2573,7 @@
                 <span class="cf-queue-rank">#${im.rank}</span>
                 <span class="cf-queue-ra">${escapeHtml(im.ra || 'DF')}</span>
               </button>
-              <span class="cf-indice" title="Índice de prioridade">
+              <span class="cf-indice" title="${IPV_TIP}">
                 <span class="cf-indice-bar" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(im.indice) || 0))}%"></span></span>
                 <b>${formatDec(im.indice, 1)}</b>
               </span>

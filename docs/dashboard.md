@@ -160,6 +160,7 @@ icon: material/view-dashboard
         <button type="button" id="cf-btn-fullscreen" class="cf-btn" aria-pressed="false">Tela cheia</button>
       </div>
     </div>
+    <p class="cf-stage-hint">Clique em um imóvel da fila ou no mapa para ver os detalhes dele. Passe o mouse sobre siglas e números para ver o que significam.</p>
     <div class="cf-stage-body">
       <div class="cf-stage-maps">
         <div id="panel-d3geo" class="cf-tabpanel" role="tabpanel" aria-labelledby="tab-d3geo">
@@ -186,9 +187,9 @@ icon: material/view-dashboard
             <p class="cf-queue-sub" id="cf-queue-sel-summary">5 marcados filtrando o painel</p>
           </div>
           <div class="cf-seg-group" role="group" aria-label="Atalhos da fila">
-            <button type="button" class="cf-btn-mini is-active" id="cf-btn-car-top5">Top 5</button>
-            <button type="button" class="cf-btn-mini" id="cf-btn-car-all">Todos</button>
-            <button type="button" class="cf-btn-mini" id="cf-btn-car-none">DF (0)</button>
+            <button type="button" class="cf-btn-mini is-active" id="cf-btn-car-top5" title="Marca os 5 imóveis mais prioritários e mostra só os dados deles">Top 5</button>
+            <button type="button" class="cf-btn-mini" id="cf-btn-car-all" title="Marca os 50 imóveis da fila">Todos</button>
+            <button type="button" class="cf-btn-mini" id="cf-btn-car-none" title="Desmarca todos e mostra os dados do DF inteiro">Nenhum (DF todo)</button>
             <button type="button" class="cf-btn-mini" id="cf-btn-car-fit" title="Enquadrar imóveis marcados no mapa">Zoom</button>
           </div>
         </div>
@@ -217,6 +218,7 @@ icon: material/view-dashboard
           </label>
           <span class="cf-muted" id="cf-queue-vis-count">50 exibidos</span>
         </div>
+        <p class="cf-queue-legend"><b>RL</b> Reserva Legal · <b>APP</b> Preserv. Permanente · <b>UC 1km</b> até 1 km de Unid. de Conservação · <b>prot.</b> focos nessas áreas</p>
         <div id="cf-table-status" class="cf-sr-only" role="status" aria-live="polite"></div>
         <div class="cf-queue-list-wrap" tabindex="0" role="region" aria-labelledby="cf-car-table-title">
           <ul id="cf-car-tbody" class="cf-queue-list"></ul>
