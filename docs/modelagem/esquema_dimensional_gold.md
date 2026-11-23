@@ -1,6 +1,24 @@
 # Esquema dimensional Gold
 
-Camada `gold` no dbt-duckdb (`transformacao/models/marts/`). Estrela em torno da fato atômica de focos, com um fato no grão do imóvel para a pergunta de gestão e uma tabela larga de consumo para o painel.
+Camada analítica no dbt-duckdb (`transformacao/models/marts/`). É a camada semântica do projeto: regras de negócio versionadas, tabelas com granularidade declarada e um contrato de consumo para o painel.
+
+## Em uma frase
+
+A Gold responde **quais imóveis rurais do DF têm focos reincidentes em área protegida** e entrega essa resposta já ordenada para vistoria. O painel não recalcula: lê o retrato `gold.json` exportado de `painel_imoveis_prioritarios` ([ADR 0004](../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
+
+## Como ler (semântica)
+
+| Ideia | O que significa aqui |
+| :--- | :--- |
+| **Pergunta de gestão** | Imóveis com foco em Reserva Legal, APP ou a até 1 km de UC, em pelo menos 2 anos distintos (2015–2025). |
+| **Fato atômico** | `fato_foco_calor`: uma linha por detecção (`id_foco` = tempo + espaço + satélite). |
+| **Sujeito da decisão** | O imóvel, em `fct_reincidencia_imovel` (uma linha por imóvel com foco protegido). |
+| **Fila de vistoria** | `painel_imoveis_prioritarios`: só reincidentes, ordenados pelo IPV ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)). |
+| **Tendência** | `mart_reincidencia_imovel_ano`: a mesma regra, por imóvel × ano. |
+| **Histórico cadastral** | `dim_imovel_car` em SCD Tipo 2: o foco cruza com a versão do perímetro vigente na data do evento. |
+| **Área protegida** | Reserva Legal do próprio imóvel, APP, ou faixa de 1 km de UC (regra única no intermediate). |
+
+Fluxo mental: detecção → cruzamento espacial e histórico → imóvel → reincidência → índice → fila → painel.
 
 ## Decisões de modelagem
 
