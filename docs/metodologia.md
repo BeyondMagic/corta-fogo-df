@@ -6,18 +6,16 @@ icon: material/compass-outline
 
 <p class="apresentador"><em>Responsáveis: Elias F. e Gabriel Fernando</em></p>
 
-A metodologia descreve **como** o projeto define métricas e cruzamentos. A implementação dessas regras vive na [camada Gold](modelagem/esquema_dimensional_gold.md) (dbt-duckdb). Detalhes do índice e do frescor: [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md), [Frescor e SLA](frescor_sla.md) e [Dashboard](dashboard.md).
+A metodologia diz **como** medimos. A Gold é onde isso vira tabela e alimenta o [Dashboard](dashboard.md). Guia completo, em português simples: [esquema dimensional Gold](modelagem/esquema_dimensional_gold.md). Índice: [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md). Frescor: [SLA](frescor_sla.md).
 
-## O que a Gold entrega (leitura semântica)
+## O que a Gold entrega
 
-A Gold é a definição única das métricas usadas no painel e nas análises:
+Em quatro frases:
 
-1. **Área protegida:** foco em Reserva Legal do próprio imóvel, em APP, ou a até `1.000 m` de uma UC.
-2. **Reincidente:** imóvel com essa condição em pelo menos **2 anos** distintos entre 2015 e 2025.
-3. **Fila:** reincidentes ordenados pelo IPV; o consumo público é o retrato `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
-4. **Histórico:** cada foco cruza com a versão do imóvel vigente na data do evento (SCD Tipo 2).
-
-Granularidades, decisões de modelagem e contagens: [esquema dimensional Gold](modelagem/esquema_dimensional_gold.md).
+1. Conta só foco em **Reserva Legal do imóvel**, **APP** ou a até **1 km de UC**.
+2. **Reincidente** = isso em **2 anos ou mais** (2015–2025).
+3. A fila de vistoria ordena esses imóveis pelo **IPV** e sai no `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
+4. Cada foco usa o **perímetro da época** do evento, não o mapa de hoje.
 
 ## Arquitetura em Camadas (Bronze, Silver e Gold)
 
