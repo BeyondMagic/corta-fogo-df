@@ -95,3 +95,20 @@ icon: material/numeric-4-box
 | ETL reverso | Asset `operacional/fila_vistoria` no `job_transformacao`: a fila (1.593 imóveis) volta ao PostgreSQL, idempotente | `operacional.fila_vistoria`, lida e atualizada por quem vistoria; preserva `status_vistoria` ([ETL reverso e acesso](../../etl_reverso_e_acesso.md)) |
 | Controle de acesso | Papéis `etl_reverso`, `fiscal_vistoria` e `analista_leitura`; RLS na fila e privilégio por coluna | `fiscal_vistoria` vê 1.413 de 1.593 (cadastro ativo); `analista_leitura` não lê `geom` (migração `V10`) |
 | Limites assumidos | Fila entregue via `gold.json` no painel ([Diário de Bordo](../../diario_de_bordo.md)) | Papéis sem login nem segredos; sem controle de acesso por papel no warehouse DuckDB |
+
+### 5.1. ETL reverso e controle de acesso
+
+A fila de vistoria calculada no analítico volta ao PostgreSQL operacional (`operacional.fila_vistoria`), e cada papel só tem o privilégio de que precisa. O ETL empurra por *upsert* em uma transação: rodar duas vezes deixa a tabela igual, e o `status_vistoria` que o fiscal registrou nunca é sobrescrito. Imóvel que sai da fila fica com `na_fila = FALSE`, sem apagar o histórico.
+
+| Papel | Pode | Não pode |
+| :--- | :--- | :--- |
+| `etl_reverso` | Inserir a fila e atualizar as métricas | Alterar `status_vistoria` e `observacao` |
+| `fiscal_vistoria` | Ler a fila ativa (RLS: `na_fila AND cadastro_ativo`) e alterar `status_vistoria` e `observacao` | Ver imóvel com cadastro não ativo, alterar métricas, apagar, ler `public.imovel_car` |
+| `analista_leitura` | Ler `cod_imovel`, `situacao`, `condicao`, `area_ha` e `data_download` de `imovel_car` | Ler a geometria `geom`, usar `SELECT *`, entrar no schema `operacional` |
+
+```bash
+docker compose --profile transformacao run --rm etl_reverso
+docker compose --profile transformacao --profile demonstracao run --rm demo_acesso
+```
+
+A demonstração exerce cada papel no banco real e reprova (exit 1) se algum privilégio falhar. Na última execução: 1.593 imóveis na fila, segunda carga insere 0; o fiscal vê 1.413 de 1.593 e é negado em `indice_prioridade`, `DELETE` e `imovel_car`; o analista é negado em `geom`, `SELECT *` e no schema `operacional`. Detalhes e limites em [ETL reverso e controle de acesso](../../etl_reverso_e_acesso.md).
