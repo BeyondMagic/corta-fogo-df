@@ -7,6 +7,7 @@ from dagster import (
 )
 from dagster_dbt import DbtCliResource
 
+from .etl_reverso import fila_vistoria_postgres
 from .frescor import frescor_sla
 from .lote import PARTICOES_MENSAIS, foco_calor_delta, imovel_car_delta
 from .transformacao import PROJETO_DBT, modelos_dbt
@@ -20,8 +21,8 @@ job_lote_mensal = define_asset_job(
 
 job_transformacao = define_asset_job(
     "job_transformacao",
-    selection=AssetSelection.assets(modelos_dbt),
-    description="dbt build de todos os modelos, apos as tabelas Delta de origem, e a verificacao de frescor.",
+    selection=AssetSelection.assets(modelos_dbt, fila_vistoria_postgres),
+    description="dbt build de todos os modelos, apos as tabelas Delta de origem, e o ETL reverso da fila de vistoria para o PostgreSQL.",
 )
 
 job_frescor = define_asset_job(
@@ -47,7 +48,7 @@ agenda_frescor = ScheduleDefinition(
 )
 
 defs = Definitions(
-    assets=[foco_calor_delta, imovel_car_delta, modelos_dbt],
+    assets=[foco_calor_delta, imovel_car_delta, modelos_dbt, fila_vistoria_postgres],
     asset_checks=[frescor_sla],
     jobs=[job_lote_mensal, job_transformacao, job_frescor],
     schedules=[agenda_transformacao, agenda_frescor],

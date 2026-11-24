@@ -24,7 +24,7 @@ A etapa final consolidou a arquitetura de consumo estático ([ADR 0004](adr/04-d
 
 - **Gatilho de revisão acionado:** na E1, o [ADR 0001](adr/01-adotar-postgresql-com-postgis-camada-gold.md) previu revisão caso consultas analíticas passassem de `5 s`. O join espacial bruto em `41,8 s` (e `4,6 s` na MV `V7`) disparou a transição planejada para Delta Lake + DuckDB (`5,0 ms` na tabela de consumo Gold e `187,0 KB` em `gold.json`).
 - **O que sustentou a reprodutibilidade:** pipeline conteinerizado em perfis do `docker-compose.yml`, chaves substitutas determinísticas em MD5/SHA-256 sem dependência de sequência, 189 nós aprovados no `dbt build` (incluindo testes sazonais/espaciais contra erros silenciosos e reconciliação contra a MV do PostGIS) e verificação horária de frescor no Dagster.
-- **Limites assumidos ao fim da E4:** não foram implementadas gravação reversa automatizada em tabela transacional do PostgreSQL nem políticas de controle de acesso `ROLE`/RLS no warehouse, e o recorte de polígonos do mapa estático cobre os 50 primeiros imóveis priorizados pelo IPV. Esses pontos estão documentados com limiares claros nos gatilhos do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md).
+- **Limites assumidos ao fim da E4:** o ETL reverso e o controle de acesso foram implementados no PostgreSQL ([ETL reverso e acesso](etl_reverso_e_acesso.md)), mas os papéis não têm login nem segredos, e o warehouse DuckDB não tem controle por papel. O recorte de polígonos do mapa estático cobre os 50 primeiros imóveis priorizados pelo IPV. Esses pontos estão documentados com limiares claros nos gatilhos do [ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md).
 
 ---
 

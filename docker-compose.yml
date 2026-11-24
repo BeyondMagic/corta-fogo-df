@@ -213,6 +213,49 @@ services:
       - ./scripts:/app/scripts:ro
       - ./docs/assets/dados_dashboard:/app/saida
 
+  # ETL reverso: devolve a fila de vistoria da Gold ao PostgreSQL operacional (docs/etl_reverso_e_acesso.md).
+  etl_reverso:
+    profiles: ["transformacao"]
+    build:
+      context: ./transformacao
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["python", "/app/src/pipeline/etl_reverso.py"]
+    command: []
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+      DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+    volumes:
+      - warehouse:/app/data/warehouse
+      - ./src/pipeline:/app/src/pipeline:ro
+
+  # Demonstra o ETL reverso e o privilegio minimo (papeis, colunas e RLS) no banco real.
+  demo_acesso:
+    profiles: ["demonstracao"]
+    build:
+      context: ./transformacao
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["python", "/app/scripts/testes/demo_acesso_minimo.py"]
+    command: []
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-corta-fogo-df}
+      DB_USER: ${POSTGRES_USER:-corta-fogo}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-corta-fogo}
+      DUCKDB_PATH: /app/data/warehouse/corta_fogo.duckdb
+    volumes:
+      - warehouse:/app/data/warehouse
+      - ./src/pipeline:/app/src/pipeline:ro
+      - ./scripts:/app/scripts:ro
+
   dagster_webserver:
     <<: *dagster
     command: dagster-webserver -h 0.0.0.0 -p 3000 -w /opt/dagster/home/workspace.yaml

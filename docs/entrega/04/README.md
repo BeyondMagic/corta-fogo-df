@@ -91,4 +91,6 @@ icon: material/numeric-4-box
 | Métrica única | Parâmetros em `dbt_project.yml` e contrato em `painel_imoveis_prioritarios` | Reconciliado com PostGIS; alimenta `gold.json` e `analyses/` |
 | Catálogo e linhagem | Bronze, Silver, Gold e consumo documentados | [Dicionário de Dados](../../dicionario_dados.md) e diagrama da Seção 1 |
 | LGPD (dados públicos) | Carga descarta CPF, nome e contato do SICAR; guarda `cod_imovel` e geometria | Risco residual de reidentificação indireta via portal público do SICAR |
-| Limites assumidos | Fila entregue via `gold.json` no painel ([Diário de Bordo](../../diario_de_bordo.md)) | Sem gravação reversa no PostgreSQL nem `ROLE` / RLS no warehouse |
+| ETL reverso | Asset `operacional/fila_vistoria` no `job_transformacao`: a fila (1.593 imóveis) volta ao PostgreSQL, idempotente | `operacional.fila_vistoria`, lida e atualizada por quem vistoria; preserva `status_vistoria` ([ETL reverso e acesso](../../etl_reverso_e_acesso.md)) |
+| Controle de acesso | Papéis `etl_reverso`, `fiscal_vistoria` e `analista_leitura`; RLS na fila e privilégio por coluna | `fiscal_vistoria` vê 1.413 de 1.593 (cadastro ativo); `analista_leitura` não lê `geom` (migração `V10`) |
+| Limites assumidos | Fila entregue via `gold.json` no painel ([Diário de Bordo](../../diario_de_bordo.md)) | Papéis sem login nem segredos; sem controle de acesso por papel no warehouse DuckDB |

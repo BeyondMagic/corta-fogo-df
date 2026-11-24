@@ -94,6 +94,15 @@ docker compose --profile orquestracao up -d --build
 
 Interface em <http://localhost:3000>, com o grafo de assets do dbt, retry com recuo exponencial e backfill por partição mensal. Detalhes e comandos de demonstração em [orquestracao/README.md](orquestracao/README.md).
 
+### ETL reverso e controle de acesso
+
+```bash
+docker compose --profile transformacao run --rm etl_reverso
+docker compose --profile transformacao --profile demonstracao run --rm demo_acesso
+```
+
+O primeiro comando devolve a fila de vistoria da Gold ao PostgreSQL (`operacional.fila_vistoria`); no Dagster, o mesmo passo roda no `job_transformacao`, depois do `dbt build`. O segundo exerce os papéis `etl_reverso`, `fiscal_vistoria` e `analista_leitura` no banco real e reprova (exit 1) se algum privilégio ou recorte de linha falhar. Detalhes em [docs/etl_reverso_e_acesso.md](docs/etl_reverso_e_acesso.md).
+
 ### Demonstrar a semântica de entrega (at-least-once com deduplicação)
 
 ```bash

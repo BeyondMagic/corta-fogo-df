@@ -44,6 +44,7 @@ nav = [
       { "Metodologia" = "metodologia.md" },
       { "Dicionário de Dados" = "dicionario_dados.md" },
       { "Glossário" = "glossario.md" },
+      { "ETL Reverso e Acesso" = "etl_reverso_e_acesso.md" },
       { "Diário de Bordo" = "diario_de_bordo.md" }
   ]}
   # { "Diretrizes Técnicas" = [
