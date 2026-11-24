@@ -262,7 +262,7 @@
   const LAYER_LABELS = {
     bronze: 'Bronze (Fontes)',
     silver: 'Silver (Transformação)',
-    gold: 'Gold (Modelo Estrela)',
+    gold: 'Gold (Camada Semântica)',
     ops: 'Orquestração & Consumo'
   };
 
