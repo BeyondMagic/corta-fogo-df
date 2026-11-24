@@ -15,3 +15,9 @@ O plano de ensino prevê cinco decisões estruturais ao longo do semestre, uma p
 | **0003** | [Modelagem dimensional da camada analítica e ferramenta declarativa de transformação](03-modelagem-dimensional-e-ferramenta-de-transformacao.md) | [E3](https://unb-bd2.github.io/PlanoEnsino/adr/03/) | **Aceito** | 2026-11-09 |
 | **0004** | [Publicar a camada semântica Gold como contrato dbt e retrato JSON versionado](04-disponibilizacao-contrato-dbt-e-retrato-estatico.md) | [E4](https://unb-bd2.github.io/PlanoEnsino/adr/04/) | **Aceito** | 2026-11-21 |
 | **0005** | [Índice de Prioridade de Vistoria para ordenar os imóveis reincidentes](05-indice-de-prioridade-de-vistoria.md) | Livre | **Aceito** | 2026-11-14 |
+
+Decisões adicionais, fora das cinco do plano de ensino:
+
+| ID       | Decisão | Complementa | Status | Data |
+| :------- | :------ | :---------: | :----: | :--: |
+| **0006** | [Ingestão seletiva no Delta Lake e leitura direta no PostGIS](06-ingestao-seletiva-delta-e-leitura-postgis.md) | ADRs 0002 e 0003 | **Aceito** | 2026-11-22 |
