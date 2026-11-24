@@ -129,6 +129,8 @@ Essa separação garante que reprocessar um ano inteiro seja apenas rodar o arqu
 Todos os códigos, testes e relatórios da Entrega 2 estão implementados e versionados no repositório:
 
 - **[Decisão de Arquitetura 0002](../../adr/02-mecanismo-de-ingestao-e-formato-aberto.md):** documento formal detalhando o contexto, alternativas avaliadas, critérios técnicos e medições comparativas.
+- **[Decisão de Arquitetura 0006](../../adr/06-ingestao-seletiva-delta-e-leitura-postgis.md):** justificativa para replicar apenas `foco_calor` e `imovel_car` para o Delta Lake e manter as camadas territoriais no PostGIS.
+- **[Decisões e Descartes](../../decisoes_descartes.md):** detalhamento da deduplicação de focos no lote (38.945 para 38.944) e demais descartes do pipeline.
 - **[Pipeline em Lote (`batch_ingest.py`)](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/batch_ingest.py):** script responsável pela carga idempotente dos focos de satélite em arquivos Parquet com Delta Lake, particionado por ano e mês.
 - **[Consumidor CDC (`cdc_consumer.py`)](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/cdc_consumer.py):** script que lê eventos de transação do slot lógico `cdc_imovel` no PostgreSQL e atualiza a tabela Delta de imóveis rurais.
 - **[Simulador de Mutações no OLTP (`gerar_mutacoes_oltp.py`)](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/cdc/gerar_mutacoes_oltp.py):** rotina que insere e remove focos, retifica um imóvel e insere, altera e remove um imóvel sentinela no banco operacional para demonstrar a captura contínua de mudanças.

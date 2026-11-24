@@ -393,6 +393,7 @@ order by focos desc;
 Documentos complementares e código-fonte versionados no repositório:
 
 - **[Decisão de Arquitetura (ADR 0001)](../../adr/01-adotar-postgresql-com-postgis-camada-gold.md):** justificativa da escolha do PostgreSQL com PostGIS, análise de três alternativas e benchmarks com dados do DF.
+- **[Decisões e Descartes](../../decisoes_descartes.md):** justificativa dos recortes de fontes (Flora, Vazão, Hidrografia, PDAD), atributos descartados do INPE, recorte de APPs e contagens reais de saneamento na carga.
 - **[Benchmarks de Desempenho Espacial](https://github.com/BeyondMagic/corta-fogo-df/tree/main/scripts/benchmark):** scripts e medições no PostgreSQL (com e sem índice GiST) e no MongoDB (índice 2dsphere).
 - **[Glossário Técnico](../../glossario.md):** definições formais e referências bibliográficas de conceitos espaciais, temporais e de engenharia de dados.
 - **[Scripts de Migração](https://github.com/BeyondMagic/corta-fogo-df/tree/main/migrations):** scripts SQL versionados gerenciados pelo Flyway (`V1` a `V9`).
