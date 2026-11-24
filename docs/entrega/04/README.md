@@ -66,7 +66,7 @@ icon: material/numeric-4-box
 | Alternativa | Entrega | Latência medida | Limite |
 | :--- | :--- | :--- | :--- |
 | A. Opção nula (PostGIS `V9` / CSV) | `6,6 KB` (CSV) | `2.481,7 ms` (`V9`) / `0,17 ms` (CSV) | Sem geometrias no CSV; exige PostGIS |
-| B. API / Federação DuckDB | Sob demanda | `5,0 ms` (SQL tabular) | Servidor ativo; lock na carga diária |
+| B. API / Federação DuckDB | Sob demanda | `5,0 ms` (SQL tabular) | Servidor ativo; lock na transformação diária |
 | C. Contrato dbt + `gold.json` | **187,0 KB** (`35,9 KB` gzip) | **2,29 ms** (parse JSON) | Polígonos no mapa só para o top 50 |
 
 ### Gatilhos de revisão dos 5 ADRs
@@ -87,10 +87,11 @@ icon: material/numeric-4-box
 
 | Critério | O que roda | Evidência / Limite |
 | :--- | :--- | :--- |
-| Reprodutibilidade e SLA | `docker compose up` e *asset check* horário `frescor_sla` no Dagster | Carga diária às `03:00` BRT; limite de `30 h` ([`frescor.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/frescor.py)) |
+| Reprodutibilidade e SLA | `docker compose up` e *asset check* horário `frescor_sla` no Dagster | Transformação diária (dbt e ETL reverso) às `03:00` BRT; limite de `30 h` ([`frescor.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/frescor.py)) |
 | Métrica única | Parâmetros em `dbt_project.yml` e contrato em `painel_imoveis_prioritarios` | Reconciliado com PostGIS; alimenta `gold.json` e `analyses/` |
 | Catálogo e linhagem | Bronze, Silver, Gold e consumo documentados | [Dicionário de Dados](../../dicionario_dados.md) e diagrama da Seção 1 |
-| LGPD (dados públicos) | Carga descarta CPF, nome e contato do SICAR; guarda `cod_imovel` e geometria | Risco residual de reidentificação indireta via portal público do SICAR |
+| LGPD: dado pessoal | O arquivo público do SICAR não traz CPF, nome nem contato do titular; o banco guarda só `cod_imovel`, situação, condição, área e geometria | Risco residual: o `cod_imovel` permite chegar ao titular consultando o portal público do SICAR |
+| LGPD: base legal, retenção e descarte | Base legal: dado de acesso público tratado conforme a finalidade, a boa-fé e o interesse público (LGPD, art. 7º, §§ 3º e 4º). Retenção: enquanto o projeto existir. Descarte: `docker compose down -v` apaga os volumes | Base legal a validar com o grupo. Os arquivos do SICAR continuam no histórico do Git |
 | ETL reverso | Asset `operacional/fila_vistoria` no `job_transformacao`: a fila (1.593 imóveis) volta ao PostgreSQL, idempotente | `operacional.fila_vistoria`, lida e atualizada por quem vistoria; preserva `status_vistoria` ([ETL reverso e acesso](../../etl_reverso_e_acesso.md)) |
 | Controle de acesso | Papéis `etl_reverso`, `fiscal_vistoria` e `analista_leitura`; RLS na fila e privilégio por coluna | `fiscal_vistoria` vê 1.413 de 1.593 (cadastro ativo); `analista_leitura` não lê `geom` (migração `V10`) |
 | Limites assumidos | Fila entregue via `gold.json` no painel ([Diário de Bordo](../../diario_de_bordo.md)) | Papéis sem login nem segredos; sem controle de acesso por papel no warehouse DuckDB |
