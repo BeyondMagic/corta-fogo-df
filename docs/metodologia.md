@@ -6,7 +6,7 @@ icon: material/compass-outline
 
 <p class="apresentador"><em>Responsáveis: Elias F. e Gabriel Fernando</em></p>
 
-A metodologia diz **como** medimos. A Gold é onde isso vira tabela e alimenta o [Dashboard](dashboard.md). Guia completo, em português simples: [esquema dimensional Gold](modelagem/esquema_dimensional_gold.md). Índice: [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md). Frescor: [SLA](frescor_sla.md).
+A metodologia diz **como** medimos. A **Gold** é a camada semântica (tabelas com significado de negócio). A **intermediate** não é semântica: ela só prepara cruzamentos e métricas dentro da Silver. Guia: [esquema dimensional Gold](modelagem/esquema_dimensional_gold.md). Índice: [ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md). Frescor: [SLA](frescor_sla.md).
 
 ## O que a Gold entrega
 
@@ -16,6 +16,8 @@ Em quatro frases:
 2. **Reincidente** = isso em **2 anos ou mais** (2015–2025).
 3. A fila de vistoria ordena esses imóveis pelo **IPV** e sai no `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
 4. Cada foco usa o **perímetro da época** do evento, não o mapa de hoje.
+
+**Intermediate vs Gold:** intermediate calcula (`int_*`); Gold publica (`fato_*`, `fct_*`, `painel_*`). O dashboard só lê a Gold.
 
 ## Arquitetura em Camadas (Bronze, Silver e Gold)
 
