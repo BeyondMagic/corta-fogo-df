@@ -38,7 +38,7 @@ Materializa as métricas anuais da pergunta de gestão por imóvel rural, identi
 | `sk_imovel` | `VARCHAR(32)` | FK / NOT NULL | Chave substituta da versão cadastral SCD Tipo 2 do imóvel vigente na passagem do foco mais recente daquele ano. | `dim_imovel_car.sk_imovel` |
 | `total_focos` | `BIGINT` | Medida / NOT NULL | Contagem de focos distintos registrados no perímetro do imóvel que incidiram em área protegida naquele ano. | `count(DISTINCT id_foco)` |
 | `atinge_reserva_legal` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro se ao menos um foco atingiu a Reserva Legal averbada ou declarada do próprio imóvel no ano. | `bool_or(em_reserva_legal)` |
-| `atinge_app` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro se ao menos um foco atingiu Área de Preservação Permanente (hidrografia, nascente ou encosta) no ano. | `bool_or(em_app)` |
+| `atinge_app` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro se ao menos um foco atingiu Área de Preservação Permanente carregada do SISDIA/IBRAM (`nascente`, `borda_de_chapada` ou `reservatorio`; ver [Decisões e Descartes](decisoes_descartes.md)) no ano. | `bool_or(em_app)` |
 | `atinge_uc_1km` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro se ao menos um foco ocorreu dentro da faixa de amortecimento de 1.000 metros de Unidade de Conservação no ano. | `bool_or(ate_1km_uc)` |
 | `anos_com_foco_protegido` | `INTEGER` | Métrica / NOT NULL | Quantidade acumulada de anos distintos em que o imóvel apresentou focos sob critérios de proteção em toda a série de 11 anos. | `count(DISTINCT ano) OVER (PARTITION BY cod_imovel)` |
 | `lista_anos_protegidos` | `VARCHAR[]` | Métrica / NOT NULL | Vetor ordenado com os anos específicos em que foram constatadas queimadas incidentes no imóvel. | `array_agg(DISTINCT ano ORDER BY ano)` |
@@ -58,6 +58,7 @@ Tabela fato atômica do modelo dimensional estrela. Não multiplica linhas por c
 | `id_foco` | `VARCHAR(64)` | PK / NOT NULL | Hash SHA-256 determinístico derivado de latitude, longitude, data/hora do evento e nome do satélite. | `stg_focos_calor.id_foco` |
 | `sk_tempo` | `INTEGER` | FK / NOT NULL | Chave para `dim_tempo` no formato numérico `YYYYMMDD`, calculada a partir da data no fuso horário local de Brasília. | `dim_tempo.sk_tempo` |
 | `sk_satelite` | `VARCHAR(32)` | FK / NOT NULL | Chave substituta para `dim_satelite` (MD5 do nome do satélite em caixa alta). | `dim_satelite.sk_satelite` |
+| `sk_regiao_administrativa` | `VARCHAR(32)` | FK | Chave substituta para `dim_regiao_administrativa` (MD5 do código da RA; nulo se fora da tolerância de 2.000 m). | `int_focos_territorio.sk_regiao_administrativa` |
 | `satelite` | `VARCHAR(40)` | Atributo degenerado | Nome do satélite detector (ex: `AQUA_M-T`, `NOAA-20`). | `stg_focos_calor.satelite` |
 | `is_satelite_referencia` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro quando captado pelo satélite de referência oficial do INPE (`AQUA_M-T`), usado para análises temporais livres de viés amostral. | `stg_focos_calor.is_satelite_referencia` |
 | `data_hora_evento` | `TIMESTAMPTZ` | Temporal / NOT NULL | Carimbo UTC do instante exato de detecção térmica pela passagem orbital. | `stg_focos_calor.data_hora_evento` |
@@ -70,6 +71,9 @@ Tabela fato atômica do modelo dimensional estrela. Não multiplica linhas por c
 | `x_31983` | `DOUBLE` | Métrica / NOT NULL | Coordenada plana Leste (Easting) projetada em metros (SIRGAS 2000 UTM 23S). | `stg_focos_calor.x_31983` |
 | `y_31983` | `DOUBLE` | Métrica / NOT NULL | Coordenada plana Norte (Northing) projetada em metros (SIRGAS 2000 UTM 23S). | `stg_focos_calor.y_31983` |
 | `geom` | `GEOMETRY` | Espacial / NOT NULL | Ponto geométrico bidimensional com SRID fixo em EPSG:31983. Representa o centroide do pixel do satélite (pegada nominal de 375 m a 1.000 m no solo, e não o polígono contínuo da cicatriz de queima). | `ST_Point(x_31983, y_31983)` |
+| `municipio` | `VARCHAR` | Atributo | Município atribuído pelo INPE em caixa alta (`BRASÍLIA`). | `stg_focos_calor.municipio` |
+| `bioma` | `VARCHAR` | Atributo | Bioma informado pela fonte (`Cerrado`). | `stg_focos_calor.bioma` |
+| `risco_fogo` | `DOUBLE` | Métrica | Estimativa de risco de fogo do INPE (0.0 a 1.0; nulo em 4.690 registros). | `stg_focos_calor.risco_fogo` |
 | `origem_ingestao` | `VARCHAR(20)` | Linhagem / NOT NULL | Identificador do canal de extração de origem (sempre `lote`). | Constante de pipeline |
 | `operacao_cdc` | `VARCHAR(1)` | Linhagem / NOT NULL | Código de linhagem da operação (sempre `I` para inserção). | Constante de pipeline |
 | `qtd_imoveis` | `INTEGER` | Métrica / NOT NULL | Quantidade de imóveis rurais cadastrados no CAR cujo perímetro contém o foco. | Junção espacial com `stg_imoveis_car` |
@@ -101,7 +105,7 @@ Dimensão com suporte a Histórico de Variação Lenta (SCD Tipo 2), derivada do
 | `geom_ewkb_hex` | `VARCHAR` | Serialização / NOT NULL | Perímetro do imóvel serializado em formato EWKB hexadecimal com SRID 31983. | `stg_imoveis_car.geom_ewkb_hex` |
 | `geom` | `GEOMETRY` | Espacial / NOT NULL | Polígono ou multipolígono métrico reprojetado em EPSG:31983. | Conversão de `geom_ewkb_hex` |
 | `is_excluido` | `BOOLEAN` | Lógica / NOT NULL | Verdadeiro quando a versão registra a inativação ou exclusão lógica do imóvel via evento de CDC. | `operacao_cdc = 'D'` |
-| `operacao_cdc` | `VARCHAR(1)` | Linhagem / NOT NULL | Operação capturada no log de transações do PostgreSQL (`I` = Insert, `U` = Update, `D` = Delete). | Consumidor CDC / Debezium |
+| `operacao_cdc` | `VARCHAR(1)` | Linhagem / NOT NULL | Operação capturada no log de transações do PostgreSQL (`I` = Insert, `U` = Update, `D` = Delete). | Consumidor CDC nativo (`test_decoding`) |
 | `lsn_origem` | `BIGINT` | Linhagem / NOT NULL | Log Sequence Number (LSN) do PostgreSQL, garantindo ordenação estrita e idempotência contra reentregas. | Consumidor CDC |
 | `data_hora_ingestao` | `TIMESTAMPTZ` | Auditoria / NOT NULL | Carimbo UTC do momento de inserção da linha na tabela analítica. | Timestamp de escrita |
 | `dbt_valid_from` | `TIMESTAMPTZ` | Vigência / NOT NULL | Início da vigência da versão cadastral (inclusivo). Para a primeira versão histórica, adota data aberta (`1900-01-01`). | Mecanismo de Snapshot dbt |
@@ -344,25 +348,22 @@ Tabela operacional de armazenamento dos focos de calor com garantia de imutabili
 
 ### 3.2 `staging.foco_calor_raw`
 
-Tabela de staging sem tipagem estrita para carga em alta velocidade via comando nativo `COPY FROM STDIN` do PostgreSQL.
+Tabela de staging transitória para carga via comando `COPY` do PostgreSQL (migração `V5__staging_focos.sql`). Recebe o CSV já filtrado para o DF por `src/pipeline/extract_focos.py`. Colunas do CSV original do INPE fora desta tabela (`pais`, `estado`, `dias_sem_chuva`, `precipitacao`, `frp`) são descartadas na extração (ver [Decisões e Descartes](decisoes_descartes.md)).
 
-- **Granularidade:** uma linha por registro de texto bruto do arquivo CSV disponibilizado pelo BDQueimadas.
-- **Tipo de Objeto:** Tabela relacional temporária/transitória de staging.
+- **Granularidade:** uma linha por registro do arquivo `data/processed/focos_df_2015_2025.csv` (38.945 linhas).
+- **Tipo de Objeto:** Tabela relacional transitória de staging.
 
 | Coluna | Tipo | Chave / Restrição | Descrição |
 | :--- | :--- | :--- | :--- |
-| `data_hora_gmt` | `VARCHAR(30)` | Texto bruto | Carimbo de data e hora UTC como entregue no CSV. |
-| `satelite` | `VARCHAR(50)` | Texto bruto | Nome do satélite detector. |
-| `pais` | `VARCHAR(50)` | Texto bruto | País (`Brasil`). |
-| `estado` | `VARCHAR(50)` | Texto bruto | Unidade federativa (`DISTRITO FEDERAL`). |
-| `municipio` | `VARCHAR(100)` | Texto bruto | Nome do município (`BRASÍLIA`). |
-| `bioma` | `VARCHAR(50)` | Texto bruto | Nome do bioma (`Cerrado`). |
-| `dias_sem_chuva` | `VARCHAR(20)` | Texto bruto | Quantidade estimada de dias consecutivos sem chuva. |
-| `precipitacao` | `VARCHAR(20)` | Texto bruto | Precipitação acumulada recente em milímetros. |
-| `risco_fogo` | `VARCHAR(20)` | Texto bruto | Estimativa de risco de queimada. |
-| `latitude` | `VARCHAR(30)` | Texto bruto | Latitude em formato textual decimal. |
-| `longitude` | `VARCHAR(30)` | Texto bruto | Longitude em formato textual decimal. |
-| `frp` | `VARCHAR(30)` | Texto bruto | Potência radiativa do fogo (Fire Radiative Power) em MW. |
+| `latitude` | `NUMERIC` | Coordenada | Latitude em graus decimais (WGS 84). |
+| `longitude` | `NUMERIC` | Coordenada | Longitude em graus decimais (WGS 84). |
+| `data_hora_evento` | `TIMESTAMPTZ` | Temporal | Carimbo UTC da passagem do satélite. |
+| `data_hora_ingestao` | `TIMESTAMPTZ` | Auditoria | Carimbo UTC registrado na extração. |
+| `satelite` | `VARCHAR(40)` | Atributo | Nome do satélite detector. |
+| `is_satelite_referencia` | `BOOLEAN` | Flag | Verdadeiro para o satélite de referência `AQUA_M-T`. |
+| `municipio` | `VARCHAR(80)` | Atributo | Município informado pelo INPE (`BRASÍLIA`). |
+| `bioma` | `VARCHAR(40)` | Atributo | Bioma informado (`Cerrado`). |
+| `risco_fogo` | `NUMERIC(4,3)` | Métrica | Estimativa de risco de fogo do INPE (0 a 1; pode ser nulo). |
 
 ---
 
@@ -427,16 +428,16 @@ Polígonos de Reserva Legal declarados no SICAR no interior de imóveis rurais.
 
 ### 3.6 `public.area_preservacao_permanente`
 
-Mapeamento territorial de Áreas de Preservação Permanente no Distrito Federal.
+Mapeamento territorial de Áreas de Preservação Permanente no Distrito Federal (2.234 feições do SISDIA/IBRAM).
 
-- **Granularidade:** uma linha por feição poligonal de APP (nascentes, cursos d'água, encostas).
+- **Granularidade:** uma linha por feição poligonal de APP carregada (`nascente`, `borda_de_chapada` ou `reservatorio`). Demais tipologias de APP e a camada APP do SICAR não entram na carga atual (ver [Decisões e Descartes](decisoes_descartes.md)).
 - **Tipo de Objeto:** Tabela relacional PostGIS com índice espacial GiST (`idx_app_geom`).
 
 | Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
 | :--- | :--- | :--- | :--- | :--- |
 | `id_app` | `INTEGER` | PK / IDENTITY | Identificador primário sequencial. | Auto-incremento transacional |
-| `cod_imovel` | `VARCHAR(60)` | FK opcional | Referência a `public.imovel_car (cod_imovel)`. Preenchido se a APP vier do pacote individual do imóvel no SICAR; nulo se provier de camada distrital do IBRAM. | Relação fundiária SICAR |
-| `tipo` | `VARCHAR(100)` | Atributo | Tipologia da APP (ex: curso d'água, nascente, reservatório artificial, topo de morro). | Camada temática de origem |
+| `cod_imovel` | `VARCHAR(60)` | FK opcional | Referência opcional a `public.imovel_car (cod_imovel)`. Sempre `NULL` na carga atual (todas as feições vêm do SISDIA/IBRAM). | Esquema previsto para SICAR |
+| `tipo` | `VARCHAR(100)` | Atributo | Tipologia carregada da APP: `nascente` (2.000), `borda_de_chapada` (125) ou `reservatorio` (109). | Camada temática SISDIA/IBRAM |
 | `area_ha` | `NUMERIC(14,4)` | Métrica / CHECK (> 0) | Extensão em hectares da área preservada. | Atributo oficial da feição |
 | `fonte` | `VARCHAR(80)` | Linhagem | Órgão ou base de dados fornecedora (`IBRAM`, `Geoportal DF`, `SICAR`). | Metadado de extração |
 | `data_download` | `DATE` | Metadado / NOT NULL | Data em que a camada foi capturada na fonte oficial. | Metadado de extração |
@@ -457,6 +458,32 @@ Catálogo dos sensores orbitais suportados na ingestão do BDQueimadas.
 | `id_satelite` | `SMALLINT` | PK / IDENTITY | Chave primária substituta interna do PostgreSQL. | Auto-incremento transacional |
 | `nome` | `VARCHAR(40)` | Chave Natural / NOT NULL | Nome do satélite em letras maiúsculas sem espaços vazios (`UNIQUE`). | BDQueimadas |
 | `is_referencia` | `BOOLEAN` | Flag / NOT NULL | Verdadeiro para o sensor `AQUA_M-T`. O índice único parcial `uq_satelite_referencia` impede mais de um registro verdadeiro. | Configuração do BDQueimadas |
+
+---
+
+### 3.8 `public.regiao_administrativa`
+
+Polígonos das 37 Regiões Administrativas do Distrito Federal obtidos na IDE-DF / SEDUH (migração `V8__regiao_administrativa.sql`).
+
+- **Granularidade:** uma linha por Região Administrativa oficial do DF.
+- **Tipo de Objeto:** Tabela relacional PostGIS com índice espacial GiST (`ix_regiao_administrativa_geom`).
+
+| Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
+| :--- | :--- | :--- | :--- | :--- |
+| `id_ra` | `INTEGER` | PK / IDENTITY | Identificador sequencial interno do PostgreSQL. | Auto-incremento transacional |
+| `codigo` | `VARCHAR(20)` | UNIQUE / NOT NULL | Código normalizado no padrão `RA-<romano>` (ex.: `RA-VI`). | IDE-DF / SEDUH |
+| `nome` | `VARCHAR(100)` | Atributo / NOT NULL | Nome oficial formatado da RA. | IDE-DF / SEDUH |
+| `area_km2` | `NUMERIC(10,2)` | Métrica / CHECK (> 0) | Área da RA em km² calculada sobre a geometria em `EPSG:31983`. | Geometria reprojetada |
+| `fonte` | `VARCHAR(80)` | Linhagem | Origem registrada (`IDE-DF / SEDUH`). | Metadado de carga |
+| `data_download` | `DATE` | Metadado / NOT NULL | Data em que o arquivo GeoJSON foi baixado. | Sidecar `.meta.json` |
+| `data_hora_ingestao` | `TIMESTAMPTZ` | Auditoria / DEFAULT now() | Momento da inserção no banco. | Relógio do servidor |
+| `geom` | `geometry(MultiPolygon, 31983)` | Espacial / NOT NULL | Perímetro da RA validado com `ST_IsValid` e indexado com GiST. | Geometria reprojetada |
+
+---
+
+### 3.9 `public.hidrografia`
+
+Tabela auxiliar criada na migração `V2__cadastros_base.sql` (`MultiLineString, 31983`) como camada opcional da E1. Permanece com **0 registros** porque não participa da pergunta de gestão (ver [Decisões e Descartes](decisoes_descartes.md)).
 
 ---
 

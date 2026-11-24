@@ -58,4 +58,4 @@ O reprocessamento é idempotente porque o `MERGE` de `batch_ingest.py` só inser
 ## Limitações
 
 - O backfill por partição está na ingestão para o Delta. Os modelos dbt são `table` com recarga completa, sem partição.
-- Ainda não há testes dbt (`dbt build` só materializa os modelos).
+- O `job_transformacao` executa `dbt build` (incluindo os 259 testes de dados e o teste unitário) e o `job_frescor` roda o *asset check* `frescor_sla` de hora em hora ([`docs/frescor_sla.md`](../docs/frescor_sla.md)).
