@@ -17,6 +17,8 @@ Em quatro frases:
 3. A fila de vistoria ordena esses imóveis pelo **IPV** ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)) e sai no `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
 4. Cada foco usa o **perímetro da época** do evento, não o mapa de hoje.
 
+**Intermediate vs Gold:** intermediate calcula (`int_*`); Gold publica (`fato_*`, `fct_*`, `painel_*`). O dashboard só lê a Gold.
+
 ## Arquitetura em Camadas (Bronze, Silver e Gold)
 
 <p class="apresentador"><em>Arquitetura: Gabriel Souza e Manoel Felipe</em></p>

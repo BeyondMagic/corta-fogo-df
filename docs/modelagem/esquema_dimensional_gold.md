@@ -1,80 +1,98 @@
 # Esquema dimensional Gold
 
-A Gold é a camada pronta para consulta. Ela junta os dados já limpos e responde a pergunta do projeto sem o painel precisar recalcular nada.
+A Gold é a **camada semântica** do projeto: regras de negócio em tabelas com nome e grão claros, prontas para o painel e para SQL. O painel não recalcula: lê o `gold.json` ([ADR 0004](../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
 
-Implementação: dbt-duckdb em `transformacao/models/marts/`. Consumo no painel: arquivo `gold.json` ([ADR 0004](../adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
+Implementação: dbt-duckdb em `transformacao/models/marts/`.
 
-## A pergunta que a Gold responde
+## Intermediate não é a camada semântica
+
+São camadas diferentes no mesmo pipeline dbt:
+
+| Camada | Pasta | Papel | Quem consome |
+| :--- | :--- | :--- | :--- |
+| **Staging** | `models/staging/` | Tipa e limpa a fonte (Silver) | Só o pipeline |
+| **Intermediate** | `models/intermediate/` | Cozinha o dado: cruzamento espacial, versões SCD2, métricas, peças do IPV | Só o pipeline |
+| **Gold (semântica)** | `models/marts/` | Responde a pergunta de gestão: fato, dimensões, fila | Painel, análises, entrega |
+
+A intermediate **calcula** (ex.: `int_focos_imoveis`, `int_indice_prioridade_imovel`).  
+A Gold **publica o significado** (ex.: `fct_reincidencia_imovel`, `painel_imoveis_prioritarios`).
+
+No diagrama Bronze / Silver / Gold, a intermediate fica dentro da **Silver** (transformação). A camada semântica é a **Gold**.
+
+## A pergunta
 
 > Quais imóveis rurais do DF tiveram focos de calor **reincidentes** em Reserva Legal, APP ou a até 1 km de Unidade de Conservação, entre 2015 e 2025?
 
 **Reincidente** = foco em área protegida em **2 anos ou mais**.
 
-## Do foco à fila (passo a passo)
+## O que importa na Gold (3 tabelas)
 
-1. O satélite detecta um **foco** (ponto no mapa, com data e sensor).
-2. A gente pergunta: esse foco caiu em imóvel? Em Reserva Legal, APP ou perto de UC?
-3. Cada foco é comparado com o **perímetro que o imóvel tinha naquela data** (não com o mapa de hoje).
-4. Agrupamos por imóvel: em quantos anos isso aconteceu?
-5. Quem tem 2 anos ou mais vira **reincidente**.
-6. Os reincidentes entram numa **fila de vistoria**, ordenada pelo índice IPV ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)).
-7. O painel só lê essa fila pronta.
-
-## Tabelas em português
-
-| Tabela | Em uma linha | Cada linha é | Linhas (14/11/2026) |
+| Tabela | Pra quê | Cada linha é | Linhas |
 | :--- | :--- | :--- | ---: |
-| `fato_foco_calor` | Todas as detecções | 1 foco | 38.944 |
-| `dim_tempo` | Calendário do projeto | 1 dia | 4.018 |
+| `fato_foco_calor` | Contar focos sem inflar o número | 1 detecção | 38.944 |
+| `fct_reincidencia_imovel` | Imóvel na pergunta + IPV | 1 imóvel com foco protegido | 4.068 |
+| `painel_imoveis_prioritarios` | Fila do dashboard | 1 reincidente, já ordenado | 1.593 |
+
+```text
+intermediate (cruzamentos, métricas, IPV)
+        |
+        v
+fato_foco_calor --> fct_reincidencia_imovel --> painel_imoveis_prioritarios
+   (cada foco)         (cada imóvel)              (fila / gold.json)
+```
+
+## Do foco à fila
+
+1. Satélite detecta um **foco**.
+2. Intermediate: caiu em imóvel e em área protegida (RL, APP ou 1 km de UC)?
+3. Intermediate: usa o **perímetro da data do foco** (SCD2).
+4. Gold: conta **anos** por imóvel; com 2 ou mais → reincidente.
+5. Gold: ordena pelo **IPV** ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)).
+6. Painel lê a fila pronta.
+
+## Duas regras anti-erro
+
+1. **Um foco, uma linha** em `fato_foco_calor`. No SICAR imóveis se sobrepõem; repetir por imóvel infla o total.
+2. **Mapa da época do foco** via `dim_imovel_car` (SCD Tipo 2).
+
+## Glossário
+
+| Termo | Significado |
+| :--- | :--- |
+| **Camada semântica** | A Gold: métricas e entidades com significado de negócio. |
+| **Intermediate** | Etapa de transformação (Silver), não é consumo final. |
+| **UC** | Unidade de Conservação. Conta a até 1 km. |
+| **APP** | Área de Preservação Permanente. Conta se intersecta. |
+| **Reserva Legal** | Parte do imóvel com vegetação obrigatória. |
+| **SICAR** | Cadastro Ambiental Rural. |
+| **IPV** | Índice que ordena a fila. |
+| **SCD Tipo 2** | Guardar versões do cadastro. |
+
+---
+
+## Detalhe: demais tabelas da Gold
+
+| Tabela | Em uma linha | Cada linha é | Linhas |
+| :--- | :--- | :--- | ---: |
+| `dim_tempo` | Calendário 2015–2025 | 1 dia | 4.018 |
 | `dim_satelite` | Sensores do INPE | 1 satélite | 20 |
 | `dim_regiao_administrativa` | RAs do DF | 1 RA | 37 |
-| `dim_territorio` | Áreas protegidas | 1 UC, APP ou Reserva Legal | 15.814 |
-| `dim_imovel_car` | Histórico do cadastro | 1 versão de um imóvel | 21.049 |
-| `fct_reincidencia_imovel` | Imóveis que já queimaram em área protegida | 1 imóvel | 4.068 |
-| `mart_reincidencia_imovel_ano` | A mesma coisa, ano a ano | 1 imóvel em 1 ano | 8.271 |
-| `painel_imoveis_prioritarios` | Fila de vistoria (o que o painel usa) | 1 imóvel reincidente, já ordenado | 1.593 |
+| `dim_territorio` | Áreas protegidas | 1 UC, APP ou RL | 15.814 |
+| `dim_imovel_car` | Histórico do cadastro | 1 versão de imóvel | 21.049 |
+| `mart_reincidencia_imovel_ano` | Tendência ano a ano | 1 imóvel × 1 ano | 8.271 |
 
-### Três tabelas que mais importam
-
-| Se você quer… | Olhe |
-| :--- | :--- |
-| Contar focos sem inflar número | `fato_foco_calor` |
-| Saber se o imóvel é reincidente e o IPV dele | `fct_reincidencia_imovel` |
-| Ver a fila que o dashboard mostra | `painel_imoveis_prioritarios` |
-
-## Duas regras que evitam erro de contagem
-
-**1. Um foco, uma linha na fato.**  
-No SICAR (cadastro rural) os imóveis podem se sobrepor. Um foco pode cair em vários. Se a fato repetisse uma linha por imóvel, o total de focos cresceria artificialmente. A ligação foco↔imóvel fica à parte; a decisão fica no fato **por imóvel**.
-
-**2. Usar o mapa da época do foco.**  
-Um foco de 2017 cruza com o perímetro de 2017. Isso é o histórico SCD Tipo 2 em `dim_imovel_car`.
-
-## Glossário rápido
-
-| Termo | Significado aqui |
-| :--- | :--- |
-| **UC** | Unidade de Conservação (parque, APA etc.). Conta se o foco está a até 1 km. |
-| **APP** | Área de Preservação Permanente (beira de rio, nascente etc.). Conta se o foco intersecta. |
-| **Reserva Legal** | Parte do imóvel que a lei manda manter com vegetação. Conta se o foco intersecta a RL **daquele** imóvel. |
-| **SICAR** | Sistema do Cadastro Ambiental Rural, origem dos perímetros. |
-| **IPV** | Índice que ordena quem vistoriar primeiro (recorrência, recência, intensidade). |
-| **Mart** | Tabela já agregada para uma pergunta (aqui: imóvel × ano). |
-| **SCD Tipo 2** | Guardar versões antigas do cadastro em vez de apagar o passado. |
-
-## Decisões de modelagem (referência)
+## Decisões de modelagem
 
 | Pergunta | Decisão |
 | :--- | :--- |
-| Qual o grão da fato atômica? | Uma linha por `id_foco` (detecção = tempo + espaço + satélite). |
-| A fato atômica explode por imóvel? | Não. Relação N:N em `int_focos_imoveis`. |
-| Onde está o sujeito da pergunta? | `fct_reincidencia_imovel`, uma linha por imóvel. |
-| Como ordenar os reincidentes? | IPV ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)). |
-| Tempo: dia ou mês? | Dia civil local. Estação seca no DF: maio a setembro. |
-| Chave de `dim_territorio`? | `md5(tipo_area, cod_imovel, WKT)`. Sem IDENTITY do PostGIS. |
-| Região Administrativa | Ligada ao foco (ponto) e ao imóvel (ponto interno). |
-| SCD2 no cruzamento | `dbt_valid_from <= data_hora_evento < dbt_valid_to`. |
-| Reincidência | ≥ 2 anos distintos com foco em área protegida (2015–2025). |
+| Grão da fato atômica? | 1 linha por `id_foco`. |
+| Explode por imóvel? | Não. N:N em `int_focos_imoveis`. |
+| Sujeito da pergunta? | `fct_reincidencia_imovel`. |
+| Ordem da fila? | IPV ([ADR 0005](../adr/05-indice-de-prioridade-de-vistoria.md)). |
+| Tempo | Dia civil local. Seca no DF: maio a setembro. |
+| Chave de território | `md5(tipo_area, cod_imovel, WKT)`. |
+| SCD2 | `dbt_valid_from <= data_hora_evento < dbt_valid_to`. |
+| Reincidência | ≥ 2 anos com foco em área protegida (2015–2025). |
 
 ## Arquitetura em camadas (Bronze, Silver e Gold)
 
@@ -105,21 +123,16 @@ dim_tempo   dim_satelite   dim_regiao_administrativa   dim_territorio
 ### `dim_imovel_car`
 
 - PK: `sk_imovel = md5(cod_imovel, lsn_origem)`, uma por versão.
-- Nova versão só quando muda atributo, geometria ou exclusão. Reentrega igual do CDC não abre versão.
-- A lógica de versões está em `int_imoveis_versoes`; a dimensão só apresenta.
+- Nova versão só quando muda atributo, geometria ou exclusão.
+- Lógica em `int_imoveis_versoes`; a dimensão só apresenta.
 
 ### `fato_foco_calor`
 
-Lê `int_focos_territorio`. Chaves: `id_foco`, `sk_tempo`, `sk_satelite`, `sk_regiao_administrativa`. Marcas: `em_imovel_car`, `em_reserva_legal`, `em_app`, `ate_1km_uc`, `em_area_protegida`, `qtd_imoveis`, `distancia_min_uc_m`.
+Lê `int_focos_territorio`. Chaves: `id_foco`, `sk_tempo`, `sk_satelite`, `sk_regiao_administrativa`.
 
 ### `fct_reincidencia_imovel`
 
-1. `int_focos_imoveis`: pares foco e imóvel na versão vigente.
-2. `int_focos_protegidos_imovel`: só RL do próprio imóvel, APP ou 1 km de UC.
-3. `int_metricas_imovel`: anos, dias, focos.
-4. `int_indice_prioridade_imovel`: IPV e quartis, só reincidentes.
-
-Contagem de focos soma entre imóveis, mas um foco em imóveis sobrepostos conta em cada um. Densidade e IPV não somam entre imóveis.
+Monta a partir da intermediate: pares protegidos, métricas e IPV. Uma linha por imóvel.
 
 ### `painel_imoveis_prioritarios`
 
@@ -127,8 +140,8 @@ Tabela que o painel consome. `posicao` 1 = maior IPV. `gerado_em` alimenta o [fr
 
 ### `mart_reincidencia_imovel_ano`
 
-Mesma regra do fato por imóvel, por ano. Serve para ver a série no tempo.
+Mesma regra, por imóvel e ano.
 
 ## Reconciliação
 
-`tests/reconcilia_fato_imovel_com_mv_postgis.sql` compara os reincidentes da Gold com a MV do PostGIS. Na carga de 14/11/2026, zero divergências. Severidade `warn`: cada lado lê o cadastro em momentos diferentes.
+`tests/reconcilia_fato_imovel_com_mv_postgis.sql` compara a Gold com a MV do PostGIS. Carga 14/11/2026: zero divergências. Severidade `warn`.
