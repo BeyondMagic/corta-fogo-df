@@ -37,13 +37,14 @@ icon: material/numeric-4-box
 
 ---
 
-## 2. [Metodologia](../../metodologia.md)
+## 2. [Metodologia](../../metodologia.md) e [Decisões de Negócio](../../decisoes_descartes.md)
 
 <p class="apresentador"><em>Apresentação: Elias F. e Gabriel Fernando</em></p>
 
-- Padronização em `EPSG:31983` e regra única de área protegida (Reserva Legal do próprio imóvel, APP ou `1.000 m` de UC), cruzando cada foco com a versão do cadastro vigente na data (`dim_imovel_car`).
-- Separação entre a contagem total (`38.945` focos em 20 satélites) e a série comparável no `AQUA_M-T`, usando dias com foco no cálculo de densidade do IPV para não enviesar sensores de `375 m`.
-- O teste `reconcilia_fato_imovel_com_mv_postgis` valida os 1.593 reincidentes e os 37.693 focos entre DuckDB e PostGIS a cada execução.
+- **Base métrica e histórico sem reescrever o passado:** padronização em `EPSG:31983` (`ST_IsValid`), cruzando cada foco com a versão cadastral vigente na data do evento (`dim_imovel_car` em SCD Tipo 2) sobre Reserva Legal do próprio imóvel, APP ou `1.000 m` de UC.
+- **Sensores e separação de grãos (sobreposição SICAR):** tendência interanual usa o sensor `AQUA_M-T` (`1 km²`), enquanto a cobertura fundiária usa 20 satélites; `fato_foco_calor` preserva `38.944` focos únicos do DF e `fct_reincidencia_imovel` absorve a relação N:N de matrículas sobrepostas sem inflar o total distrital.
+- **Priorização acionável (IPV) e recorte gestão vs. campo:** `dias_com_foco` por `100 ha` (piso `14,1 ha` = 1 pixel VIIRS) reduz a área mediana do Top 10 de `25.808 ha` para `114,2 ha` (9 ativos); a camada Gold mantém `1.593` reincidentes (incluindo `CA`/`SU`/`PE` para auditoria de passivo) e a RLS em `operacional.fila_vistoria` entrega `1.413` ativos ao fiscal de campo.
+- **Camada semântica única e validação cruzada:** parâmetros centralizados em `dbt_project.yml` e contrato `enforced` alimentam `gold.json`, consultas SQL e ETL reverso sem divergência, com `0` diferenças frente ao PostGIS (`V9`) e `259` testes aprovados.
 
 ---
 

@@ -307,8 +307,7 @@ Código, testes e documentos da Entrega 3, versionados no repositório:
 
 - **[Decisão de Arquitetura 0003](../../adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md):** modelagem dimensional e ferramenta de transformação, com alternativas e medições.
 - **[Decisão de Arquitetura 0005](../../adr/05-indice-de-prioridade-de-vistoria.md):** Índice de Prioridade de Vistoria, com cinco critérios de ordenação medidos.
-- **[Decisão de Arquitetura 0006](../../adr/06-ingestao-seletiva-delta-e-leitura-postgis.md):** ingestão seletiva no Delta Lake, leitura direta no PostGIS e convivência com a MV Gold.
-- **[Decisões e Descartes](../../decisoes_descartes.md):** recortes de dados, saneamento na carga, regras operacionais e limitações conhecidas.
+- **[Decisões e Descartes](../../decisoes_descartes.md):** ingestão seletiva no Delta Lake vs. leitura direta no PostGIS, saneamento na carga, regras operacionais e limitações conhecidas.
 - **[Frescor e SLA](../../frescor_sla.md)** e **[planos `EXPLAIN`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/docs/explain)** da consulta otimizada.
 - **[Esquema dimensional Gold](../../modelagem/esquema_dimensional_gold.md):** granularidades e decisões de modelagem.
 - **[Projeto dbt (`transformacao/`)](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao):** staging, intermediate, snapshot, gold, testes e consultas em `analyses/`.

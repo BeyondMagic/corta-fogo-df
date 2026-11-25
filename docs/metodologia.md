@@ -6,18 +6,18 @@ icon: material/compass-outline
 
 <p class="apresentador"><em>Responsáveis: Elias F. e Gabriel Fernando</em></p>
 
-A metodologia define **como** o projeto mede ocorrências térmicas, cruza limites territoriais e prioriza imóveis rurais para fiscalização. A materialização dessas regras vive no [esquema dimensional Gold](modelagem/esquema_dimensional_gold.md) (`dbt-duckdb`) e alimenta o [Dashboard](dashboard.md). Os recortes de escopo, tratamentos de anomalias e alternativas descartadas estão documentados de forma espelhada em [Decisões e Descartes](decisoes_descartes.md).
+A metodologia define **como** o projeto mede ocorrências térmicas, cruza limites territoriais e prioriza imóveis rurais para fiscalização. A **Gold** é a **camada semântica** da plataforma: concentra entidades e métricas com significado de negócio, definição única em [`dbt_project.yml`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/dbt_project.yml) e contrato de esquema para consumo no [Dashboard](dashboard.md), em consultas SQL e no [ETL reverso](etl_reverso_e_acesso.md). Já a camada **intermediate** (`int_*`) não é semântica: atua apenas como etapa interna de cruzamentos espaciais e agregações dentro da Silver ([esquema dimensional Gold](modelagem/esquema_dimensional_gold.md)). Os recortes de escopo, tratamentos de anomalias e alternativas descartadas estão documentados de forma espelhada em [Decisões e Descartes](decisoes_descartes.md).
 
-## O que a Gold entrega
+## O que a camada semântica Gold entrega
 
-Em quatro frases:
+Em quatro regras:
 
-1. Conta só foco em **Reserva Legal do imóvel**, **APP** ou a até **1 km de UC**.
-2. **Reincidente** = isso em **2 anos ou mais** (2015 a 2025).
-3. A fila de vistoria ordena esses imóveis pelo **IPV** ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)) e sai no `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)).
-4. Cada foco usa o **perímetro da época** do evento, não o mapa de hoje.
+1. Contabiliza apenas focos incidentes em **Reserva Legal do próprio imóvel**, **APP** ou a até **1 km de UC**.
+2. Define **reincidente** como o imóvel com foco protegido em **2 anos civis ou mais** (`2015` a `2025`).
+3. Ordena a fila de vistoria pelo **IPV** ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)) em `gold.painel_imoveis_prioritarios`, servindo simultaneamente `gold.json` ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)) e `operacional.fila_vistoria`.
+4. Cruza cada foco com o **perímetro vigente na época** do evento (`SCD Tipo 2`), sem reescrever o passado com retificações recentes.
 
-**Intermediate vs Gold:** intermediate calcula (`int_*`); Gold publica (`fato_*`, `fct_*`, `painel_*`). O dashboard só lê a Gold.
+**Separação Silver (`int_*`) vs. Gold (semântica):** modelos `int_*` executam junções espaciais e cálculos intermediários; apenas modelos Gold (`dim_*`, `fato_*`, `fct_*`, `mart_*`, `painel_*`) expõem métricas oficiais ao consumo.
 
 ## Arquitetura em Camadas (Bronze, Silver e Gold)
 
@@ -69,6 +69,10 @@ Todas as camadas vetoriais e coordenadas de focos são convertidas na entrada pa
 
 Na carga para o PostGIS ([`src/pipeline/load_camadas.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/load_camadas.py)), cada polígono passa por validação topológica (`ST_IsValid`). Geometrias com autointerseções ou anéis abertos são corrigidas com `make_valid` e normalizadas para `MultiPolygon`, descartando artefatos lineares ou pontuais residuais. As tabelas recebem índice espacial `GiST` e restrição `CHECK (ST_IsValid(geom))`.
 
+### Ingestão seletiva no Delta Lake e leitura direta no PostGIS
+
+O armazenamento aberto em Delta Lake ([ADR 0002](adr/02-mecanismo-de-ingestao-e-formato-aberto.md)) recebe seletivamente as duas tabelas com dinâmica temporal contínua: `foco_calor` (série histórica crescente ingerida em lote particionado) e `imovel_car` (cadastro fundiário sujeito a retificações e exclusões via CDC). As quatro camadas públicas de referência (`unidade_conservacao`, `area_preservacao_permanente`, `reserva_legal` e `regiao_administrativa`, somando `15.854` feições quase estáticas) permanecem no PostGIS e são anexadas pelo `dbt-duckdb` via extensão `postgres` em modo `READ_ONLY` ([`transformacao/profiles.yml`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/profiles.yml)). Essa divisão evita quatro pipelines redundantes de replicação, reaproveita a validação `ST_IsValid` da carga relacional e preserva o PostGIS como linha de base independente para reconciliação espacial.
+
 ### Identidade determinística e separação de carimbos temporais
 
 Na ingestão para o Delta Lake ([`src/pipeline/batch_ingest.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/batch_ingest.py), [ADR 0002](adr/02-mecanismo-de-ingestao-e-formato-aberto.md)), cada foco recebe chave primária determinística `id_foco` calculada via `SHA-256` sobre latitude e longitude arredondadas a 5 casas decimais (`~1,1 m`), timestamp UTC da passagem e nome do satélite. O contrato separa:
@@ -99,12 +103,18 @@ Um foco ocorrido dentro do perímetro vigente de um imóvel rural ([`int_focos_p
 
 Para localização territorial ([`atribuir_regiao_administrativa.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/macros/atribuir_regiao_administrativa.sql)), cada foco usa sua coordenada pontual e cada imóvel usa um ponto garantido no interior de seu polígono (`ST_PointOnSurface(geom)`), evitando duplicação quando uma fazenda atravessa a divisa entre duas Regiões Administrativas. Pontos na borda do DF são associados à RA mais próxima até o limite de `2.000 m`.
 
-### Regra de reincidência e Índice de Prioridade de Vistoria (IPV)
+### Sobreposição cadastral no SICAR, reincidência e Índice de Prioridade de Vistoria (IPV)
 
-No modelo [`int_metricas_imovel.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/models/intermediate/int_metricas_imovel.sql), os eventos protegidos são agregados por `cod_imovel`. Como cadastros autodeclaratórios no SICAR podem se sobrepor geograficamente, a tabela fato atômica (`fato_foco_calor`, `38.944` linhas) mantém grão de 1 linha por foco sem multiplicar registros por imóvel, enquanto o fato por imóvel (`fct_reincidencia_imovel`, `4.068` imóveis atingidos) consolida a contagem de anos, dias e focos de cada cadastro ([esquema dimensional Gold](modelagem/esquema_dimensional_gold.md)).
+Cadastros autodeclaratórios no SICAR apresentam sobreposições geográficas frequentes: os `35.013` focos situados dentro da malha rural geram `76.115` pares foco-imóvel em [`int_focos_imoveis.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/models/intermediate/int_focos_imoveis.sql). Para impedir inflação nas estatísticas do Distrito Federal e ainda responsabilizar cada matrícula atingida em áreas de litígio, a modelagem separa dois grãos ([esquema dimensional Gold](modelagem/esquema_dimensional_gold.md)):
+
+- **Grão do evento térmico (`fato_foco_calor`, `38.944` linhas):** uma linha única por detecção orbital, usada em todos os totais anuais, sazonais e por Região Administrativa do DF.
+- **Grão do sujeito fiscalizado (`fct_reincidencia_imovel`, `4.068` imóveis atingidos):** agrega em [`int_metricas_imovel.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/models/intermediate/int_metricas_imovel.sql) os eventos protegidos de cada `cod_imovel`. Um foco sobre dois imóveis sobrepostos conta em ambos os cadastros para fins de vistoria, somando `37.693` ocorrências foco-imóvel nos reincidentes sem alterar o total de focos do DF.
+
+A partir desse grão por imóvel aplicam-se as regras de negócio de seleção e priorização:
 
 - **Elegibilidade de reincidência:** `anos_com_foco >= 2` (foco em área protegida em pelo menos 2 anos civis distintos entre 2015 e 2025), resultando em **1.593 imóveis reincidentes**.
-- **Ordenação da fila ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)):** para impedir que fazendas extensas (mediana de `25.808 ha` no top 10 por contagem bruta) ou chácaras minúsculas distorçam a priorização, [`int_indice_prioridade_imovel.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/models/intermediate/int_indice_prioridade_imovel.sql) calcula o IPV de `0` a `100`:
+- **Visão de gestão vs. visão operacional de campo (situação cadastral):** na camada Gold (`painel_imoveis_prioritarios` e `gold.json`), cadastros pendentes (`107 PE`), suspensos (`41 SU`) e cancelados (`32 CA`) permanecem visíveis ao lado dos ativos (`1.413 AT`), marcados por `cadastro_ativo = false`, pois cancelamento cadastral não extingue passivo ambiental. Apenas exclusões lógicas do CDC (`is_excluido = true`) saem da tabela. Já no retorno operacional ao PostgreSQL (`operacional.fila_vistoria`), uma política de *Row-Level Security* filtra a visão do papel `fiscal_vistoria` exclusivamente aos **1.413 imóveis ativos** (`na_fila AND cadastro_ativo`), direcionando equipes de campo apenas a matrículas vigentes.
+- **Ordenação da fila ([ADR 0005](adr/05-indice-de-prioridade-de-vistoria.md)):** para impedir que fazendas extensas (mediana de `25.808 ha` no top 10 por contagem bruta) ou chácaras minúsculas distorçam a priorização, [`int_indice_prioridade_imovel.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/models/intermediate/int_indice_prioridade_imovel.sql) calcula o IPV de `0` a `100` com parâmetros centralizados em `dbt_project.yml`:
 
 ```text
 IPV = 100 x (0,4 x recorrência + 0,3 x recência + 0,3 x intensidade)
@@ -122,30 +132,32 @@ Regras de fuso horário, estação seca, situação cadastral e otimizações de
 
 ---
 
-## 4. Validação Cruzada, Consumo e Limitações
+## 4. Validação Cruzada, Consumo Duplo e Governança
 
 ### Reconciliação entre motores e testes de domínio
 
 A camada analítica passa por três níveis de verificação a cada execução do `dbt build` (259 testes de dados e 1 teste unitário):
 
-1. **Reconciliação PostGIS vs. DuckDB ([ADR 0006](adr/06-ingestao-seletiva-delta-e-leitura-postgis.md)):** o teste [`reconcilia_fato_imovel_com_mv_postgis.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/tests/reconcilia_fato_imovel_com_mv_postgis.sql) compara os `1.593` imóveis reincidentes, contagens de focos, anos e flags territoriais calculados no `dbt-duckdb` contra a visão materializada independente `gold.mv_imoveis_reincidentes_areas_protegidas` (`V9`) no PostGIS (0 divergências na carga de referência).
-2. **Testes singulares contra erros silenciosos:** verificam no repositório de testes [`transformacao/tests/`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao/tests) se todo ano possui ao menos `500` focos totais e `80` no satélite `AQUA_M-T`, se a estação seca (maio a setembro) concentra ao menos `70%` dos focos e se todas as geometrias permanecem no retângulo envolvente do DF.
+1. **Reconciliação PostGIS vs. DuckDB ([Decisões e Descartes, seção 2](decisoes_descartes.md#2-saneamento-deduplicacao-e-armazenamento-bronze-e-silver)):** o teste [`reconcilia_fato_imovel_com_mv_postgis.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/tests/reconcilia_fato_imovel_com_mv_postgis.sql) compara os `1.593` imóveis reincidentes, contagens de focos, anos e flags territoriais calculados no `dbt-duckdb` (motor DuckDB Spatial) contra a visão materializada independente `gold.mv_imoveis_reincidentes_areas_protegidas` (`V9`, motor GEOS no PostGIS), registrando `0` divergências na carga de referência.
+2. **Testes singulares contra erros silenciosos:** verificam em [`transformacao/tests/`](https://github.com/BeyondMagic/corta-fogo-df/tree/main/transformacao/tests) se todo ano possui ao menos `500` focos totais e `80` no satélite `AQUA_M-T`, se a estação seca (maio a setembro) concentra ao menos `70%` dos focos e se todas as geometrias permanecem no retângulo envolvente do DF.
 3. **Teste unitário de SCD Tipo 2 e SLA de frescor:** valida a preservação histórica de perímetros retificados e monitora de hora em hora no Dagster se a tabela de consumo foi atualizada dentro da janela de `30 horas` ([Frescor e SLA](frescor_sla.md)).
 
-### De onde vêm os dados do painel e do banco operacional
+### Camada semântica única, consumo duplo e retorno operacional
 
-O consumo analítico e operacional é desacoplado do processamento pesado por dois fluxos gerados após o `dbt build`:
+Para eliminar divergência de cálculo entre telas, relatórios e operação, todos os limiares da regra de negócio (`raio_uc_m`, `anos_minimos_reincidencia`, pesos do IPV e `area_minima_ha`) são versionados em um único arquivo ([`transformacao/dbt_project.yml`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/transformacao/dbt_project.yml)) e materializados em `gold.painel_imoveis_prioritarios` sob contrato estrito de colunas e tipos (`contract: enforced: true`). Nenhum consumidor recalcula cruzamentos ou índices:
 
 | Artefato / Destino | Gerado por | Fonte de leitura | Conteúdo e Papel |
 | :--- | :--- | :--- | :--- |
-| `docs/assets/dados_dashboard/gold.json` | [`scripts/exportar_painel_gold.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/exportar_painel_gold.py) | `gold.painel_imoveis_prioritarios` e `gold.fct_reincidencia_imovel` (DuckDB) | Resposta oficial à pergunta de gestão ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)): totais, distribuições, fila de vistoria ordenada pelo IPV, carimbo `gerado_em` e polígonos simplificados (`60 m`) dos 50 primeiros imóveis |
-| `operacional.fila_vistoria` (PostgreSQL) | [`src/pipeline/etl_reverso.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/etl_reverso.py) | `gold.painel_imoveis_prioritarios` (DuckDB) | Retorno idempotente dos 1.593 reincidentes ao banco operacional, com controle de acesso por papel e preservação de `status_vistoria` ([ETL Reverso e Acesso](etl_reverso_e_acesso.md)) |
-| `resumo.json`, `geometrias.json`, `focos.json` | [`scripts/gerar_dados_dashboard.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_dashboard.py) | `data/processed/` e `data/raw/` | Séries auxiliares de exploração visual do mapa (histórico por sensor, malha de RAs e UCs) |
+| `docs/assets/dados_dashboard/gold.json` | [`scripts/exportar_painel_gold.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/exportar_painel_gold.py) | `gold.painel_imoveis_prioritarios` e `gold.fct_reincidencia_imovel` (DuckDB) | Consumo analítico web ([ADR 0004](adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md)): totais, distribuições, fila ordenada pelo IPV, carimbo `gerado_em` e polígonos simplificados (`60 m`) dos 50 primeiros imóveis |
+| `analyses/consulta_pergunta_gestao.sql` e `resumo_pergunta_gestao.sql` | `dbt show` sobre a camada semântica | `gold.painel_imoveis_prioritarios` e `gold.fct_reincidencia_imovel` (DuckDB) | Consumo analítico tabular direto sobre os `1.593` reincidentes completos, sem limite de 50 posições |
+| `operacional.fila_vistoria` (PostgreSQL) | [`src/pipeline/etl_reverso.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/etl_reverso.py) | `gold.painel_imoveis_prioritarios` (DuckDB) | Retorno operacional idempotente ao PostgreSQL (`V10`): preserva `status_vistoria` e `observacao` registrados pelo fiscal, aplica RLS (`1.413` ativos para `fiscal_vistoria`) e restringe `geom` em `analista_leitura` por minimização de LGPD ([ETL Reverso e Acesso](etl_reverso_e_acesso.md)) |
+| `resumo.json`, `geometrias.json`, `focos.json` | [`scripts/gerar_dados_dashboard.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/scripts/gerar_dados_dashboard.py) | `data/processed/` e `data/raw/` | Séries auxiliares de exploração visual do mapa (histórico geral por sensor, malha de RAs e UCs) |
 
-Para regenerar o retrato oficial do painel após executar a transformação:
+Para regenerar o retrato do painel e atualizar a fila operacional após executar o `dbt build`:
 
 ```bash
 docker compose --profile transformacao run --rm exportar_painel
+docker compose --profile transformacao run --rm etl_reverso
 ```
 
-Recortes de privacidade (LGPD), diferenças dos arquivos exploratórios e limitações conhecidas: [Decisões e Descartes, seções 4 e 5](decisoes_descartes.md#4-validacao-orquestracao-e-consumo-no-painel).
+Recortes de privacidade (LGPD), regras de privilégio mínimo, diferenças dos arquivos exploratórios e limitações conhecidas: [Decisões e Descartes, seções 4 e 5](decisoes_descartes.md#4-validacao-orquestracao-consumo-duplo-e-governanca).

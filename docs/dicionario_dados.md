@@ -123,7 +123,7 @@ Dimensão consolidada de feições territoriais especialmente protegidas no Dist
 
 | Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
 | :--- | :--- | :--- | :--- | :--- |
-| `sk_territorio` | `VARCHAR(32)` | PK / NOT NULL | Hash estável gerado a partir de `tipo_area` e representação WKT canônica da geometria, imune a recargas de contêineres. | `md5(tipo_area \|\| '\|' \|\| ST_AsText(geom))` |
+| `sk_territorio` | `VARCHAR(32)` | PK / NOT NULL | Hash estável gerado a partir de `tipo_area`, `cod_imovel` (quando aplicável) e representação WKT canônica da geometria, deduplicando 3 Reservas Legais idênticas no mesmo imóvel (`13.499` para `13.496`). | `md5(tipo_area \|\| '\|' \|\| coalesce(cod_imovel, '') \|\| '\|' \|\| ST_AsText(geom))` |
 | `tipo_area` | `VARCHAR(30)` | Categoria / NOT NULL | Tipo da feição protegida: `unidade_conservacao`, `app` ou `reserva_legal`. | Identificador de camada de origem |
 | `id_feicao_origem` | `BIGINT` | Auditoria / NOT NULL | Chave primária numérica original da tabela de origem no PostgreSQL (uso exclusivo para rastreabilidade de carga). | PK da tabela transacional |
 | `nome_area` | `VARCHAR(200)` | Atributo | Nome oficial da Unidade de Conservação ou descrição tipológica da APP (nulo para Reserva Legal). | Fonte IBRAM / SICAR |
@@ -173,7 +173,7 @@ Dimensão dos sensores orbitais que operam na captação de anomalias térmicas 
 
 ### 1.7 `gold.mv_imoveis_reincidentes_areas_protegidas` (PostgreSQL / PostGIS)
 
-Visão materializada relacional na camada Gold do banco PostgreSQL (migração `V7`).
+Visão materializada relacional na camada Gold do banco PostgreSQL (criada na migração `V7` e otimizada com `ST_Subdivide` na migração `V9`), mantida como referência independente de reconciliação espacial frente ao `dbt-duckdb`.
 
 - **Granularidade:** uma linha por imóvel rural reincidente (focos em área protegida em pelo menos 2 anos distintos entre 2015 e 2025).
 - **Tipo de Objeto:** Tabela materializada relacional com índice espacial GiST.
@@ -487,6 +487,31 @@ Tabela auxiliar criada na migração `V2__cadastros_base.sql` (`MultiLineString,
 
 ---
 
+### 3.10 `operacional.fila_vistoria` (Destino do ETL Reverso)
+
+Tabela transacional de ação operacional alimentada pelo script [`src/pipeline/etl_reverso.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/etl_reverso.py) a partir de `gold.painel_imoveis_prioritarios` (migração [`V10__fila_operacional_e_acesso_minimo.sql`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/migrations/V10__fila_operacional_e_acesso_minimo.sql)). Protegida por *Row-Level Security* (`fiscal_vistoria` enxerga e edita apenas os `1.413` imóveis com `na_fila AND cadastro_ativo`) e privilégios por coluna (`etl_reverso` não altera anotações de vistoria). Omite chave estrangeira para `public.imovel_car` para preservar histórico durante recargas `TRUNCATE ... CASCADE` ([ETL Reverso e Acesso](etl_reverso_e_acesso.md)).
+
+- **Granularidade:** uma linha por imóvel rural reincidente já publicado na fila operacional (`1.593` ativos na fila atual).
+- **Tipo de Objeto:** Tabela relacional PostgreSQL com RLS habilitada e gatilho `tg_fila_vistoria_carimbo`.
+
+| Coluna | Tipo | Chave / Restrição | Descrição e Regra de Negócio | Origem / Linhagem |
+| :--- | :--- | :--- | :--- | :--- |
+| `cod_imovel` | `VARCHAR(60)` | PK | Código identificador natural do imóvel no SICAR (`DF-...`). | `gold.painel_imoveis_prioritarios.cod_imovel` |
+| `posicao` | `INTEGER` | NOT NULL / CHECK (> 0) | Ordem na fila de vistoria segundo o IPV. | `gold.painel_imoveis_prioritarios.posicao` |
+| `codigo_regiao_administrativa`, `regiao_administrativa` | `VARCHAR(20)` / `VARCHAR(100)` | Atributo | Código e nome da Região Administrativa do imóvel. | `gold.painel_imoveis_prioritarios` |
+| `situacao`, `cadastro_ativo` | `VARCHAR(2)` / `BOOLEAN` | NOT NULL | Situação no SICAR e indicador `situacao = 'AT'` (usado na política RLS `fiscal_vistoria`). | `gold.painel_imoveis_prioritarios` |
+| `area_ha` | `DOUBLE PRECISION` | Métrica | Área declarada do imóvel em hectares. | `gold.painel_imoveis_prioritarios.area_ha` |
+| `classificacao_prioridade`, `indice_prioridade` | `VARCHAR(40)` / `DOUBLE PRECISION` | NOT NULL / CHECK (0 a 100) | Quartil de prioridade e nota do IPV. | `gold.painel_imoveis_prioritarios` |
+| `anos_com_foco`, `primeiro_ano_com_foco`, `ultimo_ano_com_foco` | `INTEGER` | NOT NULL (`anos_com_foco > 0`) | Contagem e limites de anos com foco em área protegida. | `gold.painel_imoveis_prioritarios` |
+| `total_focos`, `focos_reserva_legal`, `focos_app`, `focos_uc_1km` | `INTEGER` | Métrica | Totais de detecções protegidas no imóvel e por critério espacial. | `gold.painel_imoveis_prioritarios` |
+| `gold_gerado_em` | `TIMESTAMPTZ` | NOT NULL | Carimbo `gerado_em` da tabela Gold de origem no DuckDB. | `gold.painel_imoveis_prioritarios.gerado_em` |
+| `na_fila` | `BOOLEAN` | NOT NULL / DEFAULT TRUE | `FALSE` quando o imóvel deixa a lista em carga posterior, mantendo o histórico de vistoria. | Controle do `etl_reverso.py` |
+| `carga_em` | `TIMESTAMPTZ` | NOT NULL / DEFAULT now() | Instante UTC do último *upsert* confirmado pelo ETL reverso. | Controle do `etl_reverso.py` |
+| `status_vistoria` | `VARCHAR(12)` | NOT NULL / CHECK | Estado operacional exclusivo do fiscal (`PENDENTE`, `AGENDADA`, `REALIZADA`, `DISPENSADA`), preservado entre cargas. | Escrita humana (`fiscal_vistoria`) |
+| `observacao`, `atualizado_em` | `TEXT` / `TIMESTAMPTZ` | Auditoria de campo | Relato livre da vistoria e carimbo atualizado pelo gatilho `tg_fila_vistoria_carimbo`. | Escrita humana / Trigger PostgreSQL |
+
+---
+
 ## 4. Matriz de Rastreabilidade e Linhagem Ponta a Ponta
 
 A tabela a seguir resume o ciclo de transformação de cada dado entre os sistemas da plataforma:
@@ -494,8 +519,8 @@ A tabela a seguir resume o ciclo de transformação de cada dado entre os sistem
 | Dado / Conceito | Camada Bronze (PostgreSQL) | Camada Silver (Delta Lake) | Camada Gold (dbt / Dimensional) | Consumo e Entrega |
 | :--- | :--- | :--- | :--- | :--- |
 | **Focos de Calor** | `public.foco_calor` (somente inserção) | `foco_calor_analitico` (partição ano/mês) | `fato_foco_calor` (grão atômico com SKs) | `focos.json` e `resumo.json` |
-| **Imóveis Rurais** | `public.imovel_car` (snapshot fundiário) | `imovel_car_analitico` (CDC com LSN) | `dim_imovel_car` (SCD Tipo 2 com vigência) | `car_top50_geoms` em `gold.json` |
+| **Imóveis Rurais** | `public.imovel_car` (`SELECT` sem `geom` para `analista_leitura`) | `imovel_car_analitico` (CDC com LSN) | `dim_imovel_car` (SCD Tipo 2 com vigência) | `car_top50_geoms` em `gold.json` |
 | **Áreas Protegidas e RAs** | `unidade_conservacao`, `reserva_legal`, `app`, `regiao_administrativa` | Camadas padronizadas e `ST_Subdivide` / `stg_*` | `dim_territorio` e `dim_regiao_administrativa` | `geometrias.json` e filtro RA no painel |
 | **Tempo e Calendário** | `data_hora_evento` nas tabelas | `ano`, `mes` particionados em UTC | `dim_tempo` (grão diário com `is_estacao_seca`) | Séries anuais/mensais no painel |
 | **Satélites** | `public.satelite` (com índice parcial) | Colunas `satelite`, `is_satelite_referencia` | `dim_satelite` (MD5 estável e flag) | Comparação de sensores e `AQUA_M-T` |
-| **Resposta de Gestão e Fila** | `gold.mv_imoveis_reincidentes_areas_protegidas` | Integrações `int_focos_protegidos_imovel`, `int_metricas` e `int_indice` | `fct_reincidencia_imovel`, `mart_reincidencia_imovel_ano` e `painel_imoveis_prioritarios` | `gold.json` (`187,0 KB`, SLA `30 h`) e `analyses/` SQL |
+| **Resposta de Gestão e Fila** | `gold.mv_imoveis_reincidentes_areas_protegidas` (`V9`) | Integrações `int_focos_protegidos_imovel`, `int_metricas` e `int_indice` | `fct_reincidencia_imovel`, `mart_reincidencia_imovel_ano` e `painel_imoveis_prioritarios` | `gold.json` (`187,0 KB`, SLA `30 h`), `analyses/` SQL e `operacional.fila_vistoria` (ETL reverso com RLS) |

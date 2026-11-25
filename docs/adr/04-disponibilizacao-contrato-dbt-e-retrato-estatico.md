@@ -72,7 +72,7 @@ Adotamos **contrato declarativo de consumo no dbt (`painel_imoveis_prioritarios`
 
 - **Recorte geométrico da fila limitada no mapa:** `car_top50_geoms` exporta polígonos apenas dos 50 primeiros colocados por IPV; imóveis das posições 51 a 1.593 são consultados via `consulta_pergunta_gestao.sql` no DuckDB, sem renderização individual no mapa web.
 - **Atraso inerente ao ciclo em retrato (até 30 horas):** alterações recém-ingeridas pelo CDC só chegam ao usuário publicado após novo `dbt build`, execução de `exportar_painel_gold.py` e atualização do artefato estático.
-- **Escrita reversa e controle de acesso no banco fora do escopo atual:** `gold.json` entrega a fila pronta para triagem humana no navegador, mas não grava de volta uma tabela operacional no PostgreSQL nem aplica perfis `ROLE` ou *Row-Level Security* no warehouse.
+- **Painel web somente leitura e sem controle de papel no arquivo DuckDB:** `gold.json` serve triagem visual aberta em hospedagem estática, sem autenticação nem gravação direta pelo navegador. A escrita operacional (`status_vistoria` e `observacao`) e o controle de acesso por linha e coluna (`ROLE` / RLS em `operacional.fila_vistoria`, migração `V10`) ocorrem exclusivamente no PostgreSQL via [`src/pipeline/etl_reverso.py`](https://github.com/BeyondMagic/corta-fogo-df/blob/main/src/pipeline/etl_reverso.py) ([ETL Reverso e Acesso](../etl_reverso_e_acesso.md)), enquanto o arquivo local `corta_fogo.duckdb` não implementa separação de papéis.
 
 **O que se torna irreversível:**
 
@@ -84,4 +84,4 @@ Revisaremos esta decisão caso ocorra ao menos uma das condições abaixo:
 
 1. O arquivo `gold.json` ultrapassar `2 MB` (ou o conjunto de JSONs do painel passar de `5 MB`) devido à expansão da fila para além de 50 imóveis, elevando o carregamento inicial acima de `2 s`.
 2. A equipe de fiscalização exigir atualização em tempo sub-diário (SLA inferior a `6 horas`) ou filtragem geométrica livre sobre todos os 21.047 imóveis em campo, justificando substituir o retrato estático por uma API sobre DuckDB/PostGIS.
-3. Um sistema operacional externo passar a consumir diretamente os resultados da fila, exigindo gravação de volta no PostgreSQL (ETL reverso em tabela transacional) e restrição de acesso por linha ou região administrativa (`ROLE` / RLS).
+3. Os fiscais precisarem registrar `status_vistoria` diretamente pela interface web do dashboard (e não apenas via banco operacional `operacional.fila_vistoria`), exigindo backend autenticado acoplado às políticas RLS do PostgreSQL.

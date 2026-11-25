@@ -38,14 +38,14 @@ nav = [
       { "2ª: Ingestão e Formato" = "adr/02-mecanismo-de-ingestao-e-formato-aberto.md" },
       { "3ª: Modelagem e Transformação" = "adr/03-modelagem-dimensional-e-ferramenta-de-transformacao.md" },
       { "4ª: Disponibilização e Consumo" = "adr/04-disponibilizacao-contrato-dbt-e-retrato-estatico.md" },
-      { "5ª: Índice de Prioridade" = "adr/05-indice-de-prioridade-de-vistoria.md" },
-      { "6ª: Delta Seletivo e PostGIS" = "adr/06-ingestao-seletiva-delta-e-leitura-postgis.md" }
+      { "5ª: Índice de Prioridade" = "adr/05-indice-de-prioridade-de-vistoria.md" }
   ]},
   { "Referência" = [
       { "Metodologia" = "metodologia.md" },
       { "Decisões e Descartes" = "decisoes_descartes.md" },
       { "Dicionário de Dados" = "dicionario_dados.md" },
       { "Glossário" = "glossario.md" },
+      { "Frescor e SLA" = "frescor_sla.md" },
       { "ETL Reverso e Acesso" = "etl_reverso_e_acesso.md" },
       { "Diário de Bordo" = "diario_de_bordo.md" }
   ]}
